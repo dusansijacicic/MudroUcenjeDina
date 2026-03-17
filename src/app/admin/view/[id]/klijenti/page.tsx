@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
 import { redirect, notFound } from 'next/navigation';
+import Link from 'next/link';
 
 export default async function AdminViewKlijentiPage({
   params,
@@ -34,11 +35,21 @@ export default async function AdminViewKlijentiPage({
     .order('prezime')
     .order('ime');
 
+  const listHref = `/admin/view/${id}/klijenti`;
+
   return (
     <div>
-      <h1 className="text-xl font-semibold text-stone-800 mb-6">
+      <h1 className="text-xl font-semibold text-stone-800 mb-4">
         Klijenti – {instructor.ime} {instructor.prezime}
       </h1>
+      <div className="mb-4">
+        <Link
+          href={`/admin/view/${id}/klijenti/novi`}
+          className="inline-flex items-center rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700"
+        >
+          + Novi polaznik
+        </Link>
+      </div>
       <div className="rounded-xl border border-stone-200 bg-white overflow-hidden">
         <table className="w-full text-sm">
           <thead className="bg-stone-50 border-b border-stone-200">

@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
+import { getDashboardInstructor } from '@/lib/dashboard';
 import { TIME_SLOTS } from '@/lib/constants';
 import PredavanjeForm from '../PredavanjeForm';
 
@@ -9,17 +10,8 @@ export default async function NoviTerminPage({
   searchParams: Promise<{ date?: string; slot?: string }>;
 }) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect('/login');
-
-  const { data: instructor } = await supabase
-    .from('instructors')
-    .select('id')
-    .eq('user_id', user.id)
-    .single();
-  if (!instructor) redirect('/login');
+  const { instructor } = await getDashboardInstructor();
+  if (!instructor) redirect('/login?reason=no_instructor');
 
   const params = await searchParams;
   const date = params.date ?? new Date().toISOString().slice(0, 10);

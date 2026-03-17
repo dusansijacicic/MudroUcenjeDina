@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { redirect, notFound } from 'next/navigation';
 import Link from 'next/link';
+import { getDashboardInstructor } from '@/lib/dashboard';
 import ClientForm from '../ClientForm';
 import type { Client, Predavanje } from '@/types/database';
 import { TIME_SLOTS } from '@/lib/constants';
@@ -12,17 +13,8 @@ export default async function KlijentPage({
 }) {
   const { id } = await params;
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect('/login');
-
-  const { data: instructor } = await supabase
-    .from('instructors')
-    .select('id')
-    .eq('user_id', user.id)
-    .single();
-  if (!instructor) redirect('/login');
+  const { instructor } = await getDashboardInstructor();
+  if (!instructor) redirect('/login?reason=no_instructor');
 
   const { data: client } = await supabase
     .from('clients')

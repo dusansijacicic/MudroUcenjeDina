@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
 import { redirect, notFound } from 'next/navigation';
+import { getDashboardInstructor } from '@/lib/dashboard';
 import PredavanjeForm from '../../../PredavanjeForm';
 import { TIME_SLOTS } from '@/lib/constants';
 
@@ -10,17 +11,8 @@ export default async function NoviPredavanjePage({
 }) {
   const { id: termId } = await params;
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect('/login');
-
-  const { data: instructor } = await supabase
-    .from('instructors')
-    .select('id')
-    .eq('user_id', user.id)
-    .single();
-  if (!instructor) redirect('/login');
+  const { instructor } = await getDashboardInstructor();
+  if (!instructor) redirect('/login?reason=no_instructor');
 
   const { data: term } = await supabase
     .from('terms')

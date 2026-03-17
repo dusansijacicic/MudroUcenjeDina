@@ -36,6 +36,14 @@ export default async function AdminPage({
       <p className="text-stone-500 text-sm mb-6">
         Kao admin vidiš sve predavače. Klikni da vidiš kalendar i klijente tog predavača.
       </p>
+      <div className="mb-4">
+        <Link
+          href="/admin/predavaci/novi"
+          className="inline-flex items-center rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700"
+        >
+          + Novi predavač
+        </Link>
+      </div>
       <div className="rounded-xl border border-stone-200 bg-white divide-y divide-stone-100">
         {(instructors ?? []).length === 0 ? (
           <div className="p-6 text-center text-stone-500">

@@ -9,11 +9,17 @@ import type { Client } from '@/types/database';
 interface ClientFormProps {
   instructorId: string;
   client?: Client | null;
+  /** Ako je setovan, posle čuvanja redirect ovde (npr. za admin: /admin/view/123/klijenti) */
+  redirectAfterSave?: string;
+  /** Tekst za „Nazad” / „Odustani” link (opciono) */
+  cancelLabel?: string;
 }
 
 export default function ClientForm({
   instructorId,
   client,
+  redirectAfterSave,
+  cancelLabel,
 }: ClientFormProps) {
   const router = useRouter();
   const [ime, setIme] = useState(client?.ime ?? '');
@@ -65,7 +71,7 @@ export default function ClientForm({
         const { error: insertError } = await supabase.from('clients').insert(payload);
         if (insertError) throw insertError;
       }
-      router.push('/dashboard/klijenti');
+      router.push(redirectAfterSave ?? '/dashboard/klijenti');
       router.refresh();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Greška pri čuvanju.');
@@ -203,10 +209,10 @@ export default function ClientForm({
           {loading ? 'Čuvanje...' : client ? 'Sačuvaj izmene' : 'Dodaj klijenta'}
         </button>
         <Link
-          href="/dashboard/klijenti"
+          href={redirectAfterSave ?? '/dashboard/klijenti'}
           className="rounded-lg border border-stone-300 px-4 py-2 text-stone-700 hover:bg-stone-100"
         >
-          Odustani
+          {cancelLabel ?? 'Odustani'}
         </Link>
       </div>
     </form>

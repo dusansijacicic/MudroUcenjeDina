@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
+import { getDashboardInstructor } from '@/lib/dashboard';
 import CalendarView from './CalendarView';
 import AddTermButton from './AddTermButton';
 import CalendarFilters from './CalendarFilters';
@@ -34,17 +35,11 @@ export default async function DashboardPage({
   }>;
 }) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect('/login');
+  const { instructor } = await getDashboardInstructor();
+  if (!instructor) redirect('/login?reason=no_instructor');
 
-  const { data: instructor } = await supabase
-    .from('instructors')
-    .select('id, color')
-    .eq('user_id', user.id)
-    .single();
-  if (!instructor) redirect('/login');
+  const instructorId = instructor.id;
+  const instructorColor = instructor.color ?? DEFAULT_INSTRUCTOR_COLOR;
 
   const params = await searchParams;
   const view = (params.view === 'dan' || params.view === 'mesec') ? params.view : 'nedelja';
@@ -90,7 +85,7 @@ export default async function DashboardPage({
   const { data: termsRaw } = await supabase
     .from('terms')
     .select('*, predavanja(*, client:clients(id, ime, prezime))')
-    .eq('instructor_id', instructor.id)
+    .eq('instructor_id', instructorId)
     .gte('date', dateFrom)
     .lte('date', dateTo)
     .order('date')
@@ -109,11 +104,9 @@ export default async function DashboardPage({
   const { data: clients } = await supabase
     .from('clients')
     .select('id, ime, prezime')
-    .eq('instructor_id', instructor.id)
+    .eq('instructor_id', instructorId)
     .order('prezime')
     .order('ime');
-
-  const instructorColor = instructor.color ?? DEFAULT_INSTRUCTOR_COLOR;
 
   return (
     <div>
@@ -126,13 +119,13 @@ export default async function DashboardPage({
             currentView={view}
             currentParams={params}
           />
-          <AddTermButton instructorId={instructor.id} />
+          <AddTermButton instructorId={instructorId} />
         </div>
       </div>
       <CalendarView
         view={view}
         terms={terms}
-        instructorId={instructor.id}
+        instructorId={instructorId}
         instructorColor={instructorColor}
         startOfWeek={startOfWeek}
         singleDay={singleDay}

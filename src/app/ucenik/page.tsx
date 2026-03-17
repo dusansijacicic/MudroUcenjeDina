@@ -35,6 +35,9 @@ export default async function UcenikPage() {
       <h1 className="text-xl font-semibold text-stone-800">
         Zdravo, {client.ime}!
       </h1>
+      <p className="text-stone-500 text-sm">
+        Ovde vidiš samo svoje zakazane časove i istoriju – nemaš pristup drugim podacima.
+      </p>
 
       <section className="rounded-xl border border-stone-200 bg-white p-6">
         <h2 className="text-lg font-medium text-stone-800 mb-4">

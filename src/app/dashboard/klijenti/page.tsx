@@ -1,21 +1,13 @@
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
+import { getDashboardInstructor } from '@/lib/dashboard';
 import ClientRow from './ClientRow';
 
 export default async function KlijentiPage() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect('/login');
-
-  const { data: instructor } = await supabase
-    .from('instructors')
-    .select('id')
-    .eq('user_id', user.id)
-    .single();
-  if (!instructor) redirect('/login');
+  const { instructor } = await getDashboardInstructor();
+  if (!instructor) redirect('/login?reason=no_instructor');
 
   const { data: clients } = await supabase
     .from('clients')

@@ -1,22 +1,11 @@
-import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
+import { getDashboardInstructor } from '@/lib/dashboard';
 import PodesavanjaForm from './PodesavanjaForm';
 import type { Instructor } from '@/types/database';
 
 export default async function PodesavanjaPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect('/login');
-
-  const { data: instructor } = await supabase
-    .from('instructors')
-    .select('*')
-    .eq('user_id', user.id)
-    .single();
-
-  if (!instructor) redirect('/login');
+  const { instructor } = await getDashboardInstructor();
+  if (!instructor) redirect('/login?reason=no_instructor');
 
   return (
     <div className="max-w-lg">

@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { redirect, notFound } from 'next/navigation';
 import Link from 'next/link';
+import { getDashboardInstructor } from '@/lib/dashboard';
 import { TIME_SLOTS } from '@/lib/constants';
 import type { Predavanje } from '@/types/database';
 
@@ -11,17 +12,8 @@ export default async function TerminDetailPage({
 }) {
   const { id: termId } = await params;
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect('/login');
-
-  const { data: instructor } = await supabase
-    .from('instructors')
-    .select('id')
-    .eq('user_id', user.id)
-    .single();
-  if (!instructor) redirect('/login');
+  const { instructor } = await getDashboardInstructor();
+  if (!instructor) redirect('/login?reason=no_instructor');
 
   const { data: term } = await supabase
     .from('terms')
