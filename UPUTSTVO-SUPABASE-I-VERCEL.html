@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="sr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dina Kalendar – Supabase i Vercel korak po korak</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      line-height: 1.6;
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 2rem 1.5rem;
+      color: #1c1917;
+      background: #fafaf9;
+    }
+    h1 {
+      font-size: 1.75rem;
+      margin-bottom: 0.5rem;
+      color: #292524;
+    }
+    .subtitle { color: #78716c; margin-bottom: 2rem; font-size: 0.95rem; }
+    h2 {
+      font-size: 1.25rem;
+      margin-top: 2.5rem;
+      margin-bottom: 0.75rem;
+      padding-bottom: 0.35rem;
+      border-bottom: 2px solid #eab308;
+      color: #292524;
+    }
+    ol, ul { padding-left: 1.5rem; margin: 0.75rem 0; }
+    li { margin: 0.4rem 0; }
+    a {
+      color: #b45309;
+      text-decoration: none;
+    }
+    a:hover { text-decoration: underline; }
+    .step { margin: 1rem 0; }
+    .step-num {
+      display: inline-block;
+      width: 1.75rem;
+      height: 1.75rem;
+      line-height: 1.75rem;
+      text-align: center;
+      background: #eab308;
+      color: #1c1917;
+      font-weight: bold;
+      border-radius: 50%;
+      margin-right: 0.5rem;
+      font-size: 0.9rem;
+    }
+    .code, .file {
+      background: #292524;
+      color: #e7e5e4;
+      padding: 0.2rem 0.5rem;
+      border-radius: 4px;
+      font-family: 'Consolas', 'Monaco', monospace;
+      font-size: 0.9rem;
+    }
+    .block {
+      background: #1c1917;
+      color: #e7e5e4;
+      padding: 1rem 1.25rem;
+      border-radius: 8px;
+      font-family: 'Consolas', 'Monaco', monospace;
+      font-size: 0.9rem;
+      overflow-x: auto;
+      margin: 0.75rem 0;
+    }
+    .note {
+      background: #fef9c3;
+      border-left: 4px solid #eab308;
+      padding: 0.75rem 1rem;
+      margin: 1rem 0;
+      font-size: 0.9rem;
+    }
+    .done { color: #15803d; font-weight: 600; }
+    hr { border: none; border-top: 1px solid #e7e5e4; margin: 2rem 0; }
+  </style>
+</head>
+<body>
+  <h1>Dina Kalendar – Supabase i Vercel</h1>
+  <p class="subtitle">Korak po korak: baza, prijava i besplatno hostovanje.</p>
+
+  <h2>1. Supabase – baza i prijava</h2>
+  <div class="step">
+    <span class="step-num">1</span>
+    Otvori <a href="https://supabase.com" target="_blank" rel="noopener">supabase.com</a> i napravi besplatan nalog (Sign in / Sign up).
+  </div>
+  <div class="step">
+    <span class="step-num">2</span>
+    Klikni <strong>New project</strong>. Izaberi organizaciju (ili napravi novu), unesi ime projekta i <strong>lozinku za bazu</strong> – sačuvaj je negde.
+  </div>
+  <div class="step">
+    <span class="step-num">3</span>
+    Kad se projekat učita, u levom meniju idi na <strong>Project Settings</strong> (zupčanik), pa <strong>API</strong>. Tu ćeš naći:
+    <ul>
+      <li><strong>Project URL</strong> – to je vrednost za <span class="code">NEXT_PUBLIC_SUPABASE_URL</span></li>
+      <li><strong>anon public</strong> (ključ) – to je <span class="code">NEXT_PUBLIC_SUPABASE_ANON_KEY</span></li>
+    </ul>
+    Kopiraj oba negde (npr. u Notepad) – trebaće ti za lokalno pokretanje i za Vercel.
+  </div>
+  <div class="step">
+    <span class="step-num">4</span>
+    U levom meniju otvori <strong>SQL Editor</strong> (ikona &lt;/&gt;). Tu ćeš pokrenuti tri SQL skripte <strong>jednu za drugom</strong> (vidi sekciju 2 ispod).
+  </div>
+  <div class="note">
+    (Opciono) Ako želiš da korisnici mogu da se uloguju odmah bez potvrde emaila: <strong>Authentication</strong> → <strong>Providers</strong> → Email → isključi <strong>Confirm email</strong>.
+  </div>
+
+  <h2>2. SQL migracije u Supabase-u</h2>
+  <p>U <strong>SQL Editor</strong> u Supabase-u radi sledeće. Za svaku skriptu: <strong>+ New query</strong> → nalepi ceo sadržaj fajla → <strong>Run</strong>.</p>
+  <div class="step">
+    <span class="step-num">1</span>
+    Otvori u projektu fajl <span class="file">supabase/migrations/001_initial.sql</span>. Kopiraj <strong>ceo</strong> sadržaj (Ctrl+A, Ctrl+C), nalepi u SQL Editor, klikni <strong>Run</strong>. Treba da piše da je uspešno.
+  </div>
+  <div class="step">
+    <span class="step-num">2</span>
+    Novi query: otvori <span class="file">supabase/migrations/002_predavanja_i_ucenik.sql</span>, kopiraj ceo sadržaj, nalepi, <strong>Run</strong>.
+  </div>
+  <div class="step">
+    <span class="step-num">3</span>
+    Novi query: otvori <span class="file">supabase/migrations/003_instructor_color.sql</span>, kopiraj ceo sadržaj, nalepi, <strong>Run</strong>.
+  </div>
+  <div class="note">
+    Provera: u levom meniju otvori <strong>Table Editor</strong>. Trebalo bi da vidiš tabele: <span class="code">instructors</span>, <span class="code">clients</span>, <span class="code">terms</span>, <span class="code">predavanja</span>.
+  </div>
+
+  <h2>3. Lokalno pokretanje</h2>
+  <div class="step">
+    <span class="step-num">1</span>
+    U folderu projekta (Dina kalendar) napravi fajl <span class="file">.env.local</span>. U njemu stavi (zameni vrednosti onim iz Supabase koraka 3):
+  </div>
+  <div class="block">NEXT_PUBLIC_SUPABASE_URL=https://tvoj-projekat.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=tvoj_anon_key_ovde</div>
+  <div class="step">
+    <span class="step-num">2</span>
+    U terminalu (u tom istom folderu) pokreni:
+  </div>
+  <div class="block">npm install
+npm run dev</div>
+  <div class="step">
+    <span class="step-num">3</span>
+    Otvori u browseru <a href="http://localhost:3000" target="_blank" rel="noopener">http://localhost:3000</a>. Klikni „Registrujte se” i napravi prvog predavača.
+  </div>
+
+  <hr>
+
+  <h2>4. Vercel – hostovanje na internetu</h2>
+  <div class="step">
+    <span class="step-num">1</span>
+    Otvori <a href="https://vercel.com" target="_blank" rel="noopener">vercel.com</a> i uloguj se (najlakše preko GitHub-a).
+  </div>
+  <div class="step">
+    <span class="step-num">2</span>
+    Klikni <strong>Add New</strong> → <strong>Project</strong>. Izaberi repozitorijum sa ovim projektom (npr. MudroUcenjeDina). Ako ga nema na listi, prvo poveži GitHub nalog u Vercel podešavanjima.
+  </div>
+  <div class="step">
+    <span class="step-num">3</span>
+    Pre nego što klikneš Deploy, otvori <strong>Environment Variables</strong>. Dodaj dve promenljive (iste vrednosti kao u <span class="file">.env.local</span>):
+    <ul>
+      <li>Name: <span class="code">NEXT_PUBLIC_SUPABASE_URL</span> &nbsp; Value: tvoj Supabase Project URL</li>
+      <li>Name: <span class="code">NEXT_PUBLIC_SUPABASE_ANON_KEY</span> &nbsp; Value: tvoj Supabase anon key</li>
+    </ul>
+  </div>
+  <div class="step">
+    <span class="step-num">4</span>
+    Klikni <strong>Deploy</strong>. Kad se završi, Vercel će ti dati link tipa <span class="code">https://mudro-ucenje-dina.vercel.app</span> (ili slično). Sačuvaj taj URL.
+  </div>
+
+  <h2>5. Podešavanje Supabase-a za produkciju</h2>
+  <p>Da bi prijava radila na tom Vercel linku, u Supabase-u moraš dozvoliti taj domen.</p>
+  <div class="step">
+    <span class="step-num">1</span>
+    U Supabase-u: <strong>Authentication</strong> → <strong>URL Configuration</strong>.
+  </div>
+  <div class="step">
+    <span class="step-num">2</span>
+    <strong>Site URL</strong> postavi na tvoj Vercel URL, npr. <span class="code">https://mudro-ucenje-dina.vercel.app</span>.
+  </div>
+  <div class="step">
+    <span class="step-num">3</span>
+    U <strong>Redirect URLs</strong> dodaj (jedan red): <span class="code">https://tvoj-vercel-url.vercel.app/auth/callback</span> (zameni sa svojim pravim URL-om). Klikni Save.
+  </div>
+
+  <hr>
+  <p class="done">Gotovo. Aplikacija je na besplatnom domenu (Vercel), baza i prijava na Supabase-u.</p>
+</body>
+</html>
