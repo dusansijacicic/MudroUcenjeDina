@@ -1,0 +1,73 @@
+import { createClient } from '@/lib/supabase/server';
+import { redirect, notFound } from 'next/navigation';
+
+export default async function AdminViewKlijentiPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = await params;
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect('/login');
+
+  const { data: admin } = await supabase
+    .from('admin_users')
+    .select('user_id')
+    .eq('user_id', user.id)
+    .single();
+  if (!admin) redirect('/login');
+
+  const { data: instructor } = await supabase
+    .from('instructors')
+    .select('id, ime, prezime')
+    .eq('id', id)
+    .single();
+  if (!instructor) notFound();
+
+  const { data: clients } = await supabase
+    .from('clients')
+    .select('*')
+    .eq('instructor_id', id)
+    .order('prezime')
+    .order('ime');
+
+  return (
+    <div>
+      <h1 className="text-xl font-semibold text-stone-800 mb-6">
+        Klijenti – {instructor.ime} {instructor.prezime}
+      </h1>
+      <div className="rounded-xl border border-stone-200 bg-white overflow-hidden">
+        <table className="w-full text-sm">
+          <thead className="bg-stone-50 border-b border-stone-200">
+            <tr>
+              <th className="text-left p-3 font-medium text-stone-600">Ime i prezime</th>
+              <th className="text-left p-3 font-medium text-stone-600">Godište</th>
+              <th className="text-left p-3 font-medium text-stone-600">Razred</th>
+              <th className="text-left p-3 font-medium text-stone-600">Škola</th>
+              <th className="text-left p-3 font-medium text-stone-600">Kontakt</th>
+              <th className="text-right p-3 font-medium text-stone-600">Plaćeno časova</th>
+            </tr>
+          </thead>
+          <tbody>
+            {(clients ?? []).map((c) => (
+              <tr key={c.id} className="border-b border-stone-100">
+                <td className="p-3 font-medium text-stone-800">{c.ime} {c.prezime}</td>
+                <td className="p-3 text-stone-600">{c.godiste ?? '—'}</td>
+                <td className="p-3 text-stone-600">{c.razred ?? '—'}</td>
+                <td className="p-3 text-stone-600">{c.skola ?? '—'}</td>
+                <td className="p-3 text-stone-600">{c.kontakt_telefon ?? '—'}</td>
+                <td className="p-3 text-right">{c.placeno_casova}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {(!clients || clients.length === 0) && (
+          <div className="p-6 text-center text-stone-500">Nema klijenata.</div>
+        )}
+      </div>
+    </div>
+  );
+}

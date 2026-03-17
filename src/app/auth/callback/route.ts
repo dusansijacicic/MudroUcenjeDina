@@ -13,9 +13,13 @@ export async function GET(request: Request) {
       const { data: { user } } = await supabase.auth.getUser();
       let target = next;
       if (user && next === '/dashboard') {
-        const { data: inst } = await supabase.from('instructors').select('id').eq('user_id', user.id).single();
-        const { data: cl } = await supabase.from('clients').select('id').eq('user_id', user.id).single();
-        if (cl && !inst) target = '/ucenik';
+        const { data: adm } = await supabase.from('admin_users').select('user_id').eq('user_id', user.id).single();
+        if (adm) target = '/admin';
+        else {
+          const { data: inst } = await supabase.from('instructors').select('id').eq('user_id', user.id).single();
+          const { data: cl } = await supabase.from('clients').select('id').eq('user_id', user.id).single();
+          if (cl && !inst) target = '/ucenik';
+        }
       }
       return NextResponse.redirect(`${origin}${target}`);
     }

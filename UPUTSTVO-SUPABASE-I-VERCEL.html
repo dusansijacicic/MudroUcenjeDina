@@ -184,6 +184,28 @@ npm run dev</div>
     U <strong>Redirect URLs</strong> dodaj (jedan red): <span class="code">https://tvoj-vercel-url.vercel.app/auth/callback</span> (zameni sa svojim pravim URL-om). Klikni Save.
   </div>
 
+  <h2>6. Mock podaci i test korisnici</h2>
+  <p>Da bi imao gotove naloge i podatke za testiranje:</p>
+  <div class="step">
+    <span class="step-num">1</span>
+    U Supabase: <strong>Authentication</strong> → <strong>Users</strong> → <strong>Add user</strong>. Dodaj tri korisnika (email + lozinka):
+  </div>
+  <p class="note"><strong>Važno:</strong> Supabase prihvata samo lozinke od <strong>najmanje 6 znakova</strong>. Koristi npr. <strong>123456</strong> umesto 1234.</p>
+  <ul>
+    <li><strong>dusan.sijacic2@gmail.com</strong> / 123456 → super admin (menja sve)</li>
+    <li><strong>dina.mateja@yahoo.com</strong> / 123456 → predavač</li>
+    <li><strong>nekodete@gmail.com</strong> / 123456 → učenik</li>
+  </ul>
+  <div class="step">
+    <span class="step-num">2</span>
+    U <strong>SQL Editor</strong> pokreni prvo migraciju <span class="file">supabase/migrations/004_admin_users.sql</span> (tabela admin_users i RLS).
+  </div>
+  <div class="step">
+    <span class="step-num">3</span>
+    Zatim pokreni ceo fajl <span class="file">supabase/seed_mock_data.sql</span>. On povezuje te korisnike sa ulogama, kreira predavača Dinu, klijente (Marko, Jovana, Neko Dete, Teodora, Luka, Mila), termine i predavanja. Neko Dete je povezan kao učenik (nekodete@gmail.com).
+  </div>
+  <p class="note">Nakon toga možeš da se uloguješ kao Dusan (admin), Dina (predavač) ili NekoDete (učenik) i da vidiš kako aplikacija radi.</p>
+
   <hr>
   <p class="done">Gotovo. Aplikacija je na besplatnom domenu (Vercel), baza i prijava na Supabase-u.</p>
 </body>

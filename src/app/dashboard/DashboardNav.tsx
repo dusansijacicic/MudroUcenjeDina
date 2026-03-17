@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase/client';
 import { useRouter } from 'next/navigation';
 import type { Instructor } from '@/types/database';
 
-export default function DashboardNav({ instructor }: { instructor: Instructor }) {
+export default function DashboardNav({ instructor, isAdminView }: { instructor: Instructor; isAdminView?: boolean }) {
   const pathname = usePathname();
   const router = useRouter();
 
@@ -27,6 +27,11 @@ export default function DashboardNav({ instructor }: { instructor: Instructor })
     <header className="bg-white border-b border-stone-200">
       <div className="max-w-6xl mx-auto px-4 flex items-center justify-between h-14">
         <div className="flex items-center gap-6">
+          {isAdminView && (
+            <Link href="/admin" className="text-sm text-stone-500 hover:text-stone-700">
+              ← Admin
+            </Link>
+          )}
           <Link href="/dashboard" className="font-semibold text-stone-800">
             Dina Kalendar
           </Link>

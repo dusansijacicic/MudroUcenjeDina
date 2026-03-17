@@ -1,12 +1,20 @@
 'use client';
 
 import { createClient } from '@/lib/supabase/client';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import toast from 'react-hot-toast';
+
+const REASON_MESSAGES: Record<string, string> = {
+  no_session: 'Sesija nije pronađena ili je istekla. Ulogujte se ponovo.',
+  not_authorized: 'Niste ovlašćeni za tu stranicu.',
+  no_instructor: 'Za ovaj nalog nije pronađen predavač. Dodajte se u admin_users ili kao predavač.',
+};
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -16,6 +24,13 @@ export default function LoginPage() {
   const [prezime, setPrezime] = useState('');
 
   const supabase = createClient();
+
+  useEffect(() => {
+    const reason = searchParams.get('reason');
+    if (reason && REASON_MESSAGES[reason]) {
+      toast.error(REASON_MESSAGES[reason], { id: 'login-reason' });
+    }
+  }, [searchParams]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -39,6 +54,7 @@ export default function LoginPage() {
           });
           if (profileError) throw profileError;
         }
+        toast.success('Registracija uspešna. Preusmeravanje na dashboard...');
         router.push('/dashboard');
         router.refresh();
       } else {
@@ -49,18 +65,34 @@ export default function LoginPage() {
         if (signInError) throw signInError;
         const { data: { user: u } } = await supabase.auth.getUser();
         if (u) {
-          const { data: inst } = await supabase.from('instructors').select('id').eq('user_id', u.id).single();
-          const { data: cl } = await supabase.from('clients').select('id').eq('user_id', u.id).single();
-          if (inst) router.push('/dashboard');
-          else if (cl) router.push('/ucenik');
-          else router.push('/dashboard');
+          const { data: adm } = await supabase.from('admin_users').select('user_id').eq('user_id', u.id).single();
+          if (adm) {
+            toast.success('Prijava uspešna (admin). Preusmeravanje...');
+            router.push('/admin');
+          } else {
+            const { data: inst } = await supabase.from('instructors').select('id').eq('user_id', u.id).single();
+            const { data: cl } = await supabase.from('clients').select('id').eq('user_id', u.id).single();
+            if (inst) {
+              toast.success('Prijava uspešna. Preusmeravanje na kalendar...');
+              router.push('/dashboard');
+            } else if (cl) {
+              toast.success('Prijava uspešna. Preusmeravanje na Moj pregled...');
+              router.push('/ucenik');
+            } else {
+              toast('Nalog nije povezan ni sa predavačem ni sa učenikom.', { icon: '⚠️' });
+              router.push('/dashboard');
+            }
+          }
         } else {
+          toast.success('Prijava uspešna. Preusmeravanje...');
           router.push('/dashboard');
         }
         router.refresh();
       }
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Greška pri prijavi.');
+      const msg = err instanceof Error ? err.message : 'Greška pri prijavi.';
+      setError(msg);
+      toast.error(msg);
     } finally {
       setLoading(false);
     }
