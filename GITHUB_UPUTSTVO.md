@@ -30,11 +30,11 @@ Ako GitHub repozitorijum nema ništa (prazan), nastavi sa:
 
 ```bash
 git branch -M main
-git remote add origin https://github.com/TVOJ_USERNAME/dina-kalendar.git
+git remote add origin https://github.com/dusansijacicic/MudroUcenjeDina.git
 git push -u origin main
 ```
 
-**Zameni `TVOJ_USERNAME`** svojim GitHub korisničkim imenom, a `dina-kalendar` imenom repozitorijuma ako si ga drugačije nazvao.
+**Tvoj repozitorijum:** [github.com/dusansijacicic/MudroUcenjeDina](https://github.com/dusansijacicic/MudroUcenjeDina)
 
 ---
 
