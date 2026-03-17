@@ -36,6 +36,12 @@ git push -u origin main
 
 **Tvoj repozitorijum:** [github.com/dusansijacicic/MudroUcenjeDina](https://github.com/dusansijacicic/MudroUcenjeDina)
 
+**Ako je remote "origin" već dodat na pogrešan URL**, ispravi ga:
+```bash
+git remote set-url origin https://github.com/dusansijacicic/MudroUcenjeDina.git
+git push -u origin main
+```
+
 ---
 
 ## Važno
