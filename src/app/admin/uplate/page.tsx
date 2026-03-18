@@ -32,12 +32,23 @@ export default async function AdminUplatePage() {
     .order('created_at', { ascending: false })
     .limit(200);
 
-  const list = (rows ?? []).map((r: Record<string, unknown>) => {
+  type UplataRow = {
+    id: string;
+    created_at: unknown;
+    iznos: unknown;
+    broj_casova: unknown;
+    popust_percent: number | null | undefined;
+    napomena: unknown;
+    instructor: { ime?: string; prezime?: string } | null;
+    client: { ime?: string; prezime?: string } | null;
+    term_type: { naziv?: string } | null;
+  };
+  const list: UplataRow[] = (rows ?? []).map((r: Record<string, unknown>) => {
     const instr = Array.isArray(r.instructor) ? r.instructor[0] : r.instructor;
     const client = Array.isArray(r.client) ? r.client[0] : r.client;
     const tt = Array.isArray(r.term_type) ? r.term_type[0] : r.term_type;
     return {
-      id: r.id,
+      id: r.id as string,
       created_at: r.created_at,
       iznos: r.iznos,
       broj_casova: r.broj_casova,
