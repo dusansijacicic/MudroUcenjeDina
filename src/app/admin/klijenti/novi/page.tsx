@@ -3,7 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { getAdminInstructorsList } from '../actions';
+import { getAdminInstructorsList } from '../../actions';
 
 export default function AdminNoviKlijentPage() {
   const router = useRouter();
