@@ -101,6 +101,7 @@ export async function getTakenForSlot(
   return { takenInstructorIds, takenClassroomIds };
 }
 
+/** Pravila za slot (datum + vreme): max N termina (iz podešavanja); svaki termin ima JEDINSTVENOG predavača i JEDINSTVENU učionicu u tom slotu. */
 export async function createTermAsAdmin(
   instructorId: string,
   date: string,
@@ -124,6 +125,7 @@ export async function createTermAsAdmin(
   const dateStr = date.slice(0, 10);
   const adminSupabase = createAdminClient();
 
+  // 1) Max broj termina u slotu
   const [{ count: termCount }, { data: maxSetting }] = await Promise.all([
     adminSupabase.from('terms').select('*', { count: 'exact', head: true }).eq('date', dateStr).eq('slot_index', slot),
     adminSupabase.from('app_settings').select('value').eq('key', 'max_termina_po_slotu').single(),
@@ -133,6 +135,7 @@ export async function createTermAsAdmin(
     return { error: `Maksimalan broj termina u ovom slotu je ${maxTerminaPoSlotu}. Podešavanje u Admin → Podešavanja.` };
   }
 
+  // 2) Jedan predavač = jedan termin u slotu (A)
   const { data: existingSameInstructor } = await adminSupabase
     .from('terms')
     .select('id')
@@ -142,9 +145,10 @@ export async function createTermAsAdmin(
     .maybeSingle();
 
   if (existingSameInstructor) {
-    return { error: 'Ovaj predavač već ima termin u ovom slotu. Izaberite drugog predavača.' };
+    return { error: 'Ovaj predavač već ima termin u ovom slotu. Jedan predavač može imati samo jedan termin u istom vremenu.' };
   }
 
+  // 3) Jedna učionica = jedan termin u slotu (B)
   if (classroomId) {
     const { data: existingSameClassroom } = await adminSupabase
       .from('terms')
@@ -154,7 +158,7 @@ export async function createTermAsAdmin(
       .eq('classroom_id', classroomId)
       .maybeSingle();
     if (existingSameClassroom) {
-      return { error: 'Ova učionica je već zauzeta u ovom terminu. Izaberite drugu učionicu.' };
+      return { error: 'Ova učionica je već zauzeta u ovom slotu. Jedna učionica može biti samo u jednom terminu u istom vremenu.' };
     }
   }
 
@@ -260,6 +264,7 @@ export async function deletePredavanjeAsAdmin(predavanjeId: string, termId: stri
   return {};
 }
 
+/** Premeštanje termina: ista pravila – u ciljnom slotu moraju biti jedinstveni predavač i učionica, i ne sme se premašiti max termina po slotu. */
 export async function moveTermAsAdmin(
   termId: string,
   newDate: string,
@@ -269,10 +274,31 @@ export async function moveTermAsAdmin(
   if (authErr || !admin) return { error: authErr ?? 'Niste ovlašćeni.' };
   const slot = Math.min(12, Math.max(0, newSlotIndex));
   const dateStr = newDate.slice(0, 10);
-  const { error } = await admin
-    .from('terms')
-    .update({ date: dateStr, slot_index: slot })
-    .eq('id', termId);
+
+  const { data: term } = await admin.from('terms').select('instructor_id, classroom_id, date, slot_index').eq('id', termId).single();
+  if (!term) return { error: 'Termin nije pronađen.' };
+
+  const isSameSlot = term.date === dateStr && term.slot_index === slot;
+  if (isSameSlot) return {}; // nema pomeranja
+
+  const [{ count: termCount }, { data: maxSetting }] = await Promise.all([
+    admin.from('terms').select('*', { count: 'exact', head: true }).eq('date', dateStr).eq('slot_index', slot),
+    admin.from('app_settings').select('value').eq('key', 'max_termina_po_slotu').single(),
+  ]);
+  const maxTerminaPoSlotu = (maxSetting?.value && parseInt(maxSetting.value, 10)) || 4;
+  if ((termCount ?? 0) >= maxTerminaPoSlotu) {
+    return { error: `U ciljnom slotu je već ${maxTerminaPoSlotu} termina (maksimum).` };
+  }
+
+  const { data: existingInstructor } = await admin.from('terms').select('id').eq('instructor_id', term.instructor_id).eq('date', dateStr).eq('slot_index', slot).maybeSingle();
+  if (existingInstructor) return { error: 'Ovaj predavač već ima termin u ciljnom slotu.' };
+
+  if (term.classroom_id) {
+    const { data: existingClassroom } = await admin.from('terms').select('id').eq('classroom_id', term.classroom_id).eq('date', dateStr).eq('slot_index', slot).maybeSingle();
+    if (existingClassroom) return { error: 'Ova učionica je već zauzeta u ciljnom slotu.' };
+  }
+
+  const { error } = await admin.from('terms').update({ date: dateStr, slot_index: slot }).eq('id', termId);
   if (error) return { error: error.message };
   revalidatePath('/admin/kalendar');
   revalidatePath(`/admin/termin/${termId}`);

@@ -76,7 +76,10 @@ CREATE TABLE classrooms (
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
--- Termini (jedan slot na dan; classroom_id opciono)
+-- Termini: u JEDNOM slotu (datum + vreme) važi:
+--   A) Jedan predavač može imati samo JEDAN termin (UNIQUE ispod).
+--   B) Jedna učionica može biti korišćena samo u JEDNOM terminu (unique indeks ispod).
+-- Broj termina po slotu ograničen je u app_settings (max_termina_po_slotu).
 CREATE TABLE terms (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   instructor_id UUID NOT NULL REFERENCES instructors(id) ON DELETE CASCADE,
