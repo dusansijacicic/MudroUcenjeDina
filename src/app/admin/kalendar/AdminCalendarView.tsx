@@ -96,10 +96,11 @@ function AdminCellContent({
   emptyDate: string;
   emptySlot: number;
 }) {
+  const newTermHref = `/admin/termin/novi?date=${emptyDate}&slot=${emptySlot}`;
   if (termsInSlot.length === 0) {
     return (
       <Link
-        href={`/admin/termin/novi?date=${emptyDate}&slot=${emptySlot}`}
+        href={newTermHref}
         className="block rounded-lg border border-dashed border-stone-200 p-2 text-stone-400 hover:border-amber-400 hover:bg-amber-50/50 min-h-[52px]"
       >
         +
@@ -136,6 +137,12 @@ function AdminCellContent({
           </Link>
         );
       })}
+      <Link
+        href={newTermHref}
+        className="block rounded-lg border border-dashed border-stone-200 p-1.5 text-stone-400 hover:border-amber-400 hover:bg-amber-50/50 text-xs"
+      >
+        + još predavač u ovom slotu
+      </Link>
     </div>
   );
 }

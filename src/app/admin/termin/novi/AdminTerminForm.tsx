@@ -9,16 +9,18 @@ type Instructor = { id: string; ime: string; prezime: string };
 export default function AdminTerminForm({
   instructors,
   defaultDate,
+  defaultSlotIndex = 0,
   slotLabels,
 }: {
   instructors: Instructor[];
   defaultDate: string;
+  defaultSlotIndex?: number;
   slotLabels: readonly string[];
 }) {
   const router = useRouter();
   const [instructorId, setInstructorId] = useState(instructors[0]?.id ?? '');
   const [date, setDate] = useState(defaultDate);
-  const [slotIndex, setSlotIndex] = useState(0);
+  const [slotIndex, setSlotIndex] = useState(defaultSlotIndex);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -95,7 +97,7 @@ export default function AdminTerminForm({
         disabled={loading}
         className="rounded-lg bg-amber-600 px-4 py-2 text-white font-medium hover:bg-amber-700 disabled:opacity-50"
       >
-        {loading ? 'Kreiranje...' : 'Zakaži termin i otvori kalendar'}
+        {loading ? 'Kreiranje...' : 'Zakaži termin i dodaj predavanje'}
       </button>
     </form>
   );

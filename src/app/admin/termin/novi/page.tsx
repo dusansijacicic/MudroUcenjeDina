@@ -5,7 +5,11 @@ import Link from 'next/link';
 import AdminTerminForm from './AdminTerminForm';
 import { TIME_SLOTS } from '@/lib/constants';
 
-export default async function AdminTerminNoviPage() {
+export default async function AdminTerminNoviPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ date?: string; slot?: string }>;
+}) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login');
@@ -17,6 +21,10 @@ export default async function AdminTerminNoviPage() {
     .single();
   if (!admin) redirect('/login');
 
+  const params = await searchParams;
+  const dateFromUrl = params.date?.slice(0, 10);
+  const slotFromUrl = params.slot != null ? Math.min(12, Math.max(0, parseInt(params.slot, 10) || 0)) : undefined;
+
   const adminSupabase = createAdminClient();
   const { data: instructors } = await adminSupabase
     .from('instructors')
@@ -26,17 +34,19 @@ export default async function AdminTerminNoviPage() {
 
   const tomorrow = new Date();
   tomorrow.setDate(tomorrow.getDate() + 1);
-  const defaultDate = tomorrow.toISOString().slice(0, 10);
+  const defaultDate = dateFromUrl ?? tomorrow.toISOString().slice(0, 10);
+  const defaultSlot = slotFromUrl ?? 0;
 
   return (
     <div className="max-w-lg">
       <h1 className="text-xl font-semibold text-stone-800 mb-2">Zakaži termin za predavača</h1>
       <p className="text-stone-500 text-sm mb-6">
-        Izaberite predavača, datum i vremenski slot. Termin će biti kreiran (ako već ne postoji), pa možete dodati predavanje.
+        Izaberite predavača. Datum i vreme su već izabrani iz kalendara (možete ih promeniti). Termin će biti kreiran, pa na sledećem koraku dodajte predavanje (klijenta).
       </p>
       <AdminTerminForm
         instructors={instructors ?? []}
         defaultDate={defaultDate}
+        defaultSlotIndex={defaultSlot}
         slotLabels={TIME_SLOTS}
       />
       <p className="mt-4">
