@@ -93,6 +93,8 @@ export default async function DashboardPage({
       admin.from('terms').select('id, instructor_id, date, slot_index, classroom_id, instructor:instructors(id, ime, prezime, color), classroom:classrooms(id, naziv, color), predavanja(*, client:clients(id, ime, prezime))').gte('date', dateFrom).lte('date', dateTo).order('date').order('slot_index'),
       admin.from('classrooms').select('id, naziv, color').order('naziv'),
     ]);
+    console.log('[dashboard] admin termsRes.error:', termsRes.error);
+    console.log('[dashboard] admin termsRes.data length:', termsRes.data?.length ?? 0);
     allTermsRaw = (termsRes.data ?? []) as TermRow[];
     classroomsRaw = (classRes.data ?? []);
   } catch (err) {
@@ -102,11 +104,34 @@ export default async function DashboardPage({
       supabase.from('terms').select('id, instructor_id, date, slot_index, classroom_id, instructor:instructors(id, ime, prezime, color), classroom:classrooms(id, naziv, color), predavanja(*, client:clients(id, ime, prezime))').eq('instructor_id', instructorId).gte('date', dateFrom).lte('date', dateTo).order('date').order('slot_index'),
       supabase.from('classrooms').select('id, naziv, color').order('naziv'),
     ]);
+    console.log('[dashboard] fallback termsRes.error:', termsRes.error);
+    console.log('[dashboard] fallback termsRes.data length:', termsRes.data?.length ?? 0);
     allTermsRaw = (termsRes.data ?? []) as TermRow[];
     classroomsRaw = (classRes.data ?? []);
   }
 
   const allTerms = (allTermsRaw ?? []) as TermRow[];
+  // DEBUG: log svi učitani termini (pa pejstuj šta vidiš u konzoli)
+  const normOne = (t: TermRow) => ({
+    instructor: Array.isArray(t.instructor) ? t.instructor[0] : t.instructor,
+    classroom: Array.isArray(t.classroom) ? t.classroom[0] : t.classroom,
+  });
+  console.log('[dashboard] serviceRoleUsed:', serviceRoleUsed);
+  console.log('[dashboard] allTerms.length:', allTerms.length);
+  console.log(
+    '[dashboard] allTerms (id, instructor_id, date, slot, instructor name, predavanja count):',
+    allTerms.map((t) => {
+      const { instructor: inst } = normOne(t);
+      return {
+        id: t.id,
+        instructor_id: t.instructor_id,
+        date: t.date,
+        slot_index: t.slot_index,
+        instructor_name: inst ? `${(inst as { ime?: string }).ime} ${(inst as { prezime?: string }).prezime}` : null,
+        predavanja_count: (t.predavanja ?? []).length,
+      };
+    })
+  );
   const norm = (t: TermRow) => ({
     instructor: Array.isArray(t.instructor) ? t.instructor[0] : t.instructor,
     classroom: Array.isArray(t.classroom) ? t.classroom[0] : t.classroom,
@@ -126,6 +151,7 @@ export default async function DashboardPage({
         classroom: room ? { id: room.id, naziv: room.naziv, color: room.color ?? undefined } : null,
       };
     });
+  console.log('[dashboard] myTerms.length:', myTerms.length, '| otherTerms.length:', otherTerms.length, '| current instructorId:', instructorId);
 
   let terms: RawTerm[] = myTerms.map((t) => {
     const { instructor: inst, classroom: room } = norm(t);
