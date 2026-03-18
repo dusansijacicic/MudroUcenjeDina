@@ -86,7 +86,7 @@ export default async function AdminPage({
         Možete da dodate predavača, da vidite i menjate sve klijente („Svi klijenti”), da zakažete termin za bilo kog predavača, ili da kliknete na predavača da vidite njegov kalendar i klijente.
       </p>
 
-      <h2 className="text-sm font-medium text-stone-600 mb-2">Predavači (klik za kalendar i klijente)</h2>
+      <h2 className="text-sm font-medium text-stone-600 mb-2">Predavači (klik za statistiku i pregled)</h2>
       <div className="rounded-xl border border-stone-200 bg-white divide-y divide-stone-100">
         {(instructors ?? []).length === 0 ? (
           <div className="p-6 text-center text-stone-500">
@@ -94,20 +94,26 @@ export default async function AdminPage({
           </div>
         ) : (
           (instructors ?? []).map((inst) => (
-            <div key={inst.id} className="flex items-center justify-between p-4 hover:bg-stone-50 gap-2">
-              <Link href={`/admin/view/${inst.id}`} className="flex-1 flex items-center justify-between min-w-0">
-                <span className="font-medium text-stone-800">
+            <button
+              key={inst.id}
+              type="button"
+              className="w-full flex items-center justify-between p-4 hover:bg-stone-50 gap-2 text-left"
+              onClick={() => {
+                window.location.href = `/admin/view/${inst.id}`;
+              }}
+            >
+              <div className="flex-1 min-w-0">
+                <div className="font-medium text-stone-800 truncate">
                   {inst.ime} {inst.prezime}
-                </span>
-                <span className="text-sm text-stone-500 shrink-0 ml-2">{inst.email}</span>
-              </Link>
-              <Link
-                href={`/admin/view/${inst.id}/klijenti/novi`}
-                className="text-sm text-amber-600 hover:text-amber-700 shrink-0"
-              >
-                + Klijent
-              </Link>
-            </div>
+                </div>
+                <div className="text-sm text-stone-500 truncate">
+                  {inst.email}
+                </div>
+              </div>
+              <span className="text-xs text-stone-400 shrink-0">
+                Statistika →
+              </span>
+            </button>
           ))
         )}
       </div>

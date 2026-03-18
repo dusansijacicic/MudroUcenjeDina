@@ -1,5 +1,7 @@
-// Blokovi termina: početak svakog časa (45 min), od 10:30 do 19:30
+// Blokovi termina: početak svakog časa (45 min), od 09:00 do 18:00
 export const TIME_SLOTS = [
+  '09:00',
+  '09:45',
   '10:30',
   '11:15',
   '12:00',
@@ -11,8 +13,6 @@ export const TIME_SLOTS = [
   '16:30',
   '17:15',
   '18:00',
-  '18:45',
-  '19:30',
 ] as const;
 
 export const SLOT_DURATION_MINUTES = 45;

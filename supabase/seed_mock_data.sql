@@ -19,7 +19,7 @@ BEGIN
 END $$;
 
 -- 1) Očisti sve podatke iz aplikativnih tabela
-TRUNCATE predavanja, zahtevi_za_cas, terms, instructor_clients, clients, instructor_availability_periods, instructor_weekly_availability, instructors, admin_users RESTART IDENTITY CASCADE;
+TRUNCATE predavanja, zahtevi_za_cas, terms, instructor_clients, clients, instructor_availability_periods, instructor_weekly_availability, instructors, admin_users, classrooms RESTART IDENTITY CASCADE;
 
 -- 2) Dusan = super admin
 INSERT INTO admin_users (user_id)
@@ -63,7 +63,17 @@ VALUES ('Mila', 'Đorđević', 2011, '6', 'OS Vuk Karadžić', 'Stefan Đorđevi
 INSERT INTO instructor_clients (instructor_id, client_id, placeno_casova)
 SELECT i.id, c.id, 6 FROM instructors i, clients c WHERE i.email = 'dina.mateja@yahoo.com' AND c.ime = 'Mila' AND c.prezime = 'Đorđević' LIMIT 1;
 
--- 5) Termini: samo za Dinu, ponedeljak–petak naredne nedelje, slotovi 0–8
+-- 5) Učionice (6 soba)
+INSERT INTO classrooms (naziv, color) VALUES
+  ('Učionica 1', '#0ea5e9'),
+  ('Učionica 2', '#22c55e'),
+  ('Učionica 3', '#f97316'),
+  ('Učionica 4', '#a855f7'),
+  ('Učionica 5', '#facc15'),
+  ('Učionica 6', '#6b7280')
+ON CONFLICT DO NOTHING;
+
+-- 6) Termini: samo za Dinu, ponedeljak–petak naredne nedelje, slotovi 0–8, kružno po učionicama
 DO $$
 DECLARE
   next_monday DATE;
@@ -71,14 +81,26 @@ DECLARE
   day_off INT;
   s INT;
   din_id UUID;
+  room_ids UUID[];
+  room_idx INT := 1;
 BEGIN
   SELECT id INTO din_id FROM instructors WHERE email = 'dina.mateja@yahoo.com' LIMIT 1;
   IF din_id IS NULL THEN RETURN; END IF;
+  SELECT array_agg(id ORDER BY naziv) INTO room_ids FROM classrooms;
   next_monday := CURRENT_DATE + CASE WHEN EXTRACT(ISODOW FROM CURRENT_DATE) = 1 THEN 7 ELSE (8 - EXTRACT(ISODOW FROM CURRENT_DATE)::int) END;
   FOR day_off IN 0..4 LOOP
     d := next_monday + day_off;
     FOR s IN 0..8 LOOP
-      INSERT INTO terms (instructor_id, date, slot_index) VALUES (din_id, d, s)
+      IF room_ids IS NULL OR array_length(room_ids, 1) = 0 THEN
+        INSERT INTO terms (instructor_id, date, slot_index)
+        VALUES (din_id, d, s)
+        ON CONFLICT (instructor_id, date, slot_index) DO NOTHING;
+      ELSE
+        INSERT INTO terms (instructor_id, date, slot_index, classroom_id)
+        VALUES (din_id, d, s, room_ids[((room_idx - 1) % array_length(room_ids, 1)) + 1])
+        ON CONFLICT (instructor_id, date, slot_index) DO NOTHING;
+        room_idx := room_idx + 1;
+      END IF;
       ON CONFLICT (instructor_id, date, slot_index) DO NOTHING;
     END LOOP;
   END LOOP;
@@ -116,7 +138,7 @@ BEGIN
   WHERE t.slot_index = 2 AND t.date = next_monday LIMIT 1;
 END $$;
 
--- 7) Nedeljna dostupnost: samo Dina, Pon–Pet, slotovi 1–10
+-- 7) Nedeljna dostupnost: samo Dina, Pon–Pet, slotovi 1–12 (09:00–18:00)
 DO $$
 DECLARE
   din_id UUID;
@@ -126,7 +148,7 @@ BEGIN
   SELECT id INTO din_id FROM instructors WHERE email = 'dina.mateja@yahoo.com' LIMIT 1;
   IF din_id IS NULL THEN RETURN; END IF;
   FOR d IN 1..5 LOOP
-    FOR s IN 1..10 LOOP
+    FOR s IN 0..12 LOOP
       INSERT INTO instructor_weekly_availability (instructor_id, day_of_week, slot_index)
       VALUES (din_id, d, s)
       ON CONFLICT (instructor_id, day_of_week, slot_index) DO NOTHING;

@@ -63,7 +63,7 @@ export default async function AdminKalendarPage({
   const [{ data: termsRaw }, { data: instructorsList }] = await Promise.all([
     adminSupabase
       .from('terms')
-      .select('*, instructor:instructors(id, ime, prezime, color), predavanja(*, client:clients(id, ime, prezime))')
+      .select('*, instructor:instructors(id, ime, prezime, color), classroom:classrooms(id, naziv, color), predavanja(*, client:clients(id, ime, prezime))')
       .gte('date', dateFrom)
       .lte('date', dateTo)
       .order('date')
@@ -72,13 +72,21 @@ export default async function AdminKalendarPage({
   ]);
 
   const terms: AdminTerm[] = (termsRaw ?? []).map((t) => {
-    const instr = (t as { instructor?: { id: string; ime: string; prezime: string; color?: string | null } | Array<unknown> }).instructor;
+    const instr = (t as {
+      instructor?: { id: string; ime: string; prezime: string; color?: string | null } | Array<unknown>;
+      classroom?: { id: string; naziv: string; color?: string | null } | Array<unknown>;
+    }).instructor;
     const instructor = Array.isArray(instr) ? instr[0] : instr;
+    const classroomRaw = (t as {
+      classroom?: { id: string; naziv: string; color?: string | null } | Array<unknown>;
+    }).classroom;
+    const classroom = Array.isArray(classroomRaw) ? classroomRaw[0] : classroomRaw;
     return {
       id: t.id,
       instructor_id: t.instructor_id,
       date: t.date,
       slot_index: t.slot_index,
+      classroom: classroom as AdminTerm['classroom'],
       instructor: instructor as AdminTerm['instructor'],
       predavanja: t.predavanja as AdminTerm['predavanja'],
     };

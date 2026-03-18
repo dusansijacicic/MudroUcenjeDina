@@ -13,6 +13,7 @@ export type AdminTerm = {
   instructor_id: string;
   date: string;
   slot_index: number;
+  classroom?: { id: string; naziv: string; color?: string | null } | null;
   instructor?: { id: string; ime: string; prezime: string; color?: string | null } | null;
   predavanja?: Array<{
     id: string;
@@ -142,23 +143,30 @@ function AdminCellContent({
   return (
     <div className="space-y-1.5 min-h-[52px]">
       {termsInSlot.map((term) => {
-        const color = term.instructor?.color ?? DEFAULT_COLOR;
-        const bg = `${color}20`;
+        const instructorColor = term.instructor?.color ?? DEFAULT_COLOR;
+        const classroomColor = term.classroom?.color ?? '#64748b'; // fallback siva
+        const bg = `${classroomColor}20`;
         const predavanja = term.predavanja ?? [];
         const instructorName = term.instructor
           ? `${term.instructor.ime} ${term.instructor.prezime}`
           : '—';
+        const classroomName = term.classroom?.naziv ?? 'Učionica';
         return (
           <Link
             key={term.id}
             href={`/admin/termin/${term.id}`}
             className="block rounded-lg border-2 p-2 text-sm transition-opacity hover:opacity-90"
-            style={{ borderColor: color, backgroundColor: bg }}
+            style={{ borderColor: classroomColor, backgroundColor: bg, color: instructorColor }}
             draggable
             onDragStart={() => setDraggedTermId(term.id)}
             onDragEnd={() => setDraggedTermId(null)}
           >
-            <span className="font-medium text-stone-800">{instructorName}</span>
+            <span className="font-medium">
+              {instructorName}
+            </span>
+            <span className="ml-1 text-[0.7rem] uppercase tracking-wide opacity-80">
+              ({classroomName})
+            </span>
             {predavanja.length > 0 && (
               <div className="mt-0.5 text-stone-600">
                 {predavanja.map((p) =>
