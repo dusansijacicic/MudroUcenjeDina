@@ -21,6 +21,7 @@ export default function DashboardNav({ instructor, isAdminView }: { instructor: 
     { href: '/dashboard', label: 'Kalendar' },
     { href: '/dashboard/zahtevi', label: 'Zahtevi' },
     { href: '/dashboard/klijenti', label: 'Klijenti' },
+    { href: '/dashboard/uplate', label: 'Uplate' },
     { href: '/dashboard/podesavanja', label: 'Podešavanja' },
   ];
 

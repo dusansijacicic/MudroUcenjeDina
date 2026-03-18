@@ -4,7 +4,7 @@ import { redirect, notFound } from 'next/navigation';
 import Link from 'next/link';
 import { getMaxCasovaPoTerminu } from '@/lib/settings';
 import { TIME_SLOTS } from '@/lib/constants';
-import { getTermTypes, getClassrooms } from '@/app/admin/actions';
+import { getTermTypes, getClassrooms, getStanjePoVrstamaZaKlijenta } from '@/app/admin/actions';
 import AdminPredavanjeForm from '@/app/admin/termin/AdminPredavanjeForm';
 
 export default async function AdminNoviPredavanjePage({
@@ -38,6 +38,11 @@ export default async function AdminNoviPredavanjePage({
     prezime: c.prezime ?? '',
   }));
 
+  const instructorId = (term as { instructor_id?: string }).instructor_id;
+  const clientStanjeList = instructorId
+    ? await Promise.all(clients.map(async (c) => ({ clientId: c.id, stanje: await getStanjePoVrstamaZaKlijenta(c.id, instructorId) })))
+    : [];
+
   const slotLabel = TIME_SLOTS[term.slot_index] ?? '—';
   const termWithClassroom = term as { classroom_id?: string | null };
   return (
@@ -55,6 +60,7 @@ export default async function AdminNoviPredavanjePage({
         currentCount={currentCount}
         classrooms={classrooms}
         initialClassroomId={termWithClassroom.classroom_id ?? null}
+        clientStanjeList={clientStanjeList}
       />
       <p className="mt-4">
         <Link href={`/admin/termin/${termId}`} className="text-sm text-amber-700 hover:underline">← Nazad na termin</Link>

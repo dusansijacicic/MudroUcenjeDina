@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getDashboardInstructor } from '@/lib/dashboard';
+import { getOdrzanoPoVrstamaZaPredavaca } from '@/app/admin/actions';
 import CalendarView from './CalendarView';
 import AddTermButton from './AddTermButton';
 import CalendarFilters from './CalendarFilters';
@@ -112,6 +113,8 @@ export default async function DashboardPage({
   const clients = (links ?? []).map((l) => l.client).filter(Boolean) as unknown as { id: string; ime: string; prezime: string }[];
   clients.sort((a, b) => (a.prezime ?? '').localeCompare(b.prezime ?? '') || (a.ime ?? '').localeCompare(b.ime ?? ''));
 
+  const odrzanoPoVrstama = await getOdrzanoPoVrstamaZaPredavaca(instructorId);
+
   return (
     <div>
       <DashboardErrorToast />
@@ -140,6 +143,16 @@ export default async function DashboardPage({
           <span className="text-stone-400">| Ostali predavači: sivi blokovi (samo pregled)</span>
         )}
       </div>
+      {odrzanoPoVrstama.length > 0 && (
+        <div className="mb-4 rounded-lg border border-stone-200 bg-stone-50 px-3 py-2 text-sm text-stone-700">
+          <span className="font-medium text-stone-600">Održano po vrstama časova: </span>
+          {odrzanoPoVrstama.map((s) => (
+            <span key={s.term_type_id ?? 'bez'} className="mr-3">
+              {s.term_type_naziv} <strong>{s.count}</strong>
+            </span>
+          ))}
+        </div>
+      )}
       <CalendarView
         view={view}
         terms={terms}

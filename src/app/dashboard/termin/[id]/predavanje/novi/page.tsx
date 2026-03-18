@@ -2,7 +2,7 @@ import { redirect, notFound } from 'next/navigation';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getDashboardInstructor } from '@/lib/dashboard';
 import { getMaxCasovaPoTerminu } from '@/lib/settings';
-import { getTermTypes, getClassrooms } from '@/app/admin/actions';
+import { getTermTypes, getClassrooms, getStanjePoVrstamaZaKlijenta } from '@/app/admin/actions';
 import PredavanjeForm from '../../../PredavanjeForm';
 import { TIME_SLOTS } from '@/lib/constants';
 
@@ -40,6 +40,10 @@ export default async function NoviPredavanjePage({
     prezime: c.prezime ?? '',
   }));
 
+  const clientStanjeList = await Promise.all(
+    clients.map(async (c) => ({ clientId: c.id, stanje: await getStanjePoVrstamaZaKlijenta(c.id, instructor.id) }))
+  );
+
   const slotLabel = TIME_SLOTS[term.slot_index] ?? '—';
   const termWithClassroom = term as { classroom_id?: string | null };
   return (
@@ -57,6 +61,7 @@ export default async function NoviPredavanjePage({
         currentCount={currentCount}
         classrooms={classrooms}
         initialClassroomId={termWithClassroom.classroom_id ?? null}
+        clientStanjeList={clientStanjeList}
       />
     </div>
   );

@@ -10,6 +10,7 @@ import type { Predavanje } from '@/types/database';
 type ClientOption = { id: string; ime: string; prezime: string };
 type TermTypeOption = { id: string; naziv: string; opis: string | null };
 type ClassroomOption = { id: string; naziv: string; color: string | null };
+type StanjeItem = { term_type_id: string | null; term_type_naziv: string; uplaceno: number; odrzano: number; ostalo: number };
 
 interface PredavanjeFormProps {
   termId: string;
@@ -22,6 +23,8 @@ interface PredavanjeFormProps {
   currentCount?: number;
   classrooms?: ClassroomOption[];
   initialClassroomId?: string | null;
+  /** Stanje po vrstama za svakog klijenta (kod ovog predavača), da se prikaže ostalo pri izboru klijenta */
+  clientStanjeList?: { clientId: string; stanje: StanjeItem[] }[];
 }
 
 export default function PredavanjeForm({
@@ -35,9 +38,11 @@ export default function PredavanjeForm({
   currentCount = 0,
    classrooms = [],
    initialClassroomId = null,
+   clientStanjeList = [],
 }: PredavanjeFormProps) {
   const router = useRouter();
   const [clientId, setClientId] = useState(predavanje?.client_id ?? '');
+  const selectedStanje = clientStanjeList.find((s) => s.clientId === clientId)?.stanje ?? [];
   const [termTypeId, setTermTypeId] = useState<string>(predavanje?.term_type_id ?? '');
   const [odrzano, setOdrzano] = useState(predavanje?.odrzano ?? false);
   const [placeno, setPlaceno] = useState(predavanje?.placeno ?? false);
@@ -169,6 +174,16 @@ export default function PredavanjeForm({
             </option>
           ))}
         </select>
+        {clientId && selectedStanje.length > 0 && (
+          <div className="mt-2 rounded-lg bg-stone-50 border border-stone-200 px-3 py-2 text-sm">
+            <span className="font-medium text-stone-600">Ostalo časova kod vas: </span>
+            {selectedStanje.map((s) => (
+              <span key={s.term_type_id ?? 'bez'} className="mr-2">
+                {s.term_type_naziv} <strong>{s.ostalo}</strong>
+              </span>
+            ))}
+          </div>
+        )}
       </div>
       <div>
         <label className="block text-sm font-medium text-stone-700 mb-1">Vrsta termina <span className="text-red-600">*</span></label>

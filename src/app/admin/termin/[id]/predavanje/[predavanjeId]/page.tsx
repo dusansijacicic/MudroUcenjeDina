@@ -3,7 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { redirect, notFound } from 'next/navigation';
 import Link from 'next/link';
 import { TIME_SLOTS } from '@/lib/constants';
-import { getTermTypes, getClassrooms } from '@/app/admin/actions';
+import { getTermTypes, getClassrooms, getStanjePoVrstamaZaKlijenta } from '@/app/admin/actions';
 import AdminPredavanjeForm from '@/app/admin/termin/AdminPredavanjeForm';
 
 export default async function AdminEditPredavanjePage({
@@ -37,6 +37,10 @@ export default async function AdminEditPredavanjePage({
     ime: c.ime ?? '',
     prezime: c.prezime ?? '',
   }));
+  const instructorId = (term as { instructor_id?: string }).instructor_id;
+  const clientStanjeList = instructorId
+    ? await Promise.all(clients.map(async (c) => ({ clientId: c.id, stanje: await getStanjePoVrstamaZaKlijenta(c.id, instructorId) })))
+    : [];
 
   const slotLabel = TIME_SLOTS[term.slot_index] ?? '—';
   const termWithClassroom = term as { classroom_id?: string | null };
@@ -53,6 +57,7 @@ export default async function AdminEditPredavanjePage({
         termTypes={termTypes}
         classrooms={classrooms}
         initialClassroomId={termWithClassroom.classroom_id ?? null}
+        clientStanjeList={clientStanjeList}
         predavanje={{
           id: predavanje.id,
           client_id: predavanje.client_id,

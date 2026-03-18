@@ -20,7 +20,7 @@ export default async function AdminUplateNoviPage() {
   const adminSupabase = createAdminClient();
   const [{ data: instructors }, { data: clients }, termTypes] = await Promise.all([
     adminSupabase.from('instructors').select('id, ime, prezime').order('prezime').order('ime'),
-    adminSupabase.from('clients').select('id, ime, prezime').order('prezime').order('ime'),
+    adminSupabase.from('clients').select('id, ime, prezime, popust_percent').order('prezime').order('ime'),
     getTermTypes(),
   ]);
 
@@ -32,7 +32,7 @@ export default async function AdminUplateNoviPage() {
       </p>
       <UplataForm
         instructors={(instructors ?? []).map((i) => ({ id: i.id, ime: i.ime ?? '', prezime: i.prezime ?? '' }))}
-        clients={(clients ?? []).map((c) => ({ id: c.id, ime: c.ime ?? '', prezime: c.prezime ?? '' }))}
+        clients={(clients ?? []).map((c) => ({ id: c.id, ime: c.ime ?? '', prezime: c.prezime ?? '', popust_percent: (c as { popust_percent?: number | null }).popust_percent ?? 0 }))}
         termTypes={termTypes.map((t) => ({ id: t.id, naziv: t.naziv }))}
       />
       <p className="mt-4">

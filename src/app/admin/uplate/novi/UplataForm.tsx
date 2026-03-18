@@ -7,19 +7,29 @@ import toast from 'react-hot-toast';
 import { createUplata } from '@/app/admin/actions';
 
 type Option = { id: string; ime?: string; prezime?: string; naziv?: string };
+type ClientOption = Option & { popust_percent?: number };
 
 export default function UplataForm({
   instructors,
   clients,
   termTypes,
+  fixedInstructorId,
+  backHref = '/admin/uplate',
 }: {
   instructors: Option[];
-  clients: Option[];
+  clients: ClientOption[];
   termTypes: Option[];
+  /** Kad je setovan (npr. za predavača), predavač je fiksiran i ne prikazuje se izbor. */
+  fixedInstructorId?: string;
+  /** Link za „Nazad” i redirect posle unosa (default admin uplate). */
+  backHref?: string;
 }) {
   const router = useRouter();
-  const [instructorId, setInstructorId] = useState(instructors[0]?.id ?? '');
+  const [instructorId, setInstructorId] = useState(fixedInstructorId ?? instructors[0]?.id ?? '');
+  const effectiveInstructorId = fixedInstructorId ?? instructorId;
   const [clientId, setClientId] = useState(clients[0]?.id ?? '');
+  const selectedClient = clients.find((c) => c.id === clientId);
+  const clientPopust = selectedClient?.popust_percent ?? 0;
   const [iznos, setIznos] = useState('');
   const [termTypeId, setTermTypeId] = useState('');
   const [brojCasova, setBrojCasova] = useState(1);
@@ -31,7 +41,7 @@ export default function UplataForm({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    if (!instructorId || !clientId) {
+    if (!effectiveInstructorId || !clientId) {
       setError('Izaberite predavača i klijenta.');
       return;
     }
@@ -52,7 +62,7 @@ export default function UplataForm({
       return;
     }
     const result = await createUplata(
-      instructorId,
+      effectiveInstructorId,
       clientId,
       iznosNum,
       termTypeId || null,
@@ -67,26 +77,28 @@ export default function UplataForm({
       return;
     }
     toast.success('Uplata uneta.');
-    router.push('/admin/uplate');
+    router.push(backHref);
     router.refresh();
   };
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4 max-w-md">
-      <div>
-        <label className="block text-sm font-medium text-stone-700 mb-1">Ko je primio (predavač) *</label>
-        <select
-          value={instructorId}
-          onChange={(e) => setInstructorId(e.target.value)}
-          required
-          className="w-full rounded-lg border border-stone-300 px-3 py-2 text-stone-800"
-        >
-          <option value="">—</option>
-          {instructors.map((i) => (
-            <option key={i.id} value={i.id}>{i.ime} {i.prezime}</option>
-          ))}
-        </select>
-      </div>
+      {!fixedInstructorId && (
+        <div>
+          <label className="block text-sm font-medium text-stone-700 mb-1">Ko je primio (predavač) *</label>
+          <select
+            value={instructorId}
+            onChange={(e) => setInstructorId(e.target.value)}
+            required
+            className="w-full rounded-lg border border-stone-300 px-3 py-2 text-stone-800"
+          >
+            <option value="">—</option>
+            {instructors.map((i) => (
+              <option key={i.id} value={i.id}>{i.ime} {i.prezime}</option>
+            ))}
+          </select>
+        </div>
+      )}
       <div>
         <label className="block text-sm font-medium text-stone-700 mb-1">Klijent *</label>
         <select
@@ -100,6 +112,11 @@ export default function UplataForm({
             <option key={c.id} value={c.id}>{c.ime} {c.prezime}</option>
           ))}
         </select>
+        {selectedClient != null && (
+          <p className="mt-1 text-sm text-amber-700">
+            Popust na nivou klijenta: <strong>{clientPopust}%</strong> (možete ga pregaziti poljem „Popust za ovu uplatu” ispod.)
+          </p>
+        )}
       </div>
       <div>
         <label className="block text-sm font-medium text-stone-700 mb-1">Iznos (RSD)</label>
@@ -163,7 +180,7 @@ export default function UplataForm({
         >
           {loading ? 'Unos...' : 'Unesi uplatu'}
         </button>
-        <Link href="/admin/uplate" className="rounded-lg border border-stone-300 px-4 py-2 text-stone-700 hover:bg-stone-100">
+        <Link href={backHref} className="rounded-lg border border-stone-300 px-4 py-2 text-stone-700 hover:bg-stone-100">
           Nazad
         </Link>
       </div>

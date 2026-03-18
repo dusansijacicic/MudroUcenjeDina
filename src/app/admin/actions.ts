@@ -440,6 +440,94 @@ export async function updateClientAsAdmin(
   return {};
 }
 
+/** Stanje po vrstama časova za klijenta: uplaćeno (iz uplata), održano (iz predavanja), ostalo. Ako je instructorId dat, samo za tog predavača. */
+export async function getStanjePoVrstamaZaKlijenta(
+  clientId: string,
+  instructorId?: string
+): Promise<{ term_type_id: string | null; term_type_naziv: string; uplaceno: number; odrzano: number; ostalo: number }[]> {
+  const admin = createAdminClient();
+  let uplateRows: { term_type_id: string | null; broj_casova: number }[];
+  if (instructorId) {
+    const { data } = await admin.from('uplate').select('term_type_id, broj_casova').eq('client_id', clientId).eq('instructor_id', instructorId);
+    uplateRows = data ?? [];
+  } else {
+    const { data } = await admin.from('uplate').select('term_type_id, broj_casova').eq('client_id', clientId);
+    uplateRows = data ?? [];
+  }
+  const { data: predRows } = await admin
+    .from('predavanja')
+    .select('term_type_id, odrzano, term:terms(instructor_id)')
+    .eq('client_id', clientId);
+  const uplateByType = new Map<string, number>();
+  for (const u of uplateRows) {
+    const tid = u.term_type_id ?? '__bez_vrste__';
+    uplateByType.set(tid, (uplateByType.get(tid) ?? 0) + (u.broj_casova ?? 0));
+  }
+  const odrzanoByType = new Map<string, number>();
+  for (const p of predRows ?? []) {
+    const term = Array.isArray(p.term) ? p.term[0] : p.term;
+    if (instructorId && (term as { instructor_id?: string })?.instructor_id !== instructorId) continue;
+    if (!p.odrzano) continue;
+    const tid = p.term_type_id ?? '__bez_vrste__';
+    odrzanoByType.set(tid, (odrzanoByType.get(tid) ?? 0) + 1);
+  }
+  const { data: termTypes } = await admin.from('term_types').select('id, naziv').order('naziv');
+  const result: { term_type_id: string | null; term_type_naziv: string; uplaceno: number; odrzano: number; ostalo: number }[] = [];
+  for (const tt of termTypes ?? []) {
+    const uplaceno = uplateByType.get(tt.id) ?? 0;
+    const odrzano = odrzanoByType.get(tt.id) ?? 0;
+    if (uplaceno === 0 && odrzano === 0) continue;
+    result.push({
+      term_type_id: tt.id,
+      term_type_naziv: tt.naziv ?? '',
+      uplaceno,
+      odrzano,
+      ostalo: Math.max(0, uplaceno - odrzano),
+    });
+  }
+  const bezVrsteUpl = uplateByType.get('__bez_vrste__') ?? 0;
+  const bezVrsteOdrz = odrzanoByType.get('__bez_vrste__') ?? 0;
+  if (bezVrsteUpl > 0 || bezVrsteOdrz > 0) {
+    result.push({
+      term_type_id: null,
+      term_type_naziv: 'Bez vrste',
+      uplaceno: bezVrsteUpl,
+      odrzano: bezVrsteOdrz,
+      ostalo: Math.max(0, bezVrsteUpl - bezVrsteOdrz),
+    });
+  }
+  return result;
+}
+
+/** Broj održanih časova po vrstama za predavača (za prikaz na dashboardu). */
+export async function getOdrzanoPoVrstamaZaPredavaca(
+  instructorId: string
+): Promise<{ term_type_id: string | null; term_type_naziv: string; count: number }[]> {
+  const admin = createAdminClient();
+  const { data: termIds } = await admin.from('terms').select('id').eq('instructor_id', instructorId);
+  const ids = (termIds ?? []).map((t) => t.id);
+  if (ids.length === 0) return [];
+  const { data: predavanja } = await admin
+    .from('predavanja')
+    .select('term_type_id')
+    .in('term_id', ids)
+    .eq('odrzano', true);
+  const countByType = new Map<string, number>();
+  for (const p of predavanja ?? []) {
+    const tid = p.term_type_id ?? '__bez_vrste__';
+    countByType.set(tid, (countByType.get(tid) ?? 0) + 1);
+  }
+  const { data: termTypes } = await admin.from('term_types').select('id, naziv').order('naziv');
+  const result: { term_type_id: string | null; term_type_naziv: string; count: number }[] = [];
+  for (const tt of termTypes ?? []) {
+    const count = countByType.get(tt.id) ?? 0;
+    if (count > 0) result.push({ term_type_id: tt.id, term_type_naziv: tt.naziv ?? '', count });
+  }
+  const bezVrste = countByType.get('__bez_vrste__') ?? 0;
+  if (bezVrste > 0) result.push({ term_type_id: null, term_type_naziv: 'Bez vrste', count: bezVrste });
+  return result;
+}
+
 /** Unos uplate (evidencija: ko je primio, kada, koliko, za koga). Admin ili predavač (samo svoje). popust_percent = popust za ovu uplatu (npr. 10). */
 export async function createUplata(
   instructorId: string,
@@ -472,5 +560,7 @@ export async function createUplata(
   if (error) return { error: error.message };
   revalidatePath('/admin/uplate');
   revalidatePath('/admin/uplate/novi');
+  revalidatePath('/dashboard/uplate');
+  revalidatePath('/dashboard/uplate/novi');
   return {};
 }

@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
+import { getStanjePoVrstamaZaKlijenta } from '@/app/admin/actions';
 
 export default async function AdminSviKlijentiPage() {
   const supabase = await createClient();
@@ -45,6 +46,15 @@ export default async function AdminSviKlijentiPage() {
     (a, b) => (a.client.prezime ?? '').localeCompare(b.client.prezime ?? '') || (a.client.ime ?? '').localeCompare(b.client.ime ?? '')
   );
 
+  const clientWarnings = await Promise.all(
+    list.map(async ({ client }) => {
+      const stanje = await getStanjePoVrstamaZaKlijenta(client.id);
+      const problemTypes = stanje.filter((s) => s.uplaceno < s.odrzano).map((s) => s.term_type_naziv);
+      return { clientId: client.id, problemTypes };
+    })
+  );
+  const warningByClientId = new Map(clientWarnings.map((w) => [w.clientId, w.problemTypes]));
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
@@ -74,10 +84,18 @@ export default async function AdminSviKlijentiPage() {
             </tr>
           </thead>
           <tbody>
-            {list.map(({ client, instructors: instrs }) => (
+            {list.map(({ client, instructors: instrs }) => {
+              const problemTypes = warningByClientId.get(client.id) ?? [];
+              const hasWarning = problemTypes.length > 0;
+              return (
               <tr key={client.id} className="border-b border-stone-100 hover:bg-stone-50">
                 <td className="p-3 font-medium text-stone-800">
                   {client.ime} {client.prezime}
+                  {hasWarning && (
+                    <span className="ml-2 inline-flex items-center rounded-md bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800" title={`Nema dovoljno kupljenih časova za: ${problemTypes.join(', ')}`}>
+                      Nema kupljenih časova ({problemTypes.join(', ')})
+                    </span>
+                  )}
                 </td>
                 <td className="p-3 text-stone-600">{client.login_email ?? '—'}</td>
                 <td className="p-3 text-stone-600">
@@ -110,7 +128,8 @@ export default async function AdminSviKlijentiPage() {
                   )}
                 </td>
               </tr>
-            ))}
+            );
+            })}
           </tbody>
         </table>
         {list.length === 0 && (

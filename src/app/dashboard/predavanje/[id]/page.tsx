@@ -2,7 +2,7 @@ import { redirect, notFound } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getDashboardInstructor } from '@/lib/dashboard';
-import { getTermTypes, getClassrooms } from '@/app/admin/actions';
+import { getTermTypes, getClassrooms, getStanjePoVrstamaZaKlijenta } from '@/app/admin/actions';
 import { termMozeNovoPredavanje } from '@/lib/settings';
 import PredavanjeForm from '@/app/dashboard/termin/PredavanjeForm';
 import { TIME_SLOTS } from '@/lib/constants';
@@ -130,6 +130,9 @@ export default async function EditPredavanjePage({
       (a.prezime ?? '').localeCompare(b.prezime ?? '') || (a.ime ?? '').localeCompare(b.ime ?? '')
   );
   const [termTypes, classrooms] = await Promise.all([getTermTypes(), getClassrooms()]);
+  const clientStanjeList = await Promise.all(
+    clients.map(async (c) => ({ clientId: c.id, stanje: await getStanjePoVrstamaZaKlijenta(c.id, instructor.id) }))
+  );
 
   return (
     <div className="max-w-lg space-y-6">
@@ -143,6 +146,7 @@ export default async function EditPredavanjePage({
           termTypes={termTypes}
           classrooms={classrooms}
           initialClassroomId={term.classroom_id ?? null}
+          clientStanjeList={clientStanjeList}
           predavanje={{
             ...predavanje,
             term_type_id: (predavanje as { term_type_id?: string | null }).term_type_id,
