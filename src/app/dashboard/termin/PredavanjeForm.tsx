@@ -4,11 +4,12 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
-import { createPredavanje, updatePredavanje, deletePredavanje } from '@/app/dashboard/termin/actions';
+import { createPredavanje, updatePredavanje, deletePredavanje, updateTermClassroom } from '@/app/dashboard/termin/actions';
 import type { Predavanje } from '@/types/database';
 
 type ClientOption = { id: string; ime: string; prezime: string };
 type TermTypeOption = { id: string; naziv: string; opis: string | null };
+type ClassroomOption = { id: string; naziv: string; color: string | null };
 
 interface PredavanjeFormProps {
   termId: string;
@@ -19,6 +20,8 @@ interface PredavanjeFormProps {
   termTypes?: TermTypeOption[];
   maxCasova?: number;
   currentCount?: number;
+  classrooms?: ClassroomOption[];
+  initialClassroomId?: string | null;
 }
 
 export default function PredavanjeForm({
@@ -30,6 +33,8 @@ export default function PredavanjeForm({
   termTypes = [],
   maxCasova = 4,
   currentCount = 0,
+   classrooms = [],
+   initialClassroomId = null,
 }: PredavanjeFormProps) {
   const router = useRouter();
   const [clientId, setClientId] = useState(predavanje?.client_id ?? '');
@@ -39,6 +44,7 @@ export default function PredavanjeForm({
   const [komentar, setKomentar] = useState(predavanje?.komentar ?? '');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [classroomId, setClassroomId] = useState<string>(initialClassroomId ?? '');
 
   const isNew = !predavanje;
   const atLimit = isNew && currentCount >= maxCasova;
@@ -50,6 +56,15 @@ export default function PredavanjeForm({
     setLoading(true);
     console.log('[PredavanjeForm] submit', { termId, clientId, predavanje: !!predavanje });
     try {
+      if (classrooms.length > 0 && !classroomId) {
+        throw new Error('Izaberite učionicu za ovaj termin.');
+      }
+      if (classrooms.length > 0 && classroomId) {
+        const res = await updateTermClassroom(termId, classroomId);
+        if (res.error) {
+          throw new Error(res.error);
+        }
+      }
       if (predavanje) {
         const result = await updatePredavanje(
           predavanje.id,
@@ -158,6 +173,26 @@ export default function PredavanjeForm({
             <option value="">—</option>
             {termTypes.map((tt) => (
               <option key={tt.id} value={tt.id}>{tt.naziv}</option>
+            ))}
+          </select>
+        </div>
+      )}
+      {classrooms.length > 0 && (
+        <div>
+          <label className="block text-sm font-medium text-stone-700 mb-1">
+            Učionica
+          </label>
+          <select
+            value={classroomId}
+            onChange={(e) => setClassroomId(e.target.value)}
+            required
+            className="w-full rounded-lg border border-stone-300 px-3 py-2 text-stone-800"
+          >
+            <option value="">Izaberite učionicu</option>
+            {classrooms.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.naziv}
+              </option>
             ))}
           </select>
         </div>

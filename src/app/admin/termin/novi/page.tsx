@@ -36,6 +36,10 @@ export default async function AdminTerminNoviPage({
     .select('id, ime, prezime')
     .order('prezime')
     .order('ime');
+  const { data: classrooms } = await adminSupabase
+    .from('classrooms')
+    .select('id, naziv')
+    .order('naziv');
 
   const tomorrow = new Date();
   tomorrow.setDate(tomorrow.getDate() + 1);
@@ -51,6 +55,7 @@ export default async function AdminTerminNoviPage({
       <AdminTerminForm
         instructors={instructors ?? []}
         clients={clients ?? []}
+        classrooms={(classrooms ?? []) as { id: string; naziv: string }[]}
         defaultDate={defaultDate}
         defaultSlotIndex={defaultSlot}
         slotLabels={TIME_SLOTS}

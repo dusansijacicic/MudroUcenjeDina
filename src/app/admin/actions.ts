@@ -81,7 +81,12 @@ export async function createInstructorAsAdmin(formData: FormData): Promise<{ err
   return { success: true };
 }
 
-export async function createTermAsAdmin(instructorId: string, date: string, slotIndex: number): Promise<{ termId?: string; instructorId?: string; error?: string }> {
+export async function createTermAsAdmin(
+  instructorId: string,
+  date: string,
+  slotIndex: number,
+  classroomId: string | null
+): Promise<{ termId?: string; instructorId?: string; error?: string }> {
   const supabase = await createClient();
   const {
     data: { user },
@@ -101,19 +106,26 @@ export async function createTermAsAdmin(instructorId: string, date: string, slot
 
   const { data: existing } = await adminSupabase
     .from('terms')
-    .select('id')
+    .select('id, classroom_id')
     .eq('instructor_id', instructorId)
     .eq('date', dateStr)
     .eq('slot_index', slot)
     .single();
 
   if (existing) {
+    // Ako termin već postoji i nema učionicu, a sada smo izabrali neku – upiši je.
+    if (!existing.classroom_id && classroomId) {
+      await adminSupabase
+        .from('terms')
+        .update({ classroom_id: classroomId })
+        .eq('id', existing.id);
+    }
     return { termId: existing.id, instructorId };
   }
 
   const { data: inserted, error } = await adminSupabase
     .from('terms')
-    .insert({ instructor_id: instructorId, date: dateStr, slot_index: slot })
+    .insert({ instructor_id: instructorId, date: dateStr, slot_index: slot, classroom_id: classroomId })
     .select('id')
     .single();
 

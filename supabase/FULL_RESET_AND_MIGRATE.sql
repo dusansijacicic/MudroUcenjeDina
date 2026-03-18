@@ -24,6 +24,8 @@ DROP TABLE IF EXISTS instructor_clients CASCADE;
 DROP TABLE IF EXISTS admin_users CASCADE;
 DROP TABLE IF EXISTS clients CASCADE;
 DROP TABLE IF EXISTS instructors CASCADE;
+DROP TABLE IF EXISTS classrooms CASCADE;
+DROP TABLE IF EXISTS term_types CASCADE;
 
 -- Auth korisnici se NE brišu – ostaju Dusan, Dina i NekoDete (dusan.sijacic2@gmail.com, dina.mateja@yahoo.com, nekodete@gmail.com).
 -- Ako ikad želiš da obrišeš i njih: ručno u SQL Editoru pokreni:
@@ -66,13 +68,31 @@ CREATE TABLE instructor_clients (
   PRIMARY KEY (instructor_id, client_id)
 );
 
--- Termini (jedan slot na dan, bez client_id – više predavanja mogu biti u istom terminu)
+-- Učionice (sobe) – moraju postojati pre terms zbog FK
+CREATE TABLE classrooms (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  naziv TEXT NOT NULL,
+  color TEXT,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- Termini (jedan slot na dan; classroom_id opciono)
 CREATE TABLE terms (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   instructor_id UUID NOT NULL REFERENCES instructors(id) ON DELETE CASCADE,
   date DATE NOT NULL,
   slot_index SMALLINT NOT NULL CHECK (slot_index >= 0 AND slot_index <= 12),
+  classroom_id UUID REFERENCES classrooms(id) ON DELETE SET NULL,
   UNIQUE(instructor_id, date, slot_index)
+);
+CREATE UNIQUE INDEX uniq_terms_classroom_date_slot ON terms(classroom_id, date, slot_index) WHERE classroom_id IS NOT NULL;
+
+-- Vrste termina (admin ih dodaje)
+CREATE TABLE term_types (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  naziv TEXT NOT NULL,
+  opis TEXT,
+  created_at TIMESTAMPTZ DEFAULT now()
 );
 
 -- Predavanja (jedan čas = jedan termín + jedan klijent)
@@ -83,6 +103,7 @@ CREATE TABLE predavanja (
   odrzano BOOLEAN NOT NULL DEFAULT false,
   placeno BOOLEAN NOT NULL DEFAULT false,
   komentar TEXT,
+  term_type_id UUID REFERENCES term_types(id) ON DELETE SET NULL,
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
@@ -188,6 +209,8 @@ ALTER TABLE app_settings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE zahtevi_za_cas ENABLE ROW LEVEL SECURITY;
 ALTER TABLE instructor_weekly_availability ENABLE ROW LEVEL SECURITY;
 ALTER TABLE instructor_availability_periods ENABLE ROW LEVEL SECURITY;
+ALTER TABLE classrooms ENABLE ROW LEVEL SECURITY;
+ALTER TABLE term_types ENABLE ROW LEVEL SECURITY;
 
 -- Instructors
 CREATE POLICY "Instructors own row" ON instructors FOR ALL USING (auth.uid() = user_id);
@@ -291,6 +314,18 @@ CREATE POLICY "Instructors manage own availability periods" ON instructor_availa
 CREATE POLICY "Clients can read instructor availability periods" ON instructor_availability_periods FOR SELECT USING (
   instructor_id IN (SELECT linked_instructor_ids_for_current_client())
 );
+
+-- classrooms
+CREATE POLICY "classrooms_select_all" ON classrooms FOR SELECT TO authenticated USING (true);
+CREATE POLICY "classrooms_admin_all" ON classrooms FOR ALL TO authenticated USING (
+  auth.uid() IN (SELECT user_id FROM admin_users)
+) WITH CHECK (auth.uid() IN (SELECT user_id FROM admin_users));
+
+-- term_types
+CREATE POLICY "term_types_select_authenticated" ON term_types FOR SELECT TO authenticated USING (true);
+CREATE POLICY "term_types_admin_all" ON term_types FOR ALL TO authenticated USING (
+  auth.uid() IN (SELECT user_id FROM admin_users)
+) WITH CHECK (auth.uid() IN (SELECT user_id FROM admin_users));
 
 -- ----- 6. FUNKCIJE -----
 

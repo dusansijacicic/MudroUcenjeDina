@@ -63,6 +63,11 @@ export default function AdminCalendarView({
 
   const handleDrop = async (date: string, slot: number) => {
     if (!draggedTermId) return;
+    const ok = window.confirm('Da li ste sigurni da želite da premestite ovaj termin na novi datum/vreme?');
+    if (!ok) {
+      setDraggedTermId(null);
+      return;
+    }
     const res = await moveTermAsAdmin(draggedTermId, date, slot);
     setDraggedTermId(null);
     if (!res.error) {

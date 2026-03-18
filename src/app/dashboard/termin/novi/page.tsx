@@ -22,10 +22,10 @@ export default async function NoviTerminPage({
 
   const admin = createAdminClient();
 
-  let term: { id: string } | null = null;
+  let term: { id: string; classroom_id?: string | null } | null = null;
   const { data: existing } = await admin
     .from('terms')
-    .select('id')
+    .select('id, classroom_id')
     .eq('instructor_id', instructor.id)
     .eq('date', date)
     .eq('slot_index', slotIndex)
@@ -40,7 +40,7 @@ export default async function NoviTerminPage({
         date,
         slot_index: slotIndex,
       })
-      .select('id')
+      .select('id, classroom_id')
       .single();
     if (error) {
       console.error('[termin/novi] terms insert failed', error.message);
@@ -93,6 +93,8 @@ export default async function NoviTerminPage({
         termTypes={termTypes}
         maxCasova={maxCasova}
         currentCount={currentCount}
+        classrooms={classrooms}
+        initialClassroomId={term.classroom_id ?? null}
       />
     </div>
   );

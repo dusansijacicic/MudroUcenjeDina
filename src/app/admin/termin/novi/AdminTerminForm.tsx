@@ -6,16 +6,19 @@ import { createTermAsAdmin, createPredavanjeAsAdmin } from '../../actions';
 
 type Instructor = { id: string; ime: string; prezime: string };
 type Client = { id: string; ime: string; prezime: string };
+type Classroom = { id: string; naziv: string };
 
 export default function AdminTerminForm({
   instructors,
   clients,
+  classrooms,
   defaultDate,
   defaultSlotIndex = 0,
   slotLabels,
 }: {
   instructors: Instructor[];
   clients: Client[];
+  classrooms: Classroom[];
   defaultDate: string;
   defaultSlotIndex?: number;
   slotLabels: readonly string[];
@@ -27,6 +30,7 @@ export default function AdminTerminForm({
   const [slotIndex, setSlotIndex] = useState(defaultSlotIndex);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [classroomId, setClassroomId] = useState(classrooms[0]?.id ?? '');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -37,8 +41,12 @@ export default function AdminTerminForm({
         setError('Izaberite klijenta.');
         return;
       }
+      if (!classroomId) {
+        setError('Izaberite učionicu.');
+        return;
+      }
 
-      const termResult = await createTermAsAdmin(instructorId, date, slotIndex);
+      const termResult = await createTermAsAdmin(instructorId, date, slotIndex, classroomId);
       if (termResult.error || !termResult.termId) {
         setError(termResult.error ?? 'Greška pri kreiranju termina.');
         return;
@@ -80,6 +88,14 @@ export default function AdminTerminForm({
     );
   }
 
+  if (classrooms.length === 0) {
+    return (
+      <p className="text-stone-500 text-sm">
+        Nema učionica. Dodajte učionice u sekciji „Učionice”, pa se vratite na zakazivanje.
+      </p>
+    );
+  }
+
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -113,6 +129,21 @@ export default function AdminTerminForm({
             ))}
           </select>
         </div>
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-stone-700 mb-1">Učionica</label>
+        <select
+          value={classroomId}
+          onChange={(e) => setClassroomId(e.target.value)}
+          required
+          className="w-full rounded-lg border border-stone-300 px-3 py-2 text-stone-800"
+        >
+          {classrooms.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.naziv}
+            </option>
+          ))}
+        </select>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>

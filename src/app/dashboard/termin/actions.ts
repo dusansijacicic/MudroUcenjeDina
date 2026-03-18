@@ -191,3 +191,33 @@ export async function deleteTermAsInstructor(termId: string): Promise<{ error?: 
   revalidatePath('/dashboard');
   return {};
 }
+
+export async function updateTermClassroom(
+  termId: string,
+  classroomId: string
+): Promise<{ error?: string }> {
+  const { instructor } = await getDashboardInstructor();
+  if (!instructor) return { error: 'Niste predavač.' };
+  let admin;
+  try {
+    admin = createAdminClient();
+  } catch {
+    return { error: 'Server greška.' };
+  }
+  const { data: term } = await admin
+    .from('terms')
+    .select('instructor_id')
+    .eq('id', termId)
+    .single();
+  if (!term || term.instructor_id !== instructor.id) {
+    return { error: 'Niste ovlašćeni za ovaj termin.' };
+  }
+  const { error } = await admin
+    .from('terms')
+    .update({ classroom_id: classroomId })
+    .eq('id', termId);
+  if (error) return { error: error.message };
+  revalidatePath('/dashboard');
+  revalidatePath(`/dashboard/termin/${termId}`);
+  return {};
+}
