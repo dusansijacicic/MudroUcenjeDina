@@ -20,7 +20,10 @@ export default function UcenikNav({ client }: { client: Client }) {
       <div className="max-w-3xl mx-auto px-4 flex items-center justify-between h-14">
         <nav className="flex items-center gap-4" aria-label="Glavna navigacija">
           <Link href="/ucenik" className="font-semibold text-[var(--kid-text)] transition-smooth hover:text-[var(--kid-teal)] focus:outline-none focus:ring-2 focus:ring-[var(--kid-teal)] rounded-lg px-1">
-            Dina Kalendar – Moj pregled
+            Moj pregled
+          </Link>
+          <Link href="/ucenik/kalendar" className="text-sm text-[#0d9488] hover:text-[#0f766e] font-medium transition-smooth rounded px-2 py-1 hover:bg-[var(--kid-teal)]/30">
+            Kalendar
           </Link>
           <Link href="/ucenik/zahtev" className="text-sm text-[#0d9488] hover:text-[#0f766e] font-medium transition-smooth rounded px-2 py-1 hover:bg-[var(--kid-teal)]/30">
             Zakaži čas
