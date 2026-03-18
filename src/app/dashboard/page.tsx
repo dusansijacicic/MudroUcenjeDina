@@ -122,6 +122,7 @@ export default async function DashboardPage({
       classroom: room ? { id: room.id, naziv: room.naziv, color: room.color ?? undefined } : null,
     };
   });
+  let filteredOtherTerms = otherTerms;
   if (clientFilterId) {
     terms = terms
       .map((t) => ({
@@ -129,14 +130,25 @@ export default async function DashboardPage({
         predavanja: (t.predavanja ?? []).filter((p) => p.client_id === clientFilterId),
       }))
       .filter((t) => (t.predavanja?.length ?? 0) > 0);
+    filteredOtherTerms = otherTerms
+      .map((ot) => ({ ...ot, predavanja: (ot.predavanja ?? []).filter((p) => p.client_id === clientFilterId) }))
+      .filter((ot) => (ot.predavanja?.length ?? 0) > 0);
   }
 
-  const [{ data: links }, { data: classroomsRaw }] = await Promise.all([
-    admin.from('instructor_clients').select('client:clients(id, ime, prezime)').eq('instructor_id', instructorId),
-    admin.from('classrooms').select('id, naziv, color').order('naziv'),
-  ]);
-  const clients = (links ?? []).map((l) => l.client).filter(Boolean) as unknown as { id: string; ime: string; prezime: string }[];
-  clients.sort((a, b) => (a.prezime ?? '').localeCompare(b.prezime ?? '') || (a.ime ?? '').localeCompare(b.ime ?? ''));
+  const { data: classroomsRaw } = await admin.from('classrooms').select('id, naziv, color').order('naziv');
+
+  const clientMap = new Map<string, { id: string; ime: string; prezime: string }>();
+  for (const t of allTerms) {
+    for (const p of t.predavanja ?? []) {
+      const client = (p as { client?: { id: string; ime: string; prezime: string } | null }).client;
+      if (client && !clientMap.has(client.id)) {
+        clientMap.set(client.id, { id: client.id, ime: client.ime ?? '', prezime: client.prezime ?? '' });
+      }
+    }
+  }
+  const clients = Array.from(clientMap.values()).sort(
+    (a, b) => (a.prezime || '').localeCompare(b.prezime || '') || (a.ime || '').localeCompare(b.ime || '')
+  );
 
   const odrzanoPoVrstama = await getOdrzanoPoVrstamaZaPredavaca(instructorId);
 
@@ -220,7 +232,7 @@ export default async function DashboardPage({
         singleDay={singleDay}
         monthStart={monthStart}
         clientFilterId={clientFilterId}
-        otherTerms={otherTerms}
+        otherTerms={filteredOtherTerms}
       />
     </div>
   );
