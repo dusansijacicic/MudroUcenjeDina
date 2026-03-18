@@ -86,6 +86,12 @@ export default async function AdminPage({
         >
           Učionice
         </Link>
+        <Link
+          href="/admin/podesavanja"
+          className="inline-flex items-center rounded-lg border border-stone-300 px-4 py-2 text-sm font-medium text-stone-700 hover:bg-stone-100"
+        >
+          Podešavanja
+        </Link>
       </div>
 
       <p className="text-stone-500 text-sm mb-6">

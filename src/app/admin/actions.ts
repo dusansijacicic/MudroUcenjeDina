@@ -124,6 +124,15 @@ export async function createTermAsAdmin(
   const dateStr = date.slice(0, 10);
   const adminSupabase = createAdminClient();
 
+  const [{ count: termCount }, { data: maxSetting }] = await Promise.all([
+    adminSupabase.from('terms').select('*', { count: 'exact', head: true }).eq('date', dateStr).eq('slot_index', slot),
+    adminSupabase.from('app_settings').select('value').eq('key', 'max_termina_po_slotu').single(),
+  ]);
+  const maxTerminaPoSlotu = (maxSetting?.value && parseInt(maxSetting.value, 10)) || 4;
+  if ((termCount ?? 0) >= maxTerminaPoSlotu) {
+    return { error: `Maksimalan broj termina u ovom slotu je ${maxTerminaPoSlotu}. Podešavanje u Admin → Podešavanja.` };
+  }
+
   const { data: existingSameInstructor } = await adminSupabase
     .from('terms')
     .select('id')
@@ -349,5 +358,27 @@ export async function deleteClassroom(id: string): Promise<{ error?: string }> {
   if (error) return { error: error.message };
   revalidatePath('/admin/ucionice');
   revalidatePath('/admin/kalendar');
+  return {};
+}
+
+/** Čitanje vrednosti iz app_settings (za admin podešavanja). */
+export async function getAppSettings(): Promise<Record<string, string>> {
+  const admin = createAdminClient();
+  const { data } = await admin.from('app_settings').select('key, value');
+  const out: Record<string, string> = {};
+  (data ?? []).forEach((r: { key: string; value: string }) => { out[r.key] = r.value; });
+  return out;
+}
+
+/** Ažuriranje jednog ključa u app_settings. Samo admin. */
+export async function updateAppSetting(key: string, value: string): Promise<{ error?: string }> {
+  const { admin, error: authErr } = await requireAdmin();
+  if (authErr || !admin) return { error: authErr ?? 'Samo admin.' };
+  const trimmed = value.trim();
+  if (!trimmed) return { error: 'Vrednost ne sme biti prazna.' };
+  const { error } = await admin.from('app_settings').upsert({ key, value: trimmed }, { onConflict: 'key' });
+  if (error) return { error: error.message };
+  revalidatePath('/admin/podesavanja');
+  revalidatePath('/admin/termin/novi');
   return {};
 }

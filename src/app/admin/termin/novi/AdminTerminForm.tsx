@@ -19,6 +19,7 @@ export default function AdminTerminForm({
   slotLabels,
   initialTakenInstructorIds = [],
   initialTakenClassroomIds = [],
+  maxTerminaPoSlotu = 4,
 }: {
   instructors: Instructor[];
   clients: Client[];
@@ -29,6 +30,7 @@ export default function AdminTerminForm({
   slotLabels: readonly string[];
   initialTakenInstructorIds?: string[];
   initialTakenClassroomIds?: string[];
+  maxTerminaPoSlotu?: number;
 }) {
   const router = useRouter();
   const [date, setDate] = useState(defaultDate);
@@ -164,21 +166,32 @@ export default function AdminTerminForm({
     );
   }
 
-  const noInstructorsAvailable = availableInstructors.length === 0;
-  const noClassroomsAvailable = availableClassrooms.length === 0;
-  const cannotSubmit = noInstructorsAvailable || noClassroomsAvailable;
+  const slotFull = takenInstructorIds.length >= maxTerminaPoSlotu;
+  const noInstructorsAvailable = !slotFull && availableInstructors.length === 0;
+  const noClassroomsAvailable = !slotFull && availableClassrooms.length === 0;
+  const cannotSubmit = slotFull || noInstructorsAvailable || noClassroomsAvailable;
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
+      {slotFull && (
+        <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <p className="font-medium">Maksimalan broj termina u ovom slotu je dostignut ({maxTerminaPoSlotu}).</p>
+          <p className="mt-0.5 text-amber-700">Promenite datum ili vreme, ili povećajte limit u Admin → Podešavanja.</p>
+        </div>
+      )}
       {(noInstructorsAvailable || noClassroomsAvailable) && (
         <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-800">
           {noInstructorsAvailable && (
-            <p className="font-medium">Nema slobodnih predavača u ovom terminu.</p>
-            <p className="mt-0.5 text-amber-700">Svi predavači već imaju termin u izabranom datumu i vremenu. Promenite datum ili vreme (slot) da biste videli slobodne predavače.</p>
+            <>
+              <p className="font-medium">Nema slobodnih predavača u ovom terminu.</p>
+              <p className="mt-0.5 text-amber-700">Svi predavači već imaju termin u izabranom datumu i vremenu. Promenite datum ili vreme (slot) da biste videli slobodne predavače.</p>
+            </>
           )}
           {noClassroomsAvailable && (
-            <p className="font-medium mt-2">Nema slobodnih učionica u ovom terminu.</p>
-            <p className="mt-0.5 text-amber-700">Sve učionice su zauzete u izabranom terminu. Promenite datum ili vreme da biste videli slobodne učionice.</p>
+            <>
+              <p className="font-medium mt-2">Nema slobodnih učionica u ovom terminu.</p>
+              <p className="mt-0.5 text-amber-700">Sve učionice su zauzete u izabranom terminu. Promenite datum ili vreme da biste videli slobodne učionice.</p>
+            </>
           )}
         </div>
       )}
@@ -189,7 +202,7 @@ export default function AdminTerminForm({
             value={instructorId}
             onChange={(e) => setInstructorId(e.target.value)}
             required
-            disabled={noInstructorsAvailable}
+            disabled={noInstructorsAvailable || slotFull}
             className="w-full rounded-lg border border-stone-300 px-3 py-2 text-stone-800 disabled:bg-stone-100 disabled:cursor-not-allowed"
           >
             <option value="">Izaberite predavača</option>
@@ -225,7 +238,7 @@ export default function AdminTerminForm({
           value={classroomId}
           onChange={(e) => setClassroomId(e.target.value)}
           required
-          disabled={noClassroomsAvailable}
+          disabled={noClassroomsAvailable || slotFull}
           className="w-full rounded-lg border border-stone-300 px-3 py-2 text-stone-800 disabled:bg-stone-100 disabled:cursor-not-allowed"
         >
           <option value="">Izaberite učionicu</option>
@@ -287,7 +300,7 @@ export default function AdminTerminForm({
         disabled={loading || cannotSubmit}
         className="rounded-lg bg-amber-600 px-4 py-2 text-white font-medium hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed"
       >
-        {loading ? 'Kreiranje...' : cannotSubmit ? 'Nema slobodnih predavača ili učionica' : 'Zakaži termin i predavanje'}
+        {loading ? 'Kreiranje...' : slotFull ? `Slot pun (max ${maxTerminaPoSlotu})` : cannotSubmit ? 'Nema slobodnih predavača ili učionica' : 'Zakaži termin i predavanje'}
       </button>
     </form>
   );

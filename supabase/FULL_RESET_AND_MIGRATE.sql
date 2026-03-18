@@ -118,6 +118,7 @@ CREATE TABLE app_settings (
   value TEXT NOT NULL
 );
 INSERT INTO app_settings (key, value) VALUES ('max_casova_po_terminu', '4') ON CONFLICT (key) DO NOTHING;
+INSERT INTO app_settings (key, value) VALUES ('max_termina_po_slotu', '4') ON CONFLICT (key) DO NOTHING;
 
 -- Zahtevi za čas (klijent zatraži, predavač potvrdi/promeni/odbije)
 CREATE TABLE zahtevi_za_cas (

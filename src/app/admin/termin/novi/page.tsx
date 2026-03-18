@@ -5,6 +5,7 @@ import Link from 'next/link';
 import AdminTerminForm from './AdminTerminForm';
 import { TIME_SLOTS } from '@/lib/constants';
 import { getTermTypes, getTakenForSlot } from '@/app/admin/actions';
+import { getMaxTerminaPoSlotu } from '@/lib/settings';
 
 export default async function AdminTerminNoviPage({
   searchParams,
@@ -48,13 +49,19 @@ export default async function AdminTerminNoviPage({
   const defaultDate = dateFromUrl ?? tomorrow.toISOString().slice(0, 10);
   const defaultSlot = slotFromUrl ?? 0;
 
-  const { takenInstructorIds, takenClassroomIds } = await getTakenForSlot(defaultDate, defaultSlot);
+  const [{ takenInstructorIds, takenClassroomIds }, maxTerminaPoSlotu] = await Promise.all([
+    getTakenForSlot(defaultDate, defaultSlot),
+    getMaxTerminaPoSlotu(),
+  ]);
 
   return (
     <div className="max-w-lg">
       <h1 className="text-xl font-semibold text-stone-800 mb-2">Zakaži termin za predavača</h1>
+      <p className="text-stone-500 text-sm mb-2">
+        U istom vremenskom slotu (npr. 10:00) može biti više termina: različiti predavači u različitim učionicama (npr. Dina u U1, Pera u U2, Mika u U3).
+      </p>
       <p className="text-stone-500 text-sm mb-6">
-        Izaberite predavača i klijenta. U izboru su samo predavači i učionice slobodni u ovom terminu (jedan predavač / jedna učionica po slotu).
+        Jedan predavač može imati samo jedan termin u tom slotu; jedna učionica može biti korišćena samo jednom. U izboru su samo slobodni predavači i učionice.
       </p>
       <AdminTerminForm
         instructors={(instructors ?? []) as { id: string; ime: string; prezime: string }[]}
@@ -66,6 +73,7 @@ export default async function AdminTerminNoviPage({
         slotLabels={TIME_SLOTS}
         initialTakenInstructorIds={takenInstructorIds}
         initialTakenClassroomIds={takenClassroomIds}
+        maxTerminaPoSlotu={maxTerminaPoSlotu}
       />
       <p className="mt-4">
         <Link href="/admin" className="text-sm text-amber-700 hover:underline">← Nazad na admin</Link>

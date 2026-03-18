@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 
 const DEFAULT_MAX_CASOVA_PO_TERMINU = 4;
+const DEFAULT_MAX_TERMINA_PO_SLOTU = 4;
 
 /** Maksimalan broj časova (predavanja) u jednom terminu. Superadmin može da menja u /admin/podesavanja. */
 export async function getMaxCasovaPoTerminu(): Promise<number> {
@@ -13,6 +14,19 @@ export async function getMaxCasovaPoTerminu(): Promise<number> {
   if (!data?.value) return DEFAULT_MAX_CASOVA_PO_TERMINU;
   const n = parseInt(data.value, 10);
   return Number.isFinite(n) && n >= 1 ? n : DEFAULT_MAX_CASOVA_PO_TERMINU;
+}
+
+/** Maksimalan broj termina (predavač+učionica) u jednom vremenskom slotu (npr. 10:00). Superadmin menja u /admin/podesavanja. */
+export async function getMaxTerminaPoSlotu(): Promise<number> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from('app_settings')
+    .select('value')
+    .eq('key', 'max_termina_po_slotu')
+    .single();
+  if (!data?.value) return DEFAULT_MAX_TERMINA_PO_SLOTU;
+  const n = parseInt(data.value, 10);
+  return Number.isFinite(n) && n >= 1 ? n : DEFAULT_MAX_TERMINA_PO_SLOTU;
 }
 
 /** Da li termin sme da primi još jedno predavanje (broj predavanja < max). */
