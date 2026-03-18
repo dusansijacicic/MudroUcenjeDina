@@ -15,11 +15,6 @@ export default async function UcenikPage() {
   const { data: client } = await admin.from('clients').select('*').eq('user_id', user.id).single();
   if (!client) redirect('/login');
 
-  const { data: links } = await admin
-    .from('instructor_clients')
-    .select('instructor_id, placeno_casova')
-    .eq('client_id', client.id);
-
   const [
     { data: uplateRaw },
     { data: predavanjaRaw },
@@ -64,13 +59,6 @@ export default async function UcenikPage() {
   );
   const hasNewScheduledNotification = recentConfirmedOrChanged.length > 0;
 
-  const odrzanoCount = list.filter((p) => p.odrzano).length;
-  const placenoCount = list.filter((p) => p.placeno).length;
-  const odrzanoIPlacenoCount = list.filter((p) => p.odrzano && p.placeno).length;
-  const placenoCasovaUkupno = (links ?? []).reduce((s, l) => s + (l.placeno_casova ?? 0), 0);
-
-  const preostaloUkupno = placenoCasovaUkupno - odrzanoCount;
-
   // Stanje po vrstama: iz uplata (uplaćeno) i iz održanih predavanja (iskorišćeno)
   type UplataListItem = {
     id: string;
@@ -111,13 +99,13 @@ export default async function UcenikPage() {
     const tid = u.term_type?.id ?? '__bez_vrste__';
     uplacenoByType.set(tid, (uplacenoByType.get(tid) ?? 0) + (u.broj_casova ?? 0));
   }
-  const stanjePoTipu = termTypes.map((tt) => {
+  const stanjePoTipuSve = termTypes.map((tt) => {
     const uplaceno = uplacenoByType.get(tt.id) ?? 0;
     const odrzano = odrzanoByType.get(tt.id) ?? 0;
     return { id: tt.id, naziv: tt.naziv, uplaceno, odrzano, ostalo: Math.max(0, uplaceno - odrzano) };
   });
   if (uplacenoByType.has('__bez_vrste__') || odrzanoByType.has('__bez_vrste__')) {
-    stanjePoTipu.push({
+    stanjePoTipuSve.push({
       id: '__bez_vrste__',
       naziv: 'Bez vrste',
       uplaceno: uplacenoByType.get('__bez_vrste__') ?? 0,
@@ -125,6 +113,8 @@ export default async function UcenikPage() {
       ostalo: Math.max(0, (uplacenoByType.get('__bez_vrste__') ?? 0) - (odrzanoByType.get('__bez_vrste__') ?? 0)),
     });
   }
+  // Samo vrste gde ima makar jedan kupljen
+  const stanjePoTipu = stanjePoTipuSve.filter((s) => s.uplaceno >= 1);
 
   return (
     <div className="space-y-8">
@@ -146,72 +136,54 @@ export default async function UcenikPage() {
         </div>
       )}
 
-      <section className="rounded-2xl border-2 border-[var(--kid-sky-dark)]/50 bg-white/90 backdrop-blur-sm p-6 shadow-lg transition-smooth hover:shadow-xl animate-in-delay-1" aria-labelledby="pregled-casova">
-        <h2 id="pregled-casova" className="text-lg font-semibold text-[var(--kid-text)] mb-4">
-          Pregled časova
-        </h2>
-        <p className="text-sm text-[var(--kid-text-muted)] mb-4">
-          Ukupno koliko ste platili, koliko je održano, koliko je označeno kao plaćeno, koliko je održano i plaćeno i koliko časova vam preostaje.
-        </p>
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-2 lg:grid-cols-5">
-          <div className="rounded-xl bg-[var(--kid-butter)] p-4 border border-[var(--kid-butter-dark)]/50 transition-smooth hover-lift">
-            <p className="text-sm text-[var(--kid-text-muted)]">Ukupno plaćeno časova</p>
-            <p className="text-2xl font-bold text-[var(--kid-text)]">
-              {placenoCasovaUkupno}
-            </p>
-          </div>
-          <div className="rounded-xl bg-[var(--kid-mint)] p-4 border border-[var(--kid-mint-dark)]/50 transition-smooth hover-lift">
-            <p className="text-sm text-[var(--kid-text-muted)]">Održano</p>
-            <p className="text-2xl font-bold text-[var(--kid-text)]">
-              {odrzanoCount}
-            </p>
-          </div>
-          <div className="rounded-xl bg-[var(--kid-lavender)] p-4 border border-[var(--kid-lavender-dark)]/50 transition-smooth hover-lift">
-            <p className="text-sm text-[var(--kid-text-muted)]">Oznaka plaćeno</p>
-            <p className="text-2xl font-bold text-[var(--kid-text)]">
-              {placenoCount}
-            </p>
-          </div>
-          <div className="rounded-xl bg-[var(--kid-teal)]/40 p-4 border border-[var(--kid-teal)]/60 transition-smooth hover-lift">
-            <p className="text-sm text-[var(--kid-text-muted)]">Održano i plaćeno</p>
-            <p className="text-2xl font-bold text-[var(--kid-text)]">
-              {odrzanoIPlacenoCount}
-            </p>
-          </div>
-          <div className="rounded-xl bg-[var(--kid-sky)] p-4 border border-[var(--kid-sky-dark)]/50 transition-smooth hover-lift">
-            <p className="text-sm text-[var(--kid-text-muted)]">Preostalo časova</p>
-            <p className="text-2xl font-bold text-[var(--kid-text)]">
-              {preostaloUkupno}
-            </p>
-          </div>
-        </div>
-        <p className="mt-3 text-sm text-[var(--kid-text-muted)]">
-          Preostalo = ukupno plaćeno − održano (računa se posebno po svakom predavaču, pa se zbraja).
-        </p>
-      </section>
-
       <section className="rounded-2xl border-2 border-[var(--kid-sky)]/50 bg-white/90 backdrop-blur-sm p-6 shadow-lg transition-smooth hover:shadow-xl animate-in-delay-1" aria-labelledby="stanje-po-tipu">
         <h2 id="stanje-po-tipu" className="text-lg font-semibold text-[var(--kid-text)] mb-4">
           Stanje po vrstama časova
         </h2>
         <p className="text-sm text-[var(--kid-text-muted)] mb-4">
-          Koliko ste uplatili, koliko je održano i koliko vam preostaje za svaku vrstu časa.
+          Koliko ste uplatili, koliko je održano i koliko vam preostaje – samo vrste gde imate kupljene časove.
         </p>
         {stanjePoTipu.length === 0 ? (
-          <p className="text-sm text-[var(--kid-text-muted)]">Nema uplata po vrstama. Uplate koje unesu predavač ili admin ovde će se prikazati.</p>
+          <p className="text-sm text-[var(--kid-text-muted)]">Nema kupljenih časova po vrstama. Kada uplatite, ovde će se prikazati.</p>
         ) : (
-          <div className="space-y-3">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {stanjePoTipu.map((s) => (
-              <div key={s.id} className="flex flex-wrap items-center gap-4 rounded-xl bg-[var(--kid-butter)]/30 p-4 border border-[var(--kid-butter-dark)]/40">
-                <span className="font-medium text-[var(--kid-text)]">{s.naziv}</span>
-                <span className="text-sm text-[var(--kid-text-muted)]">uplaćeno: <strong className="text-[var(--kid-text)]">{s.uplaceno}</strong></span>
-                <span className="text-sm text-[var(--kid-text-muted)]">održano: <strong className="text-[var(--kid-text)]">{s.odrzano}</strong></span>
-                <span className="text-sm text-[var(--kid-text-muted)]">ostalo: <strong className="text-[var(--kid-text)]">{s.ostalo}</strong></span>
+              <div key={s.id} className="rounded-2xl border-2 border-[var(--kid-sky)]/50 bg-white p-5 shadow-md transition-smooth hover:shadow-lg hover:border-[var(--kid-teal)]/50">
+                <p className="font-semibold text-[var(--kid-text)] mb-3">{s.naziv}</p>
+                <div className="grid grid-cols-3 gap-2 text-center">
+                  <div className="rounded-xl bg-[var(--kid-butter)]/50 p-2 border border-[var(--kid-butter-dark)]/40">
+                    <p className="text-xs text-[var(--kid-text-muted)]">Uplaćeno</p>
+                    <p className="text-lg font-bold text-[var(--kid-text)]">{s.uplaceno}</p>
+                  </div>
+                  <div className="rounded-xl bg-[var(--kid-mint)]/50 p-2 border border-[var(--kid-mint-dark)]/40">
+                    <p className="text-xs text-[var(--kid-text-muted)]">Održano</p>
+                    <p className="text-lg font-bold text-[var(--kid-text)]">{s.odrzano}</p>
+                  </div>
+                  <div className="rounded-xl bg-[var(--kid-sky)]/50 p-2 border border-[var(--kid-sky-dark)]/40">
+                    <p className="text-xs text-[var(--kid-text-muted)]">Preostalo</p>
+                    <p className="text-lg font-bold text-[var(--kid-text)]">{s.ostalo}</p>
+                  </div>
+                </div>
               </div>
             ))}
           </div>
         )}
       </section>
+
+      <div className="flex flex-wrap gap-4 animate-in-delay-2">
+        <a
+          href="/ucenik/kalendar"
+          className="inline-flex items-center justify-center rounded-2xl bg-[var(--kid-teal)] px-6 py-3 text-white font-semibold shadow-lg transition-smooth hover:bg-[#0f766e] hover:shadow-xl hover:-translate-y-0.5"
+        >
+          Pogledaj moj kalendar
+        </a>
+        <a
+          href="/ucenik/zahtev"
+          className="inline-flex items-center justify-center rounded-2xl border-2 border-[var(--kid-teal)] bg-white px-6 py-3 text-[var(--kid-teal)] font-semibold transition-smooth hover:bg-[var(--kid-teal)]/10"
+        >
+          Zakaži čas
+        </a>
+      </div>
 
       <section className="rounded-2xl border-2 border-[var(--kid-lavender)]/50 bg-white/90 backdrop-blur-sm p-6 shadow-lg transition-smooth hover:shadow-xl animate-in-delay-1" aria-labelledby="vase-uplate">
         <h2 id="vase-uplate" className="text-lg font-semibold text-[var(--kid-text)] mb-4">

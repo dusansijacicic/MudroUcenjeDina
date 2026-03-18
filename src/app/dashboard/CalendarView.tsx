@@ -202,8 +202,8 @@ function CellContent({
                     {p.client ? `${p.client.ime} ${p.client.prezime}` : '—'}
                   </span>
                   <div className="flex gap-1 mt-0.5 flex-wrap">
-                    {p.odrzano && <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded">Održano</span>}
-                    {p.placeno && <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">Plaćeno</span>}
+                    {p.odrzano && <span className="text-xs bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded font-medium">Održano</span>}
+                    {p.placeno && <span className="text-xs bg-sky-100 text-sky-800 px-1.5 py-0.5 rounded font-medium">Plaćeno</span>}
                   </div>
                 </div>
               ))}

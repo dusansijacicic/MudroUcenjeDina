@@ -129,7 +129,13 @@ export default async function EditPredavanjePage({
     (a, b) =>
       (a.prezime ?? '').localeCompare(b.prezime ?? '') || (a.ime ?? '').localeCompare(b.ime ?? '')
   );
-  const [termTypes, classrooms] = await Promise.all([getTermTypes(), getClassrooms()]);
+  const [termTypes, classrooms, termsInSlotRes] = await Promise.all([
+    getTermTypes(),
+    getClassrooms(),
+    admin.from('terms').select('classroom_id').eq('date', term.date).eq('slot_index', term.slot_index).neq('id', term.id),
+  ]);
+  const termsInSlot = termsInSlotRes.data ?? [];
+  const takenClassroomIds = termsInSlot.map((t: { classroom_id: string | null }) => t.classroom_id).filter((id: string | null): id is string => id != null);
   const clientStanjeList = await Promise.all(
     clients.map(async (c) => ({ clientId: c.id, stanje: await getStanjePoVrstamaZaKlijenta(c.id, instructor.id) }))
   );
@@ -146,6 +152,7 @@ export default async function EditPredavanjePage({
           termTypes={termTypes}
           classrooms={classrooms}
           initialClassroomId={term.classroom_id ?? null}
+          takenClassroomIds={takenClassroomIds}
           clientStanjeList={clientStanjeList}
           predavanje={{
             ...predavanje,

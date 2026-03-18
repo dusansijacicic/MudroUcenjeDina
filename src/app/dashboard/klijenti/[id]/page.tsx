@@ -68,26 +68,43 @@ export default async function KlijentPage({
         </Link>
       </div>
 
-      <div className="rounded-lg bg-amber-50 border border-amber-100 p-4 text-sm">
-        <p className="font-medium text-stone-800 mb-1">Statistika časova za ovog klijenta</p>
-        <p className="text-stone-600 mb-2">
-          <strong>Plaćeno (škola)</strong> = ukupan broj časova koji je klijent platio u školi (sabira se preko svih predavača).{' '}
-          <strong>Održano ukupno</strong> = broj časova koje je klijent imao kod svih predavača.{' '}
-          <strong>Održano kod vas</strong> = broj časova koje ste vi držali ovom klijentu.
-        </p>
-        <p className="text-stone-700">
-          Plaćeno (škola): <strong>{placenoUkupno}</strong> · održano ukupno{' '}
-          <strong>{odrzanoUkupno}</strong> · održano kod vas{' '}
-          <strong>{odrzanoKodMene}</strong> · plaćeno kod vas (označeno „Plaćeno”){' '}
-          <strong>{placenoKodMene}</strong> · preostalo (škola){' '}
-          <strong>{preostaloUkupno}</strong>
-        </p>
-        {duguje > 0 && (
-          <p className="mt-1 text-sm text-red-700">
-            Duguje novac za <strong>{duguje}</strong> termina (više održanih nego plaćenih).
+      <section className="rounded-2xl border border-stone-200 bg-white shadow-sm overflow-hidden">
+        <div className="border-b border-stone-100 bg-stone-50/80 px-5 py-3">
+          <h2 className="text-base font-semibold text-stone-800">Statistika časova za ovog klijenta</h2>
+          <p className="text-xs text-stone-500 mt-0.5">
+            Plaćeno (škola) = ukupno plaćeno preko svih predavača. Održano = kod svih predavača. Preostalo = plaćeno − održano.
           </p>
-        )}
-      </div>
+        </div>
+        <div className="p-5">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
+            <div className="rounded-xl border border-stone-200 bg-stone-50/80 px-4 py-3">
+              <p className="text-xs text-stone-500 uppercase tracking-wide">Plaćeno (škola)</p>
+              <p className="text-xl font-bold text-stone-800 mt-0.5">{placenoUkupno}</p>
+            </div>
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50/80 px-4 py-3">
+              <p className="text-xs text-emerald-700 uppercase tracking-wide">Održano ukupno</p>
+              <p className="text-xl font-bold text-emerald-800 mt-0.5">{odrzanoUkupno}</p>
+            </div>
+            <div className="rounded-xl border border-sky-200 bg-sky-50/80 px-4 py-3">
+              <p className="text-xs text-sky-700 uppercase tracking-wide">Preostalo</p>
+              <p className="text-xl font-bold text-sky-800 mt-0.5">{preostaloUkupno}</p>
+            </div>
+            <div className="rounded-xl border border-stone-200 bg-amber-50/80 px-4 py-3">
+              <p className="text-xs text-amber-700 uppercase tracking-wide">Održano kod vas</p>
+              <p className="text-xl font-bold text-amber-800 mt-0.5">{odrzanoKodMene}</p>
+            </div>
+            <div className="rounded-xl border border-stone-200 bg-blue-50/80 px-4 py-3">
+              <p className="text-xs text-blue-700 uppercase tracking-wide">Plaćeno kod vas</p>
+              <p className="text-xl font-bold text-blue-800 mt-0.5">{placenoKodMene}</p>
+            </div>
+          </div>
+          {duguje > 0 && (
+            <p className="mt-4 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-4 py-2">
+              Duguje novac za <strong>{duguje}</strong> termina (više održanih nego plaćenih).
+            </p>
+          )}
+        </div>
+      </section>
 
       <ClientForm instructorId={instructor.id} client={client} />
 
@@ -137,12 +154,12 @@ function PredavanjeHistoryRow({
         </span>
         <div className="flex gap-2">
           {predavanje.odrzano && (
-            <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded">
+            <span className="text-xs bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded font-medium">
               Održano
             </span>
           )}
           {predavanje.placeno && (
-            <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded">
+            <span className="text-xs bg-sky-100 text-sky-800 px-2 py-0.5 rounded font-medium">
               Plaćeno
             </span>
           )}

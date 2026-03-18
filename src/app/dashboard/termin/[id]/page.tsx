@@ -9,10 +9,14 @@ import { deleteTermAsInstructor } from '@/app/dashboard/termin/actions';
 
 export default async function TerminDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ error?: string; message?: string }>;
 }) {
   const { id: termId } = await params;
+  const sp = await searchParams;
+  const errorMessage = sp.message ? decodeURIComponent(sp.message) : (sp.error === 'max_predavanja' ? 'Ovaj termin već ima maksimalan broj časova.' : null);
   const { instructor } = await getDashboardInstructor();
   if (!instructor) redirect('/login?reason=no_instructor');
 
@@ -70,6 +74,11 @@ export default async function TerminDetailPage({
 
   return (
     <div className="max-w-2xl">
+      {errorMessage && (
+        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800" role="alert">
+          {errorMessage}
+        </div>
+      )}
       <div className="flex items-center justify-between mb-4">
         <div>
           <h1 className="text-xl font-semibold text-stone-800 capitalize">
@@ -176,12 +185,12 @@ function PredavanjeRow({
         <p className="font-medium text-stone-800">{clientName}</p>
         <div className="flex gap-2 mt-1">
           {predavanje.odrzano && (
-            <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded">
+            <span className="text-xs bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded font-medium">
               Održano
             </span>
           )}
           {predavanje.placeno && (
-            <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded">
+            <span className="text-xs bg-sky-100 text-sky-800 px-2 py-0.5 rounded font-medium">
               Plaćeno
             </span>
           )}

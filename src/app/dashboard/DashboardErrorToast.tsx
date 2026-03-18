@@ -7,6 +7,7 @@ import toast from 'react-hot-toast';
 const ERROR_MESSAGES: Record<string, string> = {
   term: 'Greška pri kreiranju termina. Pokušajte ponovo.',
   slot_pun: 'U ovom terminu je već dostignut maksimalan broj termina. Izaberite drugi datum ili vreme.',
+  max_predavanja: 'Ovaj termin već ima maksimalan broj časova. Ne možete dodati novo predavanje.',
 };
 
 export default function DashboardErrorToast() {

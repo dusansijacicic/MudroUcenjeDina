@@ -25,13 +25,19 @@ export default async function NoviPredavanjePage({
 
   if (!term) notFound();
 
-  const [predRes, maxCasova, termTypes, classrooms] = await Promise.all([
+  const [predRes, maxCasova, termTypes, classrooms, termsInSlotRes] = await Promise.all([
     admin.from('predavanja').select('*', { count: 'exact', head: true }).eq('term_id', termId),
     getMaxCasovaPoTerminu(),
     getTermTypes(),
     getClassrooms(),
+    admin.from('terms').select('classroom_id').eq('date', term.date).eq('slot_index', term.slot_index).neq('id', termId),
   ]);
   const currentCount = predRes.count ?? 0;
+  if (currentCount >= maxCasova) {
+    redirect(`/dashboard/termin/${termId}?error=max_predavanja&message=${encodeURIComponent(`Ovaj termin već ima maksimalan broj časova (${maxCasova}).`)}`);
+  }
+  const termsInSlot = termsInSlotRes.data ?? [];
+  const takenClassroomIds = termsInSlot.map((t: { classroom_id: string | null }) => t.classroom_id).filter((id: string | null): id is string => id != null);
 
   const { data: allClients } = await admin.from('clients').select('id, ime, prezime').order('prezime').order('ime');
   const clients: { id: string; ime: string; prezime: string }[] = (allClients ?? []).map((c) => ({
@@ -61,6 +67,7 @@ export default async function NoviPredavanjePage({
         currentCount={currentCount}
         classrooms={classrooms}
         initialClassroomId={termWithClassroom.classroom_id ?? null}
+        takenClassroomIds={takenClassroomIds}
         clientStanjeList={clientStanjeList}
       />
     </div>
