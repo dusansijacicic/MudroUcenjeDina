@@ -266,3 +266,40 @@ export async function deleteTermTypeAsAdmin(id: string): Promise<{ error?: strin
   revalidatePath('/admin/vrste-termina');
   return {};
 }
+
+export type ClassroomRow = { id: string; naziv: string; color: string | null };
+
+export async function getClassrooms(): Promise<ClassroomRow[]> {
+  const admin = createAdminClient();
+  const { data } = await admin.from('classrooms').select('id, naziv, color').order('naziv');
+  return (data ?? []) as ClassroomRow[];
+}
+
+export async function upsertClassroom(id: string | null, naziv: string, color: string | null): Promise<{ error?: string }> {
+  const { admin, error: authErr } = await requireAdmin();
+  if (authErr || !admin) return { error: authErr ?? 'Samo admin.' };
+  const payload = {
+    naziv: naziv.trim(),
+    color: color?.trim() || null,
+  };
+  let error;
+  if (id) {
+    ({ error } = await admin.from('classrooms').update(payload).eq('id', id));
+  } else {
+    ({ error } = await admin.from('classrooms').insert(payload));
+  }
+  if (error) return { error: error.message };
+  revalidatePath('/admin/ucionice');
+  revalidatePath('/admin/kalendar');
+  return {};
+}
+
+export async function deleteClassroom(id: string): Promise<{ error?: string }> {
+  const { admin, error: authErr } = await requireAdmin();
+  if (authErr || !admin) return { error: authErr ?? 'Samo admin.' };
+  const { error } = await admin.from('classrooms').delete().eq('id', id);
+  if (error) return { error: error.message };
+  revalidatePath('/admin/ucionice');
+  revalidatePath('/admin/kalendar');
+  return {};
+}

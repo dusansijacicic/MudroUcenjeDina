@@ -4,7 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { getDashboardInstructor } from '@/lib/dashboard';
 import { getMaxCasovaPoTerminu } from '@/lib/settings';
 import { TIME_SLOTS } from '@/lib/constants';
-import { getTermTypes } from '@/app/admin/actions';
+import { getTermTypes, getClassrooms } from '@/app/admin/actions';
 import PredavanjeForm from '../PredavanjeForm';
 
 export default async function NoviTerminPage({
@@ -70,7 +70,10 @@ export default async function NoviTerminPage({
     prezime: c.prezime ?? '',
   }));
 
-  const termTypes = await getTermTypes();
+  const [termTypes, classrooms] = await Promise.all([
+    getTermTypes(),
+    getClassrooms(),
+  ]);
 
   return (
     <div className="max-w-lg">
