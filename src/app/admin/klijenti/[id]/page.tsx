@@ -62,10 +62,10 @@ export default async function AdminKlijentEditPage({
     return (
       <Link
         href={`/admin/termin/${p.term_id}`}
-        className={`block rounded-xl border px-4 py-3 transition-all hover:shadow-md focus:outline-none focus:ring-2 focus:ring-amber-400 ${
+        className={`block rounded-xl border px-4 py-3 ui-transition hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-amber-400 focus:ring-offset-2 ${
           isOdrzan
-            ? 'border-emerald-200 bg-emerald-50/80 hover:bg-emerald-100/80 hover:border-emerald-300'
-            : 'border-stone-200 bg-white hover:bg-stone-50 hover:border-stone-300'
+            ? 'border-emerald-200 bg-emerald-50/80 hover:bg-emerald-100/80 hover:border-emerald-300 hover:-translate-y-0.5'
+            : 'border-stone-200 bg-white hover:bg-stone-50 hover:border-stone-300 hover:-translate-y-0.5'
         }`}
       >
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -85,11 +85,11 @@ export default async function AdminKlijentEditPage({
   };
 
   return (
-    <div className="max-w-4xl space-y-10">
+    <div className="max-w-4xl space-y-10 animate-in">
       {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-4 animate-in-delay-1">
         <div>
-          <Link href="/admin/klijenti" className="text-sm text-stone-500 hover:text-amber-600 transition-colors inline-block mb-1">
+          <Link href="/admin/klijenti" className="text-sm text-stone-500 hover:text-amber-600 ui-transition inline-block mb-1 focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-offset-2 rounded">
             ← Svi klijenti
           </Link>
           <h1 className="text-2xl font-bold text-stone-900 tracking-tight">
@@ -99,8 +99,42 @@ export default async function AdminKlijentEditPage({
         </div>
       </div>
 
-      {/* Pregled termina – dva bloka na vrhu */}
-      <section className="rounded-2xl border border-stone-200 bg-white shadow-sm overflow-hidden">
+      {/* Summary: ukupno i održano po tipu */}
+      <section className="rounded-2xl border border-stone-200 bg-white shadow-sm overflow-hidden animate-in-delay-2 ui-hover-lift">
+        <div className="border-b border-stone-100 bg-stone-50/80 px-5 py-3">
+          <h2 className="text-base font-semibold text-stone-800">Pregled po vrstama časova</h2>
+          <p className="text-xs text-stone-500 mt-0.5">Ukupno uplaćeno, održano i preostalo po svakom tipu (svi predavači).</p>
+        </div>
+        <div className="overflow-x-auto">
+          {stanjePoVrstama.length === 0 ? (
+            <div className="p-5 text-sm text-stone-500">Nema uplata ili održanih časova po vrstama.</div>
+          ) : (
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-stone-200 bg-stone-50/80">
+                  <th className="text-left p-3 font-medium text-stone-600">Vrsta časa</th>
+                  <th className="text-right p-3 font-medium text-stone-600">Ukupno uplaćeno</th>
+                  <th className="text-right p-3 font-medium text-stone-600">Održano</th>
+                  <th className="text-right p-3 font-medium text-amber-700">Preostalo</th>
+                </tr>
+              </thead>
+              <tbody>
+                {stanjePoVrstama.map((s) => (
+                  <tr key={s.term_type_id ?? 'bez'} className="border-b border-stone-100 hover:bg-stone-50/50 ui-transition">
+                    <td className="p-3 font-medium text-stone-800">{s.term_type_naziv}</td>
+                    <td className="p-3 text-right text-stone-700">{s.uplaceno}</td>
+                    <td className="p-3 text-right text-stone-700">{s.odrzano}</td>
+                    <td className="p-3 text-right font-medium text-amber-800">{s.ostalo}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </section>
+
+      {/* Pregled termina – održani / zakazani */}
+      <section className="rounded-2xl border border-stone-200 bg-white shadow-sm overflow-hidden animate-in-delay-3">
         <div className="border-b border-stone-100 bg-stone-50/80 px-5 py-3">
           <h2 className="text-base font-semibold text-stone-800">Pregled termina</h2>
           <p className="text-xs text-stone-500 mt-0.5">Klik na termin otvara admin stranicu termina. Sortirano od najnovijeg.</p>
@@ -143,31 +177,8 @@ export default async function AdminKlijentEditPage({
         </div>
       </section>
 
-      {/* Stanje po vrstama */}
-      {stanjePoVrstama.length > 0 && (
-        <section className="rounded-2xl border border-stone-200 bg-white shadow-sm p-5">
-          <h2 className="text-base font-semibold text-stone-800 mb-1">Stanje po vrstama časova</h2>
-          <p className="text-xs text-stone-500 mb-4">Uplaćeno / održano / ostalo (svi predavači).</p>
-          <div className="flex flex-wrap gap-3">
-            {stanjePoVrstama.map((s) => (
-              <div
-                key={s.term_type_id ?? 'bez'}
-                className="rounded-xl border border-stone-200 bg-stone-50/60 px-4 py-3 min-w-[140px]"
-              >
-                <p className="font-medium text-stone-800 text-sm">{s.term_type_naziv}</p>
-                <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0 text-xs text-stone-600">
-                  <span>upl. <strong className="text-stone-700">{s.uplaceno}</strong></span>
-                  <span>odr. <strong className="text-stone-700">{s.odrzano}</strong></span>
-                  <span className="text-amber-700">ost. <strong>{s.ostalo}</strong></span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
-
       {/* Izmena podataka */}
-      <section className="rounded-2xl border border-stone-200 bg-white shadow-sm p-5">
+      <section className="rounded-2xl border border-stone-200 bg-white shadow-sm p-5 animate-in-delay-4">
         <h2 className="text-base font-semibold text-stone-800 mb-1">Izmena podataka klijenta</h2>
         <p className="text-xs text-stone-500 mb-4">Plaćeno časova po predavaču se vodi kroz Evidenciju uplata.</p>
         <AdminClientForm client={client as Client} redirectAfterSave="/admin/klijenti" />

@@ -26,9 +26,12 @@ export default function AdminNav() {
   };
 
   return (
-    <header className="bg-stone-800 text-white border-b border-stone-700">
+    <header className="bg-stone-800 text-white border-b border-stone-700 shadow-lg animate-fade-in">
       <div className="max-w-5xl mx-auto px-4 flex flex-wrap items-center justify-between gap-2 min-h-14 py-2">
-        <Link href="/admin" className="font-semibold text-white shrink-0">
+        <Link
+          href="/admin"
+          className="font-semibold text-white shrink-0 ui-transition hover:text-amber-200 focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-800 rounded-md"
+        >
           Dina Kalendar – Admin
         </Link>
         <nav className="flex flex-wrap items-center gap-1" aria-label="Admin navigacija">
@@ -38,8 +41,10 @@ export default function AdminNav() {
               <Link
                 key={href}
                 href={href}
-                className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  active ? 'bg-amber-500 text-white' : 'text-stone-300 hover:bg-stone-700 hover:text-white'
+                className={`px-3 py-2 rounded-lg text-sm font-medium ui-transition focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-800 ${
+                  active
+                    ? 'bg-amber-500 text-white shadow-md scale-[1.02]'
+                    : 'text-stone-300 hover:bg-stone-700 hover:text-white hover:scale-[1.02] active:scale-[0.98]'
                 }`}
               >
                 {label}
@@ -48,20 +53,20 @@ export default function AdminNav() {
           })}
           <Link
             href="/admin/termin/novi"
-            className="px-3 py-2 rounded-lg text-sm font-medium bg-amber-600 text-white hover:bg-amber-500 transition-colors"
+            className="px-3 py-2 rounded-lg text-sm font-medium bg-amber-600 text-white hover:bg-amber-500 hover:scale-[1.03] active:scale-[0.98] ui-transition shadow-md focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-800"
           >
             + Zakaži termin
           </Link>
           <Link
             href="/admin/uplate/novi"
-            className="px-3 py-2 rounded-lg text-sm font-medium border border-stone-500 text-stone-200 hover:bg-stone-700 transition-colors"
+            className="px-3 py-2 rounded-lg text-sm font-medium border border-stone-500 text-stone-200 hover:bg-stone-700 hover:border-stone-500 hover:scale-[1.02] active:scale-[0.98] ui-transition focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-800"
           >
             + Unesi uplatu
           </Link>
         </nav>
         <button
           onClick={signOut}
-          className="text-sm text-stone-400 hover:text-white shrink-0"
+          className="text-sm text-stone-400 hover:text-white shrink-0 ui-transition rounded-md px-2 py-1 hover:bg-stone-700/80 focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-800"
         >
           Odjava
         </button>

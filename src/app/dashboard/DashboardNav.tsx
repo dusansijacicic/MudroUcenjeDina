@@ -26,15 +26,15 @@ export default function DashboardNav({ instructor, isAdminView }: { instructor: 
   ];
 
   return (
-    <header className="bg-white border-b border-stone-200">
+    <header className="bg-white border-b border-stone-200 shadow-sm animate-fade-in">
       <div className="max-w-6xl mx-auto px-4 flex items-center justify-between h-14">
         <div className="flex items-center gap-6">
           {isAdminView && (
-            <Link href="/admin" className="text-sm text-stone-500 hover:text-stone-700">
+            <Link href="/admin" className="text-sm text-stone-500 hover:text-stone-700 ui-transition rounded-md px-2 py-1 hover:bg-stone-100">
               ← Admin
             </Link>
           )}
-          <Link href="/dashboard" className="font-semibold text-stone-800">
+          <Link href="/dashboard" className="font-semibold text-stone-800 ui-transition hover:text-amber-600">
             Dina Kalendar
           </Link>
           <nav className="flex gap-1">
@@ -42,10 +42,10 @@ export default function DashboardNav({ instructor, isAdminView }: { instructor: 
               <Link
                 key={href}
                 href={href}
-                className={`px-3 py-2 rounded-lg text-sm font-medium ${
+                className={`px-3 py-2 rounded-lg text-sm font-medium ui-transition focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-offset-2 ${
                   pathname === href
-                    ? 'bg-amber-100 text-amber-800'
-                    : 'text-stone-600 hover:bg-stone-100'
+                    ? 'bg-amber-100 text-amber-800 scale-[1.02]'
+                    : 'text-stone-600 hover:bg-stone-100 hover:scale-[1.02] active:scale-[0.98]'
                 }`}
               >
                 {label}
@@ -59,7 +59,7 @@ export default function DashboardNav({ instructor, isAdminView }: { instructor: 
           </span>
           <button
             onClick={signOut}
-            className="text-sm text-stone-500 hover:text-stone-700"
+            className="text-sm text-stone-500 hover:text-stone-700 ui-transition rounded-md px-2 py-1 hover:bg-stone-100 focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-offset-2"
           >
             Odjava
           </button>

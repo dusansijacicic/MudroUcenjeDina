@@ -116,9 +116,9 @@ export default async function DashboardPage({
   const odrzanoPoVrstama = await getOdrzanoPoVrstamaZaPredavaca(instructorId);
 
   return (
-    <div>
+    <div className="animate-in">
       <DashboardErrorToast />
-      <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+      <div className="flex items-center justify-between mb-4 flex-wrap gap-2 animate-in-delay-1">
         <h1 className="text-xl font-semibold text-stone-800">Kalendar</h1>
         <div className="flex items-center gap-2 flex-wrap">
           <CalendarFilters
@@ -130,7 +130,7 @@ export default async function DashboardPage({
           <AddTermButton instructorId={instructorId} />
         </div>
       </div>
-      <div className="mb-3 flex items-center gap-3 text-sm text-stone-600">
+      <div className="mb-3 flex items-center gap-3 text-sm text-stone-600 animate-in-delay-1">
         <span className="font-medium">Legenda:</span>
         <span className="flex items-center gap-1.5">
           <span
@@ -144,7 +144,7 @@ export default async function DashboardPage({
         )}
       </div>
       {odrzanoPoVrstama.length > 0 && (
-        <div className="mb-4 rounded-lg border border-stone-200 bg-stone-50 px-3 py-2 text-sm text-stone-700">
+        <div className="mb-4 rounded-xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm text-stone-700 animate-in-delay-2 ui-transition shadow-sm">
           <span className="font-medium text-stone-600">Održano po vrstama časova: </span>
           {odrzanoPoVrstama.map((s) => (
             <span key={s.term_type_id ?? 'bez'} className="mr-3">

@@ -56,8 +56,8 @@ export default async function AdminSviKlijentiPage() {
   const warningByClientId = new Map(clientWarnings.map((w) => [w.clientId, w.problemTypes]));
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-6">
+    <div className="animate-in">
+      <div className="flex items-center justify-between mb-6 animate-in-delay-1">
         <div>
           <h1 className="text-xl font-semibold text-stone-800">Svi klijenti</h1>
           <p className="text-stone-500 text-sm mt-1">
@@ -66,13 +66,13 @@ export default async function AdminSviKlijentiPage() {
         </div>
         <Link
           href="/admin/klijenti/novi"
-          className="inline-flex items-center rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700"
+          className="inline-flex items-center rounded-xl bg-amber-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-amber-500 ui-hover-lift shadow-md focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-offset-2"
         >
           + Novi klijent
         </Link>
       </div>
 
-      <div className="rounded-xl border border-stone-200 bg-white overflow-hidden">
+      <div className="rounded-2xl border border-stone-200 bg-white overflow-hidden shadow-sm animate-in-delay-2">
         <table className="w-full text-sm">
           <thead className="bg-stone-50 border-b border-stone-200">
             <tr>
@@ -88,7 +88,7 @@ export default async function AdminSviKlijentiPage() {
               const problemTypes = warningByClientId.get(client.id) ?? [];
               const hasWarning = problemTypes.length > 0;
               return (
-              <tr key={client.id} className="border-b border-stone-100 hover:bg-stone-50">
+              <tr key={client.id} className="border-b border-stone-100 hover:bg-amber-50/50 ui-transition">
                 <td className="p-3 font-medium text-stone-800">
                   {client.ime} {client.prezime}
                   {hasWarning && (

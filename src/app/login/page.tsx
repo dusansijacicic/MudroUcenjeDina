@@ -106,7 +106,7 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full rounded-xl bg-[#0d9488] text-white font-semibold py-3 hover:bg-[#0f766e] focus:ring-2 focus:ring-[var(--kid-teal)] focus:ring-offset-2 disabled:opacity-50 transition-smooth hover-lift"
+            className="w-full rounded-xl bg-[#0d9488] text-white font-semibold py-3 hover:bg-[#0f766e] focus:ring-2 focus:ring-[var(--kid-teal)] focus:ring-offset-2 disabled:opacity-50 ui-transition hover:-translate-y-0.5 active:translate-y-0 shadow-md"
           >
             {loading ? 'Sačekajte...' : 'Prijava'}
           </button>
