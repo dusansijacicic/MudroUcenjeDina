@@ -1,5 +1,6 @@
-import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
+import Link from 'next/link';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { getDashboardInstructor } from '@/lib/dashboard';
 import { getMaxCasovaPoTerminu } from '@/lib/settings';
 import { TIME_SLOTS } from '@/lib/constants';
@@ -10,7 +11,6 @@ export default async function NoviTerminPage({
 }: {
   searchParams: Promise<{ date?: string; slot?: string }>;
 }) {
-  const supabase = await createClient();
   const { instructor } = await getDashboardInstructor();
   if (!instructor) redirect('/login?reason=no_instructor');
 
@@ -19,24 +19,32 @@ export default async function NoviTerminPage({
   const slotIndex = Math.min(12, Math.max(0, parseInt(params.slot ?? '0', 10)));
   const slotLabel = TIME_SLOTS[slotIndex];
 
-  let { data: term } = await supabase
+  const admin = createAdminClient();
+
+  let term: { id: string } | null = null;
+  const { data: existing } = await admin
     .from('terms')
     .select('id')
     .eq('instructor_id', instructor.id)
     .eq('date', date)
     .eq('slot_index', slotIndex)
-    .single();
+    .maybeSingle();
+  term = existing;
 
   if (!term) {
-    const { data: inserted } = await supabase
+    const { data: inserted, error } = await admin
       .from('terms')
       .insert({
         instructor_id: instructor.id,
-        date: date,
+        date,
         slot_index: slotIndex,
       })
       .select('id')
       .single();
+    if (error) {
+      console.error('[termin/novi] terms insert failed', error.message);
+      redirect('/dashboard?error=term');
+    }
     term = inserted;
   }
 
@@ -44,16 +52,18 @@ export default async function NoviTerminPage({
     redirect('/dashboard');
   }
 
-  const [maxCasova, { count: currentCount }] = await Promise.all([
+  const [predRes, maxCasova] = await Promise.all([
+    admin.from('predavanja').select('*', { count: 'exact', head: true }).eq('term_id', term.id),
     getMaxCasovaPoTerminu(),
-    supabase.from('predavanja').select('*', { count: 'exact', head: true }).eq('term_id', term.id).then((r) => ({ count: r.count ?? 0 })),
   ]);
+  const currentCount = predRes.count ?? 0;
 
-  const { data: linkRows } = await supabase
+  let clients: { id: string; ime: string; prezime: string }[] = [];
+  const { data: linkRows } = await admin
     .from('instructor_clients')
     .select('client:clients(id, ime, prezime)')
     .eq('instructor_id', instructor.id);
-  const clients = (linkRows ?? []).map((r) => r.client).filter(Boolean) as unknown as { id: string; ime: string; prezime: string }[];
+  clients = (linkRows ?? []).map((r) => r.client).filter(Boolean) as unknown as { id: string; ime: string; prezime: string }[];
   clients.sort((a, b) => (a.prezime ?? '').localeCompare(b.prezime ?? '') || (a.ime ?? '').localeCompare(b.ime ?? ''));
 
   return (
@@ -61,6 +71,11 @@ export default async function NoviTerminPage({
       <h1 className="text-xl font-semibold text-stone-800 mb-4">
         Novo predavanje – {date} {slotLabel}
       </h1>
+      {clients.length === 0 && (
+        <p className="mb-4 text-amber-700 bg-amber-50 rounded-lg px-3 py-2 text-sm">
+          Nemaš još nijednog klijenta. Prvo dodaj klijenta u <Link href="/dashboard/klijenti/novi" className="underline font-medium">Klijenti → Novi klijent</Link>, pa se vrati ovde.
+        </p>
+      )}
       <PredavanjeForm
         termId={term.id}
         termDate={date}
