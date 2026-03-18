@@ -324,18 +324,35 @@ export async function updateTermClassroomAsAdmin(termId: string, classroomId: st
   return {};
 }
 
-export type TermTypeRow = { id: string; naziv: string; opis: string | null };
+export type TermTypeRow = { id: string; naziv: string; opis: string | null; cena_po_casu: number | null };
 
 export async function getTermTypes(): Promise<TermTypeRow[]> {
   const admin = createAdminClient();
-  const { data } = await admin.from('term_types').select('id, naziv, opis').order('naziv');
+  const { data } = await admin.from('term_types').select('id, naziv, opis, cena_po_casu').order('naziv');
   return (data ?? []) as TermTypeRow[];
 }
 
-export async function createTermTypeAsAdmin(naziv: string, opis: string | null): Promise<{ error?: string }> {
+export async function createTermTypeAsAdmin(naziv: string, opis: string | null, cena_po_casu: number | null): Promise<{ error?: string }> {
   const { admin, error: authErr } = await requireAdmin();
   if (authErr || !admin) return { error: authErr ?? 'Samo admin.' };
-  const { error } = await admin.from('term_types').insert({ naziv: naziv.trim(), opis: opis?.trim() || null });
+  const { error } = await admin.from('term_types').insert({
+    naziv: naziv.trim(),
+    opis: opis?.trim() || null,
+    cena_po_casu: cena_po_casu != null && Number.isFinite(cena_po_casu) ? cena_po_casu : null,
+  });
+  if (error) return { error: error.message };
+  revalidatePath('/admin/vrste-termina');
+  return {};
+}
+
+export async function updateTermTypeAsAdmin(id: string, naziv: string, opis: string | null, cena_po_casu: number | null): Promise<{ error?: string }> {
+  const { admin, error: authErr } = await requireAdmin();
+  if (authErr || !admin) return { error: authErr ?? 'Samo admin.' };
+  const { error } = await admin.from('term_types').update({
+    naziv: naziv.trim(),
+    opis: opis?.trim() || null,
+    cena_po_casu: cena_po_casu != null && Number.isFinite(cena_po_casu) ? cena_po_casu : null,
+  }).eq('id', id);
   if (error) return { error: error.message };
   revalidatePath('/admin/vrste-termina');
   return {};
@@ -406,5 +423,54 @@ export async function updateAppSetting(key: string, value: string): Promise<{ er
   if (error) return { error: error.message };
   revalidatePath('/admin/podesavanja');
   revalidatePath('/admin/termin/novi');
+  return {};
+}
+
+/** Izmena klijenta (samo podaci iz tabele clients). Samo admin. */
+export async function updateClientAsAdmin(
+  clientId: string,
+  payload: { ime: string; prezime: string; godiste: number | null; razred: string | null; skola: string | null; roditelj: string | null; kontakt_telefon: string | null; login_email: string | null; popust_percent: number | null }
+): Promise<{ error?: string }> {
+  const { admin, error: authErr } = await requireAdmin();
+  if (authErr || !admin) return { error: authErr ?? 'Samo admin.' };
+  const { error } = await admin.from('clients').update(payload).eq('id', clientId);
+  if (error) return { error: error.message };
+  revalidatePath('/admin/klijenti');
+  revalidatePath(`/admin/klijenti/${clientId}`);
+  return {};
+}
+
+/** Unos uplate (evidencija: ko je primio, kada, koliko, za koga). Admin ili predavač (samo svoje). popust_percent = popust za ovu uplatu (npr. 10). */
+export async function createUplata(
+  instructorId: string,
+  clientId: string,
+  iznos: number | null,
+  termTypeId: string | null,
+  brojCasova: number,
+  popustPercent: number | null,
+  napomena: string | null
+): Promise<{ error?: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: 'Niste ulogovani.' };
+  const admin = createAdminClient();
+  const { data: adminRow } = await supabase.from('admin_users').select('user_id').eq('user_id', user.id).single();
+  const { data: instructor } = await admin.from('instructors').select('id').eq('user_id', user.id).single();
+  const isAdmin = !!adminRow;
+  const isOwnInstructor = instructor?.id === instructorId;
+  if (!isAdmin && !isOwnInstructor) return { error: 'Niste ovlašćeni da unesete uplatu za tog predavača.' };
+  const popust = popustPercent != null && Number.isFinite(popustPercent) && popustPercent >= 0 && popustPercent <= 100 ? popustPercent : null;
+  const { error } = await admin.from('uplate').insert({
+    instructor_id: instructorId,
+    client_id: clientId,
+    iznos: iznos != null && Number.isFinite(iznos) ? iznos : null,
+    term_type_id: termTypeId || null,
+    broj_casova: Math.max(0, brojCasova),
+    popust_percent: popust,
+    napomena: napomena?.trim() || null,
+  });
+  if (error) return { error: error.message };
+  revalidatePath('/admin/uplate');
+  revalidatePath('/admin/uplate/novi');
   return {};
 }

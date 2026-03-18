@@ -4,6 +4,7 @@ import { getDashboardInstructor } from '@/lib/dashboard';
 import CalendarView from './CalendarView';
 import AddTermButton from './AddTermButton';
 import CalendarFilters from './CalendarFilters';
+import DashboardErrorToast from './DashboardErrorToast';
 import { DEFAULT_INSTRUCTOR_COLOR } from '@/lib/constants';
 import type { RawTerm, OtherTerm } from './CalendarView';
 
@@ -113,6 +114,7 @@ export default async function DashboardPage({
 
   return (
     <div>
+      <DashboardErrorToast />
       <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
         <h1 className="text-xl font-semibold text-stone-800">Kalendar</h1>
         <div className="flex items-center gap-2 flex-wrap">

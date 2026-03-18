@@ -51,10 +51,10 @@ export async function createClientAsInstructor(payload: ClientPayload, placeno_c
   return { clientId: newClient.id };
 }
 
+/** Ažurira samo podatke klijenta (ime, prezime, itd.). Stanje časova (koliko kojih ima na raspolaganju) vodi se kroz Evidenciju uplata. */
 export async function updateClientAsInstructor(
   clientId: string,
-  payload: ClientPayload,
-  placeno_casova: number
+  payload: ClientPayload
 ): Promise<{ error?: string }> {
   console.log('[klijenti] updateClientAsInstructor', clientId);
   const { instructor } = await getDashboardInstructor();
@@ -70,15 +70,6 @@ export async function updateClientAsInstructor(
   if (updateErr) {
     console.error('[klijenti] clients update', updateErr.message);
     return { error: updateErr.message };
-  }
-  const { error: linkErr } = await admin
-    .from('instructor_clients')
-    .update({ placeno_casova: Math.max(0, placeno_casova) })
-    .eq('instructor_id', instructor.id)
-    .eq('client_id', clientId);
-  if (linkErr) {
-    console.error('[klijenti] instructor_clients update', linkErr.message);
-    return { error: linkErr.message };
   }
   revalidatePath('/dashboard/klijenti');
   revalidatePath(`/dashboard/klijenti/${clientId}`);

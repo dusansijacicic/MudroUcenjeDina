@@ -92,6 +92,12 @@ export default async function AdminPage({
         >
           Podešavanja
         </Link>
+        <Link
+          href="/admin/uplate"
+          className="inline-flex items-center rounded-lg border border-stone-300 px-4 py-2 text-sm font-medium text-stone-700 hover:bg-stone-100"
+        >
+          Evidencija uplata
+        </Link>
       </div>
 
       <p className="text-stone-500 text-sm mb-6">

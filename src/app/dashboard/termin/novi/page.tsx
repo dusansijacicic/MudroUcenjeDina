@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getDashboardInstructor } from '@/lib/dashboard';
-import { getMaxCasovaPoTerminu } from '@/lib/settings';
+import { getMaxCasovaPoTerminu, getMaxTerminaPoSlotu } from '@/lib/settings';
 import { TIME_SLOTS } from '@/lib/constants';
 import { getTermTypes, getClassrooms } from '@/app/admin/actions';
 import PredavanjeForm from '../PredavanjeForm';
@@ -33,6 +33,13 @@ export default async function NoviTerminPage({
   term = existing;
 
   if (!term) {
+    const [maxTerminaPoSlotu, { count: termCount }] = await Promise.all([
+      getMaxTerminaPoSlotu(),
+      admin.from('terms').select('*', { count: 'exact', head: true }).eq('date', date).eq('slot_index', slotIndex),
+    ]);
+    if ((termCount ?? 0) >= maxTerminaPoSlotu) {
+      redirect(`/dashboard?error=slot_pun&message=${encodeURIComponent(`U ovom terminu je već ${maxTerminaPoSlotu} termina (maksimum). Izaberite drugi datum ili vreme.`)}`);
+    }
     const { data: inserted, error } = await admin
       .from('terms')
       .insert({

@@ -30,6 +30,7 @@ TRUNCATE TABLE
   predavanja,
   zahtevi_za_cas,
   terms,
+  uplate,
   instructor_clients,
   clients,
   instructor_availability_periods,
@@ -51,14 +52,21 @@ SELECT id, 'Dina', 'Mateja', 'dina.mateja@yahoo.com', '#EC4899'
 FROM auth.users WHERE email = 'dina.mateja@yahoo.com'
 ON CONFLICT (user_id) DO NOTHING;
 
--- 4) Jedan klijent: Neko Dete (uloguje se kao nekodete@gmail.com)
-INSERT INTO clients (ime, prezime, godiste, razred, skola, roditelj, kontakt_telefon, login_email)
-VALUES ('Neko', 'Dete', 2011, '6', 'OS Sveti Sava', 'Roditelj Dete', '063 555 6666', 'nekodete@gmail.com');
+-- 4) Klijenti: Neko Dete (učenik) + Ana Anić (samo za test kalendara)
+INSERT INTO clients (ime, prezime, godiste, razred, skola, roditelj, kontakt_telefon, login_email, popust_percent)
+VALUES
+  ('Neko', 'Dete', 2011, '6', 'OS Sveti Sava', 'Roditelj Dete', '063 555 6666', 'nekodete@gmail.com', 10),
+  ('Ana', 'Anić', 2012, '5', 'OS Kralj Petar', 'Marko Anić', '065 111 2222', NULL, 0);
 INSERT INTO instructor_clients (instructor_id, client_id, placeno_casova)
-SELECT i.id, c.id, 5
-FROM instructors i, clients c
-WHERE i.email = 'dina.mateja@yahoo.com' AND c.login_email = 'nekodete@gmail.com'
-LIMIT 1;
+SELECT i.id, c.id, 0
+FROM instructors i
+CROSS JOIN clients c
+WHERE i.email = 'dina.mateja@yahoo.com' AND c.login_email = 'nekodete@gmail.com';
+INSERT INTO instructor_clients (instructor_id, client_id, placeno_casova)
+SELECT i.id, c.id, 0
+FROM instructors i
+CROSS JOIN clients c
+WHERE i.email = 'dina.mateja@yahoo.com' AND c.ime = 'Ana' AND c.prezime = 'Anić';
 
 -- 5) Učionice (6 soba)
 INSERT INTO classrooms (naziv, color) VALUES
@@ -69,10 +77,10 @@ INSERT INTO classrooms (naziv, color) VALUES
   ('Učionica 5', '#facc15'),
   ('Učionica 6', '#6b7280');
 
--- 5b) Vrste termina (obavezno za zakazivanje)
-INSERT INTO term_types (naziv, opis) VALUES
-  ('Individualni', 'Jedan na jedan'),
-  ('Grupni', 'Grupa učenika');
+-- 5b) Vrste termina (obavezno za zakazivanje) + cena po času
+INSERT INTO term_types (naziv, opis, cena_po_casu) VALUES
+  ('Individualni', 'Jedan na jedan', 1500),
+  ('Grupni', 'Grupa učenika', 1200);
 
 -- 6) Termini: Dina, ponedeljak–petak naredne nedelje, slotovi 0–8, sa učionicama
 DO $$
@@ -106,15 +114,19 @@ BEGIN
   END LOOP;
 END $$;
 
--- 7) Predavanja: Dina – par časova za Neko Dete (prvi dan naredne nedelje)
+-- 7) Predavanja: Dina – par časova za Neko Dete (prvi dan naredne nedelje) sa vrstom časa
 DO $$
 DECLARE
   next_monday DATE;
+  tt_ind_id UUID;
+  tt_gr_id UUID;
 BEGIN
+  SELECT id INTO tt_ind_id FROM term_types WHERE naziv = 'Individualni' LIMIT 1;
+  SELECT id INTO tt_gr_id FROM term_types WHERE naziv = 'Grupni' LIMIT 1;
   next_monday := CURRENT_DATE + CASE WHEN EXTRACT(ISODOW FROM CURRENT_DATE) = 1 THEN 7 ELSE (8 - EXTRACT(ISODOW FROM CURRENT_DATE)::int) END;
 
-  INSERT INTO predavanja (term_id, client_id, odrzano, placeno, komentar)
-  SELECT t.id, c.id, true, true, 'Rad na pismenom.'
+  INSERT INTO predavanja (term_id, client_id, odrzano, placeno, komentar, term_type_id)
+  SELECT t.id, c.id, true, true, 'Rad na pismenom.', tt_ind_id
   FROM terms t
   JOIN instructors i ON i.id = t.instructor_id AND i.email = 'dina.mateja@yahoo.com'
   JOIN instructor_clients ic ON ic.instructor_id = i.id
@@ -122,13 +134,22 @@ BEGIN
   WHERE t.slot_index = 0 AND t.date = next_monday
   LIMIT 1;
 
-  INSERT INTO predavanja (term_id, client_id, odrzano, placeno, komentar)
-  SELECT t.id, c.id, true, false, 'Matematika.'
+  INSERT INTO predavanja (term_id, client_id, odrzano, placeno, komentar, term_type_id)
+  SELECT t.id, c.id, true, false, 'Matematika.', tt_ind_id
   FROM terms t
   JOIN instructors i ON i.id = t.instructor_id AND i.email = 'dina.mateja@yahoo.com'
   JOIN instructor_clients ic ON ic.instructor_id = i.id
   JOIN clients c ON c.id = ic.client_id AND c.login_email = 'nekodete@gmail.com'
   WHERE t.slot_index = 1 AND t.date = next_monday
+  LIMIT 1;
+
+  INSERT INTO predavanja (term_id, client_id, odrzano, placeno, komentar, term_type_id)
+  SELECT t.id, c.id, false, false, NULL, tt_gr_id
+  FROM terms t
+  JOIN instructors i ON i.id = t.instructor_id AND i.email = 'dina.mateja@yahoo.com'
+  JOIN instructor_clients ic ON ic.instructor_id = i.id
+  JOIN clients c ON c.id = ic.client_id AND c.login_email = 'nekodete@gmail.com'
+  WHERE t.slot_index = 2 AND t.date = next_monday
   LIMIT 1;
 END $$;
 
@@ -150,7 +171,44 @@ BEGIN
   END LOOP;
 END $$;
 
--- 9) Poveži učenika nekodete@gmail.com sa klijentom Neko Dete
+-- 9) Uplate za Neko Dete (da klijent vidi "Vaše uplate" i stanje po vrstama)
+DO $$
+DECLARE
+  din_id UUID;
+  dete_id UUID;
+  tt_ind_id UUID;
+  tt_gr_id UUID;
+BEGIN
+  SELECT id INTO din_id FROM instructors WHERE email = 'dina.mateja@yahoo.com' LIMIT 1;
+  SELECT id INTO dete_id FROM clients WHERE login_email = 'nekodete@gmail.com' LIMIT 1;
+  SELECT id INTO tt_ind_id FROM term_types WHERE naziv = 'Individualni' LIMIT 1;
+  SELECT id INTO tt_gr_id FROM term_types WHERE naziv = 'Grupni' LIMIT 1;
+  IF din_id IS NOT NULL AND dete_id IS NOT NULL THEN
+    INSERT INTO uplate (instructor_id, client_id, iznos, term_type_id, broj_casova, popust_percent, napomena)
+    VALUES
+      (din_id, dete_id, 15000, tt_ind_id, 10, NULL, 'Paket 10 individualnih – januar'),
+      (din_id, dete_id, 6000, tt_gr_id, 5, 10, 'Paket 5 grupnih sa 10% popustom'),
+      (din_id, dete_id, 3000, tt_ind_id, 2, NULL, 'Dodatna 2 časa');
+  END IF;
+END $$;
+
+-- 10) Zahtev za čas (da se vidi u listi zahteva kod učenika)
+DO $$
+DECLARE
+  dete_id UUID;
+  din_id UUID;
+  req_date DATE;
+BEGIN
+  SELECT id INTO dete_id FROM clients WHERE login_email = 'nekodete@gmail.com' LIMIT 1;
+  SELECT id INTO din_id FROM instructors WHERE email = 'dina.mateja@yahoo.com' LIMIT 1;
+  req_date := CURRENT_DATE + 7;
+  IF dete_id IS NOT NULL AND din_id IS NOT NULL THEN
+    INSERT INTO zahtevi_za_cas (client_id, instructor_id, requested_date, requested_slot_index, status, resolved_at, note_from_instructor)
+    VALUES (dete_id, din_id, req_date, 3, 'confirmed', now() - interval '1 day', 'Termin potvrđen za 10:30.');
+  END IF;
+END $$;
+
+-- 11) Poveži učenika nekodete@gmail.com sa klijentom Neko Dete
 UPDATE clients
 SET user_id = (SELECT id FROM auth.users WHERE email = 'nekodete@gmail.com' LIMIT 1)
 WHERE login_email = 'nekodete@gmail.com';

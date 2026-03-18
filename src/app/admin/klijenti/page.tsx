@@ -91,12 +91,21 @@ export default async function AdminSviKlijentiPage() {
                   ))}
                 </td>
                 <td className="p-3 text-right">
+                  <Link
+                    href={`/admin/klijenti/${client.id}`}
+                    className="text-amber-600 hover:text-amber-700 font-medium"
+                  >
+                    Izmeni
+                  </Link>
+                  {instrs.length > 0 && (
+                    <span className="text-stone-400 mx-1">|</span>
+                  )}
                   {instrs.length > 0 && (
                     <Link
                       href={`/admin/view/${instrs[0].id}/klijenti/${client.id}`}
-                      className="text-amber-600 hover:text-amber-700 font-medium"
+                      className="text-stone-500 hover:text-stone-700 text-sm"
                     >
-                      Izmeni
+                      Kod predavača
                     </Link>
                   )}
                 </td>

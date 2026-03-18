@@ -8,6 +8,7 @@ export default function TermTypesForm() {
   const router = useRouter();
   const [naziv, setNaziv] = useState('');
   const [opis, setOpis] = useState('');
+  const [cenaPoCasu, setCenaPoCasu] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -19,7 +20,13 @@ export default function TermTypesForm() {
       return;
     }
     setLoading(true);
-    const result = await createTermTypeAsAdmin(naziv.trim(), opis.trim() || null);
+    const cena = cenaPoCasu.trim() ? parseFloat(cenaPoCasu.replace(',', '.')) : null;
+    if (cenaPoCasu.trim() && (cena === undefined || !Number.isFinite(cena) || cena < 0)) {
+      setError('Cena mora biti nenegativan broj.');
+      setLoading(false);
+      return;
+    }
+    const result = await createTermTypeAsAdmin(naziv.trim(), opis.trim() || null, cena);
     if (result.error) {
       setError(result.error);
       setLoading(false);
@@ -27,6 +34,7 @@ export default function TermTypesForm() {
     }
     setNaziv('');
     setOpis('');
+    setCenaPoCasu('');
     router.refresh();
     setLoading(false);
   };
@@ -51,6 +59,16 @@ export default function TermTypesForm() {
           onChange={(e) => setOpis(e.target.value)}
           className="rounded-lg border border-stone-300 px-3 py-2 text-stone-800 w-64"
           placeholder="Kratak opis"
+        />
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-stone-700 mb-1">Cena po času (RSD)</label>
+        <input
+          type="text"
+          value={cenaPoCasu}
+          onChange={(e) => setCenaPoCasu(e.target.value)}
+          className="rounded-lg border border-stone-300 px-3 py-2 text-stone-800 w-28"
+          placeholder="npr. 1500"
         />
       </div>
       <button

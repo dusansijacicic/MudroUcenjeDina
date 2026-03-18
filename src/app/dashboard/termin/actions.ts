@@ -3,7 +3,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getDashboardInstructor } from '@/lib/dashboard';
-import { termMozeNovoPredavanje } from '@/lib/settings';
+import { termMozeNovoPredavanje, getMaxTerminaPoSlotu } from '@/lib/settings';
 import { revalidatePath } from 'next/cache';
 
 export async function createPredavanje(
@@ -134,6 +134,7 @@ export async function deletePredavanje(predavanjeId: string, termId: string): Pr
   return {};
 }
 
+/** Ista pravila kao za admin: u ciljnom slotu max termina, jedinstven predavač, jedinstvena učionica. */
 export async function moveTermAsInstructor(
   termId: string,
   newDate: string,
@@ -152,11 +153,46 @@ export async function moveTermAsInstructor(
 
   const { data: term } = await admin
     .from('terms')
-    .select('instructor_id')
+    .select('instructor_id, classroom_id, date, slot_index')
     .eq('id', termId)
     .single();
   if (!term || term.instructor_id !== instructor.id) {
     return { error: 'Niste ovlašćeni za ovaj termin.' };
+  }
+
+  const isSameSlot = term.date === dateStr && term.slot_index === slot;
+  if (isSameSlot) return {};
+
+  const [maxTerminaPoSlotu, { count: termCount }] = await Promise.all([
+    getMaxTerminaPoSlotu(),
+    admin.from('terms').select('*', { count: 'exact', head: true }).eq('date', dateStr).eq('slot_index', slot),
+  ]);
+  if ((termCount ?? 0) >= maxTerminaPoSlotu) {
+    return { error: `U izabranom terminu je već ${maxTerminaPoSlotu} termina (maksimum). Izaberite drugi datum ili vreme.` };
+  }
+
+  const { data: existingInstructor } = await admin
+    .from('terms')
+    .select('id')
+    .eq('instructor_id', term.instructor_id)
+    .eq('date', dateStr)
+    .eq('slot_index', slot)
+    .maybeSingle();
+  if (existingInstructor) {
+    return { error: 'Već imate termin u izabranom slotu.' };
+  }
+
+  if (term.classroom_id) {
+    const { data: existingClassroom } = await admin
+      .from('terms')
+      .select('id')
+      .eq('classroom_id', term.classroom_id)
+      .eq('date', dateStr)
+      .eq('slot_index', slot)
+      .maybeSingle();
+    if (existingClassroom) {
+      return { error: 'Vaša učionica je već zauzeta u izabranom terminu. Izaberite drugi datum/vreme.' };
+    }
   }
 
   const { error } = await admin
@@ -192,6 +228,7 @@ export async function deleteTermAsInstructor(termId: string): Promise<{ error?: 
   return {};
 }
 
+/** Postavlja učionicu za termin. Proverava da ista učionica nije već u drugom terminu u istom slotu (pravilo B). */
 export async function updateTermClassroom(
   termId: string,
   classroomId: string
@@ -206,11 +243,22 @@ export async function updateTermClassroom(
   }
   const { data: term } = await admin
     .from('terms')
-    .select('instructor_id')
+    .select('instructor_id, date, slot_index')
     .eq('id', termId)
     .single();
   if (!term || term.instructor_id !== instructor.id) {
     return { error: 'Niste ovlašćeni za ovaj termin.' };
+  }
+  const { data: existingSameClassroom } = await admin
+    .from('terms')
+    .select('id')
+    .eq('date', term.date)
+    .eq('slot_index', term.slot_index)
+    .eq('classroom_id', classroomId)
+    .neq('id', termId)
+    .maybeSingle();
+  if (existingSameClassroom) {
+    return { error: 'Ova učionica je već zauzeta u ovom terminu (datum + vreme). Izaberite drugu učionicu.' };
   }
   const { error } = await admin
     .from('terms')

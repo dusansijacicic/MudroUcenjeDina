@@ -26,6 +26,7 @@ DROP TABLE IF EXISTS clients CASCADE;
 DROP TABLE IF EXISTS instructors CASCADE;
 DROP TABLE IF EXISTS classrooms CASCADE;
 DROP TABLE IF EXISTS term_types CASCADE;
+DROP TABLE IF EXISTS uplate CASCADE;
 
 -- Auth korisnici se NE brišu – ostaju Dusan, Dina i NekoDete (dusan.sijacic2@gmail.com, dina.mateja@yahoo.com, nekodete@gmail.com).
 -- Ako ikad želiš da obrišeš i njih: ručno u SQL Editoru pokreni:
@@ -45,7 +46,7 @@ CREATE TABLE instructors (
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
--- Klijenti (učenici) – bez instructor_id (veza preko instructor_clients)
+-- Klijenti (učenici). popust_percent = popust u % (npr. 10 = 10%); super admin dodeljuje.
 CREATE TABLE clients (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID UNIQUE REFERENCES auth.users(id) ON DELETE SET NULL,
@@ -57,6 +58,7 @@ CREATE TABLE clients (
   skola TEXT,
   roditelj TEXT,
   kontakt_telefon TEXT,
+  popust_percent DECIMAL(5,2) DEFAULT 0 CHECK (popust_percent >= 0 AND popust_percent <= 100),
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
@@ -90,11 +92,12 @@ CREATE TABLE terms (
 );
 CREATE UNIQUE INDEX uniq_terms_classroom_date_slot ON terms(classroom_id, date, slot_index) WHERE classroom_id IS NOT NULL;
 
--- Vrste termina (admin ih dodaje)
+-- Vrste termina (admin ih dodaje). cena_po_casu = cena za 1 čas (RSD).
 CREATE TABLE term_types (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   naziv TEXT NOT NULL,
   opis TEXT,
+  cena_po_casu DECIMAL(10,2),
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
@@ -139,6 +142,19 @@ CREATE TABLE zahtevi_za_cas (
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
+-- Evidencija uplata: ko je primio, kada, koliko, za koga, koja vrsta časova
+CREATE TABLE uplate (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  instructor_id UUID NOT NULL REFERENCES instructors(id) ON DELETE CASCADE,
+  client_id UUID NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+  iznos DECIMAL(10,2),
+  term_type_id UUID REFERENCES term_types(id) ON DELETE SET NULL,
+  broj_casova INT NOT NULL DEFAULT 1 CHECK (broj_casova >= 0),
+  popust_percent DECIMAL(5,2) CHECK (popust_percent IS NULL OR (popust_percent >= 0 AND popust_percent <= 100)),
+  napomena TEXT
+);
+
 -- Dostupnost predavača (nedeljni raspored)
 CREATE TABLE instructor_weekly_availability (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -169,6 +185,9 @@ CREATE INDEX idx_predavanja_client ON predavanja(client_id);
 CREATE INDEX idx_zahtevi_client ON zahtevi_za_cas(client_id);
 CREATE INDEX idx_zahtevi_instructor ON zahtevi_za_cas(instructor_id);
 CREATE INDEX idx_zahtevi_status ON zahtevi_za_cas(status);
+CREATE INDEX idx_uplate_created_at ON uplate(created_at DESC);
+CREATE INDEX idx_uplate_instructor ON uplate(instructor_id);
+CREATE INDEX idx_uplate_client ON uplate(client_id);
 CREATE INDEX idx_instructor_weekly_availability_instructor ON instructor_weekly_availability(instructor_id);
 CREATE INDEX idx_instructor_availability_periods_instructor ON instructor_availability_periods(instructor_id);
 CREATE INDEX idx_instructor_availability_periods_dates ON instructor_availability_periods(instructor_id, date_from, date_to);
@@ -330,6 +349,19 @@ CREATE POLICY "term_types_select_authenticated" ON term_types FOR SELECT TO auth
 CREATE POLICY "term_types_admin_all" ON term_types FOR ALL TO authenticated USING (
   auth.uid() IN (SELECT user_id FROM admin_users)
 ) WITH CHECK (auth.uid() IN (SELECT user_id FROM admin_users));
+
+-- uplate
+ALTER TABLE uplate ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "uplate_select_admin" ON uplate FOR SELECT TO authenticated
+  USING (auth.uid() IN (SELECT user_id FROM admin_users));
+CREATE POLICY "uplate_select_own_instructor" ON uplate FOR SELECT TO authenticated
+  USING (instructor_id = (SELECT id FROM instructors WHERE user_id = auth.uid() LIMIT 1));
+CREATE POLICY "uplate_insert_admin" ON uplate FOR INSERT TO authenticated
+  WITH CHECK (auth.uid() IN (SELECT user_id FROM admin_users));
+CREATE POLICY "uplate_insert_own_instructor" ON uplate FOR INSERT TO authenticated
+  WITH CHECK (instructor_id = (SELECT id FROM instructors WHERE user_id = auth.uid() LIMIT 1));
+CREATE POLICY "uplate_all_admin" ON uplate FOR ALL TO authenticated
+  USING (auth.uid() IN (SELECT user_id FROM admin_users));
 
 -- ----- 6. FUNKCIJE -----
 

@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { TIME_SLOTS } from '@/lib/constants';
 import Link from 'next/link';
+import toast from 'react-hot-toast';
 import { moveTermAsInstructor } from '@/app/dashboard/termin/actions';
 
 const DAY_NAMES = ['Pon', 'Uto', 'Sre', 'Čet', 'Pet', 'Sub', 'Ned'];
@@ -85,9 +86,16 @@ export default function CalendarView({
 
   const handleDrop = async (date: string, slot: number) => {
     if (!draggedTermId) return;
+    const ok = window.confirm('Da li ste sigurni da želite da premestite ovaj termin na novi datum/vreme?');
+    if (!ok) {
+      setDraggedTermId(null);
+      return;
+    }
     const res = await moveTermAsInstructor(draggedTermId, date, slot);
     setDraggedTermId(null);
-    if (!res.error) {
+    if (res.error) {
+      toast.error(res.error);
+    } else {
       router.refresh();
     }
   };

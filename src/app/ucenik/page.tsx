@@ -20,10 +20,23 @@ export default async function UcenikPage() {
     .select('instructor_id, placeno_casova')
     .eq('client_id', client.id);
 
-  const { data: predavanjaRaw } = await admin
-    .from('predavanja')
-    .select('*, term:terms(date, slot_index, instructor_id, instructor:instructors(ime, prezime))')
-    .eq('client_id', client.id);
+  const [
+    { data: uplateRaw },
+    { data: predavanjaRaw },
+    { data: termTypesRaw },
+  ] = await Promise.all([
+    admin
+      .from('uplate')
+      .select('id, created_at, iznos, broj_casova, popust_percent, napomena, instructor:instructors(ime, prezime), term_type:term_types(id, naziv)')
+      .eq('client_id', client.id)
+      .order('created_at', { ascending: false })
+      .limit(100),
+    admin
+      .from('predavanja')
+      .select('*, term:terms(date, slot_index, instructor_id, instructor:instructors(ime, prezime))')
+      .eq('client_id', client.id),
+    admin.from('term_types').select('id, naziv').order('naziv'),
+  ]);
 
   type TermWithInstructor = { date: string; slot_index: number; instructor_id?: string; instructor?: { ime: string; prezime: string } | null };
   const list = ((predavanjaRaw ?? []) as (Predavanje & { term?: TermWithInstructor | null })[])
@@ -57,6 +70,48 @@ export default async function UcenikPage() {
   const placenoCasovaUkupno = (links ?? []).reduce((s, l) => s + (l.placeno_casova ?? 0), 0);
 
   const preostaloUkupno = placenoCasovaUkupno - odrzanoCount;
+
+  // Stanje po vrstama: iz uplata (uplaćeno) i iz održanih predavanja (iskorišćeno)
+  const uplateList = (uplateRaw ?? []).map((u: Record<string, unknown>) => {
+    const instr = Array.isArray(u.instructor) ? u.instructor[0] : u.instructor;
+    const tt = Array.isArray(u.term_type) ? u.term_type[0] : u.term_type;
+    return {
+      id: u.id,
+      created_at: u.created_at,
+      iznos: u.iznos,
+      broj_casova: u.broj_casova,
+      popust_percent: u.popust_percent,
+      napomena: u.napomena,
+      instructor: instr as { ime?: string; prezime?: string } | null,
+      term_type: tt as { id?: string; naziv?: string } | null,
+    };
+  });
+  const termTypes = (termTypesRaw ?? []) as { id: string; naziv: string }[];
+  type PredavanjeWithType = Predavanje & { term?: TermWithInstructor | null; term_type_id?: string | null };
+  const odrzanoByType = new Map<string, number>();
+  for (const p of list.filter((p) => p.odrzano) as PredavanjeWithType[]) {
+    const tid = p.term_type_id ?? '__bez_vrste__';
+    odrzanoByType.set(tid, (odrzanoByType.get(tid) ?? 0) + 1);
+  }
+  const uplacenoByType = new Map<string, number>();
+  for (const u of uplateList) {
+    const tid = u.term_type?.id ?? '__bez_vrste__';
+    uplacenoByType.set(tid, (uplacenoByType.get(tid) ?? 0) + (u.broj_casova ?? 0));
+  }
+  const stanjePoTipu = termTypes.map((tt) => {
+    const uplaceno = uplacenoByType.get(tt.id) ?? 0;
+    const odrzano = odrzanoByType.get(tt.id) ?? 0;
+    return { id: tt.id, naziv: tt.naziv, uplaceno, odrzano, ostalo: Math.max(0, uplaceno - odrzano) };
+  });
+  if (uplacenoByType.has('__bez_vrste__') || odrzanoByType.has('__bez_vrste__')) {
+    stanjePoTipu.push({
+      id: '__bez_vrste__',
+      naziv: 'Bez vrste',
+      uplaceno: uplacenoByType.get('__bez_vrste__') ?? 0,
+      odrzano: odrzanoByType.get('__bez_vrste__') ?? 0,
+      ostalo: Math.max(0, (uplacenoByType.get('__bez_vrste__') ?? 0) - (odrzanoByType.get('__bez_vrste__') ?? 0)),
+    });
+  }
 
   return (
     <div className="space-y-8">
@@ -120,6 +175,73 @@ export default async function UcenikPage() {
         <p className="mt-3 text-sm text-[var(--kid-text-muted)]">
           Preostalo = ukupno plaćeno − održano (računa se posebno po svakom predavaču, pa se zbraja).
         </p>
+      </section>
+
+      <section className="rounded-2xl border-2 border-[var(--kid-sky)]/50 bg-white/90 backdrop-blur-sm p-6 shadow-lg transition-smooth hover:shadow-xl animate-in-delay-1" aria-labelledby="stanje-po-tipu">
+        <h2 id="stanje-po-tipu" className="text-lg font-semibold text-[var(--kid-text)] mb-4">
+          Stanje po vrstama časova
+        </h2>
+        <p className="text-sm text-[var(--kid-text-muted)] mb-4">
+          Koliko ste uplatili, koliko je održano i koliko vam preostaje za svaku vrstu časa.
+        </p>
+        {stanjePoTipu.length === 0 ? (
+          <p className="text-sm text-[var(--kid-text-muted)]">Nema uplata po vrstama. Uplate koje unesu predavač ili admin ovde će se prikazati.</p>
+        ) : (
+          <div className="space-y-3">
+            {stanjePoTipu.map((s) => (
+              <div key={s.id} className="flex flex-wrap items-center gap-4 rounded-xl bg-[var(--kid-butter)]/30 p-4 border border-[var(--kid-butter-dark)]/40">
+                <span className="font-medium text-[var(--kid-text)]">{s.naziv}</span>
+                <span className="text-sm text-[var(--kid-text-muted)]">uplaćeno: <strong className="text-[var(--kid-text)]">{s.uplaceno}</strong></span>
+                <span className="text-sm text-[var(--kid-text-muted)]">održano: <strong className="text-[var(--kid-text)]">{s.odrzano}</strong></span>
+                <span className="text-sm text-[var(--kid-text-muted)]">ostalo: <strong className="text-[var(--kid-text)]">{s.ostalo}</strong></span>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className="rounded-2xl border-2 border-[var(--kid-lavender)]/50 bg-white/90 backdrop-blur-sm p-6 shadow-lg transition-smooth hover:shadow-xl animate-in-delay-1" aria-labelledby="vase-uplate">
+        <h2 id="vase-uplate" className="text-lg font-semibold text-[var(--kid-text)] mb-4">
+          Vaše uplate
+        </h2>
+        <p className="text-sm text-[var(--kid-text-muted)] mb-4">
+          Istorija uplata: ko je primio, kada, iznos, vrsta časa i broj časova.
+        </p>
+        {uplateList.length === 0 ? (
+          <p className="text-sm text-[var(--kid-text-muted)]">Nema zabeleženih uplata.</p>
+        ) : (
+          <ul className="divide-y divide-[var(--kid-lavender)]/40">
+            {uplateList.map((u) => (
+              <li key={u.id} className="py-3 first:pt-0">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-sm font-medium text-[var(--kid-text)]">
+                    {u.created_at
+                      ? new Date(u.created_at).toLocaleDateString('sr-Latn-RS', {
+                          day: '2-digit',
+                          month: '2-digit',
+                          year: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })
+                      : '—'}
+                  </span>
+                  {u.iznos != null && (
+                    <span className="text-sm font-semibold text-[var(--kid-text)]">
+                      {Number(u.iznos).toLocaleString('sr-Latn-RS')} RSD
+                    </span>
+                  )}
+                </div>
+                <p className="text-sm text-[var(--kid-text-muted)] mt-0.5">
+                  Primio: {u.instructor ? `${u.instructor.ime} ${u.instructor.prezime}` : '—'}
+                  {u.term_type?.naziv && ` · ${u.term_type.naziv}`}
+                  {u.broj_casova != null && ` · ${u.broj_casova} časova`}
+                  {u.popust_percent != null && u.popust_percent > 0 && ` · popust ${u.popust_percent}%`}
+                </p>
+                {u.napomena && <p className="text-xs text-[var(--kid-text-muted)] mt-1">{u.napomena}</p>}
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
 
       {(zahteviRaw?.length ?? 0) > 0 && (

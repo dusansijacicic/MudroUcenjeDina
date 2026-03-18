@@ -28,6 +28,8 @@ export interface Client {
   skola: string | null;
   roditelj: string | null;
   kontakt_telefon: string | null;
+  /** Popust u % za ovog klijenta (0–100). Dodeljuje super admin. */
+  popust_percent?: number | null;
   created_at: string;
 }
 

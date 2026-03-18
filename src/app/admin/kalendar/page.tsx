@@ -3,11 +3,12 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import AdminCalendarView, { type AdminTerm } from './AdminCalendarView';
+import AdminCalendarFilters from './AdminCalendarFilters';
 
 export default async function AdminKalendarPage({
   searchParams,
 }: {
-  searchParams: Promise<{ week?: string; day?: string; month?: string; view?: string }>;
+  searchParams: Promise<{ week?: string; day?: string; month?: string; view?: string; instructor?: string; classroom?: string; client?: string }>;
 }) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -21,6 +22,9 @@ export default async function AdminKalendarPage({
   if (!admin) redirect('/login');
 
   const params = await searchParams;
+  const filterInstructorId = params.instructor?.trim() || null;
+  const filterClassroomId = params.classroom?.trim() || null;
+  const filterClientId = params.client?.trim() || null;
   const view = (params.view === 'dan' || params.view === 'mesec') ? params.view : 'nedelja';
   const today = new Date();
   const todayStr = today.toISOString().slice(0, 10);
@@ -60,7 +64,7 @@ export default async function AdminKalendarPage({
   }
 
   const adminSupabase = createAdminClient();
-  const [{ data: termsRaw }, { data: instructorsList }] = await Promise.all([
+  const [{ data: termsRaw }, { data: instructorsList }, { data: classroomsList }, { data: clientsList }] = await Promise.all([
     adminSupabase
       .from('terms')
       .select('*, instructor:instructors(id, ime, prezime, color), classroom:classrooms(id, naziv, color), predavanja(*, client:clients(id, ime, prezime))')
@@ -69,9 +73,11 @@ export default async function AdminKalendarPage({
       .order('date')
       .order('slot_index'),
     adminSupabase.from('instructors').select('id, ime, prezime, color').order('prezime').order('ime'),
+    adminSupabase.from('classrooms').select('id, naziv').order('naziv'),
+    adminSupabase.from('clients').select('id, ime, prezime').order('prezime').order('ime'),
   ]);
 
-  const terms: AdminTerm[] = (termsRaw ?? []).map((t) => {
+  let terms: AdminTerm[] = (termsRaw ?? []).map((t) => {
     const instr = (t as {
       instructor?: { id: string; ime: string; prezime: string; color?: string | null } | Array<unknown>;
       classroom?: { id: string; naziv: string; color?: string | null } | Array<unknown>;
@@ -92,6 +98,10 @@ export default async function AdminKalendarPage({
     };
   });
 
+  if (filterInstructorId) terms = terms.filter((t) => t.instructor_id === filterInstructorId);
+  if (filterClassroomId) terms = terms.filter((t) => t.classroom?.id === filterClassroomId);
+  if (filterClientId) terms = terms.filter((t) => (t.predavanja ?? []).some((p) => (p.client as { id?: string })?.id === filterClientId));
+
   const base = '/admin/kalendar';
   const month = params.month || new Date().toISOString().slice(0, 7);
   const day = singleDay ?? todayStr;
@@ -107,11 +117,17 @@ export default async function AdminKalendarPage({
       <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
         <h1 className="text-xl font-semibold text-stone-800">Kalendar (svi predavači)</h1>
         <div className="flex items-center gap-2 flex-wrap">
-          <div className="flex rounded-lg border border-stone-200 bg-white p-0.5 text-sm">
-            <Link href={`${base}?view=dan&day=${day}`} className={`px-3 py-1.5 rounded-md ${view === 'dan' ? 'bg-amber-100 text-amber-800' : 'text-stone-600 hover:bg-stone-100'}`}>Dan</Link>
-            <Link href={base} className={`px-3 py-1.5 rounded-md ${view === 'nedelja' ? 'bg-amber-100 text-amber-800' : 'text-stone-600 hover:bg-stone-100'}`}>Nedelja</Link>
-            <Link href={`${base}?view=mesec&month=${month}`} className={`px-3 py-1.5 rounded-md ${view === 'mesec' ? 'bg-amber-100 text-amber-800' : 'text-stone-600 hover:bg-stone-100'}`}>Mesec</Link>
-          </div>
+          <AdminCalendarFilters
+            instructors={(instructorsList ?? []).map((i) => ({ id: i.id, ime: i.ime ?? '', prezime: i.prezime ?? '' }))}
+            classrooms={(classroomsList ?? []).map((c) => ({ id: c.id, naziv: c.naziv ?? '' }))}
+            clients={(clientsList ?? []).map((c) => ({ id: c.id, ime: c.ime ?? '', prezime: c.prezime ?? '' }))}
+            filterInstructorId={filterInstructorId}
+            filterClassroomId={filterClassroomId}
+            filterClientId={filterClientId}
+            currentView={view}
+            currentParams={{ week: params.week, day: params.day, month: params.month, view: params.view }}
+            base={base}
+          />
           <Link href="/admin/termin/novi" className="inline-flex rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700">
             Novi termin
           </Link>

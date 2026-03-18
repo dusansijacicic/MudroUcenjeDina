@@ -34,9 +34,6 @@ export default function ClientForm({
   const [kontakt_telefon, setKontaktTelefon] = useState(
     client?.kontakt_telefon ?? ''
   );
-  const [placeno_casova, setPlacenoCasova] = useState(
-    (client as { placeno_casova?: number } | null)?.placeno_casova ?? 0
-  );
   const [login_email, setLoginEmail] = useState(
     (client as { login_email?: string | null })?.login_email ?? ''
   );
@@ -57,11 +54,10 @@ export default function ClientForm({
       kontakt_telefon: kontakt_telefon.trim() || null,
       login_email: login_email.trim() || null,
     };
-    const placeno = Math.max(0, placeno_casova);
     try {
       if (client) {
         console.log('[ClientForm] update client', client.id);
-        const result = await updateClientAsInstructor(client.id, clientPayload, placeno);
+        const result = await updateClientAsInstructor(client.id, clientPayload);
         if (result.error) {
           console.error('[ClientForm] update failed', result.error);
           setError(result.error);
@@ -71,7 +67,7 @@ export default function ClientForm({
         toast.success('Klijent sačuvan.');
       } else {
         console.log('[ClientForm] insert client', clientPayload.ime, clientPayload.prezime);
-        const result = await createClientAsInstructor(clientPayload, placeno);
+        const result = await createClientAsInstructor(clientPayload, 0);
         if (result.error) {
           console.error('[ClientForm] create failed', result.error);
           setError(result.error);
@@ -195,21 +191,9 @@ export default function ClientForm({
           Ako unesete, učenik može na /registracija-ucenik da napravi nalog i vidi svoje časove.
         </p>
       </div>
-      <div>
-        <label className="block text-sm font-medium text-stone-700 mb-1">
-          Plaćeno časova (paket kod vas)
-        </label>
-        <input
-          type="number"
-          min="0"
-          value={placeno_casova}
-          onChange={(e) => setPlacenoCasova(parseInt(e.target.value, 10) || 0)}
-          className="w-full rounded-lg border border-stone-300 px-3 py-2 text-stone-800 max-w-[120px]"
-        />
-        <p className="mt-1 text-xs text-stone-500 max-w-md">
-          Broj časova koje je klijent platio kod vas (paket). „Održano” se računa automatski: svaki put kada na predavanju označite „Održano”, taj čas se uračunava. Ostalo = Plaćeno − broj održanih časova kod vas.
-        </p>
-      </div>
+      <p className="text-sm text-stone-500">
+        Stanje časova (koliko kojih ima na raspolaganju) vodi se kroz <strong>Evidenciju uplata</strong> (admin ili vi unosite uplatu: predavač, klijent, vrsta časa, broj časova). Na stranici klijenta vidi se ostalo po vrstama.
+      </p>
       {error && (
         <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">
           {error}
