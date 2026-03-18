@@ -25,9 +25,6 @@ export default function UcenikNav({ client }: { client: Client }) {
           <Link href="/ucenik/kalendar" className="font-semibold text-[var(--kid-teal)] transition-smooth hover:text-[#0f766e] focus:outline-none focus:ring-2 focus:ring-[var(--kid-teal)] rounded-lg px-2 py-1 bg-[var(--kid-teal)]/15">
             Kalendar
           </Link>
-          <Link href="/ucenik/zahtev" className="font-semibold text-[var(--kid-text)] transition-smooth hover:text-[var(--kid-teal)] focus:outline-none focus:ring-2 focus:ring-[var(--kid-teal)] rounded-lg px-1">
-            Zakaži čas
-          </Link>
         </nav>
         <div className="flex items-center gap-3">
           <span className="text-sm text-[var(--kid-text-muted)]">

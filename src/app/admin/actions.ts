@@ -4,7 +4,7 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
-import { INSTRUCTOR_COLORS } from '@/lib/constants';
+import { INSTRUCTOR_COLORS, isTermInPast } from '@/lib/constants';
 
 export async function createInstructorAsAdmin(formData: FormData): Promise<{ error?: string; success?: boolean }> {
   const supabase = await createClient();
@@ -497,6 +497,28 @@ export async function getStanjePoVrstamaZaKlijenta(
     });
   }
   return result;
+}
+
+/** Označi predavanja klijenta kao održana ako je vreme termina (datum + kraj slota) već prošlo. */
+export async function markPastPredavanjaAsOdrzano(clientId: string): Promise<void> {
+  const admin = createAdminClient();
+  const { data: rows } = await admin
+    .from('predavanja')
+    .select('id, odrzano, term:terms(date, slot_index)')
+    .eq('client_id', clientId)
+    .eq('odrzano', false);
+  const ids: string[] = [];
+  for (const p of rows ?? []) {
+    const term = Array.isArray(p.term) ? p.term[0] : p.term;
+    if (term && typeof term === 'object' && 'date' in term && 'slot_index' in term) {
+      const date = (term as { date: string }).date;
+      const slotIndex = (term as { slot_index: number }).slot_index;
+      if (date && isTermInPast(date, slotIndex)) ids.push(p.id);
+    }
+  }
+  if (ids.length > 0) {
+    await admin.from('predavanja').update({ odrzano: true }).in('id', ids);
+  }
 }
 
 /** Broj održanih časova po vrstama za predavača (za prikaz na dashboardu). */

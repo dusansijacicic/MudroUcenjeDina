@@ -2,10 +2,10 @@ import { redirect, notFound } from 'next/navigation';
 import Link from 'next/link';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getDashboardInstructor } from '@/lib/dashboard';
-import { getStanjePoVrstamaZaKlijenta } from '@/app/admin/actions';
+import { getStanjePoVrstamaZaKlijenta, markPastPredavanjaAsOdrzano } from '@/app/admin/actions';
 import ClientForm from '../ClientForm';
 import type { Client, Predavanje } from '@/types/database';
-import { TIME_SLOTS } from '@/lib/constants';
+import { TIME_SLOTS, isTermInPast } from '@/lib/constants';
 
 export default async function KlijentPage({
   params,
@@ -33,20 +33,36 @@ export default async function KlijentPage({
     .select('instructor_id, placeno_casova')
     .eq('client_id', id);
 
+  await markPastPredavanjaAsOdrzano(id);
+
   const { data: predavanja } = await admin
     .from('predavanja')
     .select('*, term:terms(date, slot_index, instructor_id)')
     .eq('client_id', id)
-    .order('created_at', { ascending: false })
-    .limit(50);
+    .limit(100);
 
   const allLessons = predavanja ?? [];
-  const predavanjaForThisInstructor = allLessons.filter(
-    (p) => (p.term as { instructor_id?: string })?.instructor_id === instructor.id
+  type TermShape = { date: string; slot_index: number; instructor_id?: string };
+  const withTerm = allLessons
+    .map((p) => ({
+      ...p,
+      termNorm: Array.isArray(p.term) ? p.term[0] : p.term,
+    }))
+    .filter((p): p is typeof p & { termNorm: TermShape } => p.termNorm != null && typeof p.termNorm === 'object' && 'date' in p.termNorm);
+  const predavanjaForThisInstructor = withTerm.filter(
+    (p) => p.termNorm.instructor_id === instructor.id
   );
+  const sortByDateSlot = (a: { termNorm: TermShape }, b: { termNorm: TermShape }) => {
+    const c = (a.termNorm.date ?? '').localeCompare(b.termNorm.date ?? '');
+    if (c !== 0) return c;
+    return (a.termNorm.slot_index ?? 0) - (b.termNorm.slot_index ?? 0);
+  };
+  const isPast = (p: { termNorm: TermShape }) => isTermInPast(p.termNorm.date, p.termNorm.slot_index ?? 0);
+  const odrzani = predavanjaForThisInstructor.filter((p) => p.odrzano || isPast(p)).sort((a, b) => -sortByDateSlot(a, b));
+  const zakazani = predavanjaForThisInstructor.filter((p) => !p.odrzano && !isPast(p)).sort(sortByDateSlot);
 
   const odrzanoUkupno = allLessons.filter((p) => p.odrzano).length;
-  const odrzanoKodMene = predavanjaForThisInstructor.filter((p) => p.odrzano).length;
+  const odrzanoKodMene = odrzani.length;
   const placenoKodMene = predavanjaForThisInstructor.filter((p) => p.placeno).length;
 
   const placenoUkupno = (allLinks ?? []).reduce(
@@ -148,20 +164,46 @@ export default async function KlijentPage({
         „Plaćeno časova (škola)” dobija se sabiranjem plaćenih paketa kod svih predavača. U formi ispod i dalje menjate paket za vašu vezu sa klijentom.
       </p>
 
-      <section>
-        <h2 className="text-lg font-medium text-stone-800 mb-3">
-          Istorija časova (šta je rađeno) – kod vas
-        </h2>
-        <div className="rounded-xl border border-stone-200 bg-white divide-y divide-stone-100">
-          {predavanjaForThisInstructor.length === 0 ? (
-            <div className="p-6 text-center text-stone-500">
-              Nema zabeleženih predavanja za ovog klijenta (kod vas).
+      <section className="rounded-2xl border border-stone-200 bg-white overflow-hidden">
+        <div className="border-b border-stone-100 bg-stone-50/80 px-5 py-3">
+          <h2 className="text-base font-semibold text-stone-800">Istorija časova – kod vas</h2>
+          <p className="text-xs text-stone-500 mt-0.5">Sortirano po datumu. Termini čije je vreme prošlo automatski se označavaju kao održani.</p>
+        </div>
+        <div className="grid md:grid-cols-2 gap-0">
+          <div className="p-5 border-b md:border-b-0 md:border-r border-stone-100">
+            <div className="flex items-center gap-2 mb-4">
+              <span className="inline-flex justify-center w-8 h-8 rounded-lg bg-amber-100 text-amber-800 font-semibold text-sm">{zakazani.length}</span>
+              <h3 className="font-semibold text-stone-800">Zakazani za budućnost</h3>
             </div>
-          ) : (
-            predavanjaForThisInstructor.map((p) => (
-              <PredavanjeHistoryRow key={p.id} predavanje={p} />
-            ))
-          )}
+            {zakazani.length === 0 ? (
+              <p className="text-sm text-stone-500">Nema zakazanih termina u budućnosti.</p>
+            ) : (
+              <ul className="space-y-2 max-h-[280px] overflow-y-auto">
+                {zakazani.map((p) => (
+                  <li key={p.id}>
+                    <PredavanjeHistoryRow predavanje={{ ...p, term: p.termNorm }} />
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+          <div className="p-5">
+            <div className="flex items-center gap-2 mb-4">
+              <span className="inline-flex justify-center w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 font-semibold text-sm">{odrzani.length}</span>
+              <h3 className="font-semibold text-stone-800">Održani</h3>
+            </div>
+            {odrzani.length === 0 ? (
+              <p className="text-sm text-stone-500">Nema održanih termina.</p>
+            ) : (
+              <ul className="space-y-2 max-h-[280px] overflow-y-auto">
+                {odrzani.map((p) => (
+                  <li key={p.id}>
+                    <PredavanjeHistoryRow predavanje={{ ...p, term: p.termNorm }} />
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         </div>
       </section>
     </div>

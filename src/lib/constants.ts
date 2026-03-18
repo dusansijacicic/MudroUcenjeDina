@@ -17,6 +17,20 @@ export const TIME_SLOTS = [
 
 export const SLOT_DURATION_MINUTES = 45;
 
+/** Kraj vremena slota (npr. slot 0 = 09:00–09:45 → "09:45"). */
+export function getSlotEndTime(slotIndex: number): string {
+  if (slotIndex < 0 || slotIndex >= TIME_SLOTS.length) return '18:45';
+  if (slotIndex < TIME_SLOTS.length - 1) return TIME_SLOTS[slotIndex + 1];
+  return '18:45';
+}
+
+/** Da li je termin (datum + slot) već prošao u odnosu na trenutno vreme. */
+export function isTermInPast(date: string, slotIndex: number): boolean {
+  const endTime = getSlotEndTime(slotIndex);
+  const termEnd = new Date(`${date}T${endTime}`);
+  return termEnd.getTime() < Date.now();
+}
+
 export type TimeSlot = (typeof TIME_SLOTS)[number];
 
 // Boje za predavače (izbor u podešavanjima)

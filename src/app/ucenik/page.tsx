@@ -131,7 +131,7 @@ export default async function UcenikPage() {
             Imate novi(e) zakazani(e) čas(ove)
           </p>
           <p className="text-sm mt-1">
-            Predavač je potvrdio ili promenio vaš zahtev. Pogledajte <strong>Vaše zahteve</strong> ispod (označeno „Novo”) i listu <strong>Moji časovi</strong>.
+            Pogledajte listu <strong>Moji časovi</strong> ispod.
           </p>
         </div>
       )}
@@ -176,12 +176,6 @@ export default async function UcenikPage() {
           className="inline-flex items-center justify-center rounded-2xl bg-[var(--kid-teal)] px-6 py-3 text-white font-semibold shadow-lg transition-smooth hover:bg-[#0f766e] hover:shadow-xl hover:-translate-y-0.5"
         >
           Pogledaj moj kalendar
-        </a>
-        <a
-          href="/ucenik/zahtev"
-          className="inline-flex items-center justify-center rounded-2xl border-2 border-[var(--kid-teal)] bg-white px-6 py-3 text-[var(--kid-teal)] font-semibold transition-smooth hover:bg-[var(--kid-teal)]/10"
-        >
-          Zakaži čas
         </a>
       </div>
 
@@ -229,53 +223,7 @@ export default async function UcenikPage() {
         )}
       </section>
 
-      {(zahteviRaw?.length ?? 0) > 0 && (
-        <section className="rounded-2xl border-2 border-[var(--kid-peach)] bg-white/90 backdrop-blur-sm p-6 shadow-lg transition-smooth hover:shadow-xl animate-in-delay-2" aria-labelledby="vasi-zahtevi">
-          <h2 id="vasi-zahtevi" className="text-lg font-semibold text-[var(--kid-text)] mb-4">
-            Vaši zahtevi za čas
-          </h2>
-          <p className="text-sm text-[var(--kid-text-muted)] mb-3">
-            Zahtevi koje ste poslali; predavač može da potvrdi, promeni termin ili odbije.
-          </p>
-          <ul className="divide-y divide-[var(--kid-peach)]/50">
-            {((zahteviRaw ?? []) as unknown[]).map((z: unknown) => {
-              const row = z as { id: string; requested_date: string; requested_slot_index: number; status: string; instructor?: { ime: string; prezime: string } | { ime: string; prezime: string }[] | null; note_from_instructor?: string | null; created_at: string; resolved_at?: string | null };
-              const instr = row.instructor && !Array.isArray(row.instructor) ? row.instructor : (Array.isArray(row.instructor) ? row.instructor[0] : null);
-              const dateStr = String(row.requested_date).slice(0, 10);
-              const timeStr = TIME_SLOTS[row.requested_slot_index] ?? '—';
-              const inst = instr ? `${instr.ime} ${instr.prezime}` : 'Bilo koji predavač';
-              const statusLabel = row.status === 'pending' ? 'Na čekanju' : row.status === 'confirmed' ? 'Potvrđen' : row.status === 'changed' ? 'Termin promenjen' : 'Odbijen';
-              const isNew = (row.status === 'confirmed' || row.status === 'changed') && row.resolved_at &&
-                (now - new Date(row.resolved_at).getTime() < sevenDaysMs);
-              return (
-                <li key={row.id} className="py-3 first:pt-0">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <span className="font-medium text-[var(--kid-text)]">{dateStr} • {timeStr}</span>
-                    <div className="flex items-center gap-2">
-                      {isNew && (
-                        <span className="text-xs px-2 py-0.5 rounded-full bg-[var(--kid-teal)]/60 text-[#0d5c52] font-medium">
-                          Novo
-                        </span>
-                      )}
-                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                        row.status === 'pending' ? 'bg-[var(--kid-butter)] text-[#b7950b]' :
-                        row.status === 'confirmed' ? 'bg-[var(--kid-mint)] text-[#1e5631]' :
-                        row.status === 'changed' ? 'bg-[var(--kid-sky)] text-[#1a5276]' : 'bg-[var(--kid-lavender)]/60 text-[var(--kid-text-muted)]'
-                      }`}>
-                        {statusLabel}
-                      </span>
-                    </div>
-                  </div>
-                  <p className="text-sm text-[var(--kid-text)]">Predavač: {inst}</p>
-                  {row.note_from_instructor && (
-                    <p className="text-sm text-[var(--kid-text-muted)] mt-1">Napomena: {row.note_from_instructor}</p>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
-        </section>
-      )}
+      {/* Sekcija "Vaši zahtevi" uklonjena – klijent ne vidi zakazivanje ni zahteve. */}
 
       <section className="animate-in-delay-3" aria-labelledby="moji-casovi">
         <h2 id="moji-casovi" className="text-lg font-semibold text-[var(--kid-text)] mb-3">

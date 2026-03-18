@@ -3,8 +3,8 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { redirect, notFound } from 'next/navigation';
 import Link from 'next/link';
 import AdminClientForm from './AdminClientForm';
-import { getStanjePoVrstamaZaKlijenta } from '@/app/admin/actions';
-import { TIME_SLOTS } from '@/lib/constants';
+import { getStanjePoVrstamaZaKlijenta, markPastPredavanjaAsOdrzano } from '@/app/admin/actions';
+import { TIME_SLOTS, isTermInPast } from '@/lib/constants';
 import type { Client } from '@/types/database';
 
 export default async function AdminKlijentEditPage({
@@ -24,6 +24,8 @@ export default async function AdminKlijentEditPage({
     .single();
   if (!admin) redirect('/login');
 
+  await markPastPredavanjaAsOdrzano(clientId);
+
   const adminSupabase = createAdminClient();
   const [{ data: client, error }, stanjePoVrstama, { data: predavanjaRaw }] = await Promise.all([
     adminSupabase.from('clients').select('*, popust_percent').eq('id', clientId).single(),
@@ -31,8 +33,7 @@ export default async function AdminKlijentEditPage({
     adminSupabase
       .from('predavanja')
       .select('id, odrzano, placeno, term_id, term:terms(date, slot_index, instructor:instructors(ime, prezime))')
-      .eq('client_id', clientId)
-      .order('term_id'),
+      .eq('client_id', clientId),
   ]);
 
   if (error || !client) notFound();
@@ -49,12 +50,14 @@ export default async function AdminKlijentEditPage({
     })
     .filter((p): p is PredavanjeRow & { term: TermInfo } => p.term != null && typeof p.term === 'object' && 'date' in p.term);
   const sortByDateSlot = (a: { term: TermInfo }, b: { term: TermInfo }) => {
-    const d = (b.term.date ?? '').localeCompare(a.term.date ?? '');
+    const d = (a.term.date ?? '').localeCompare(b.term.date ?? '');
     if (d !== 0) return d;
-    return (b.term.slot_index ?? 0) - (a.term.slot_index ?? 0);
+    return (a.term.slot_index ?? 0) - (b.term.slot_index ?? 0);
   };
-  const odrzani = withTerm.filter((p) => p.odrzano).sort(sortByDateSlot);
-  const zakazani = withTerm.filter((p) => !p.odrzano).sort(sortByDateSlot);
+  const sortByDateSlotDesc = (a: { term: TermInfo }, b: { term: TermInfo }) => -sortByDateSlot(a, b);
+  const isPast = (p: { term: TermInfo }) => isTermInPast(p.term.date, p.term.slot_index ?? 0);
+  const odrzani = withTerm.filter((p) => p.odrzano || isPast(p)).sort(sortByDateSlotDesc);
+  const zakazani = withTerm.filter((p) => !p.odrzano && !isPast(p)).sort(sortByDateSlot);
 
   const renderTermLink = (p: PredavanjeRow & { term: TermInfo }, isOdrzan: boolean) => {
     const t = p.term;
@@ -135,14 +138,31 @@ export default async function AdminKlijentEditPage({
         </div>
       </section>
 
-      {/* Pregled termina – održani / zakazani */}
+      {/* Pregled termina – zakazani za budućnost / održani (sortirano po datumu) */}
       <section className="rounded-2xl border border-stone-200 bg-white shadow-sm overflow-hidden animate-in-delay-3">
         <div className="border-b border-stone-100 bg-stone-50/80 px-5 py-3">
           <h2 className="text-base font-semibold text-stone-800">Pregled termina</h2>
-          <p className="text-xs text-stone-500 mt-0.5">Klik na termin otvara admin stranicu termina. Sortirano od najnovijeg.</p>
+          <p className="text-xs text-stone-500 mt-0.5">Sortirano po datumu. Termini čije je vreme prošlo automatski se označavaju kao održani.</p>
         </div>
         <div className="grid md:grid-cols-2 gap-0">
           <div className="p-5 border-b md:border-b-0 md:border-r border-stone-100">
+            <div className="flex items-center gap-2 mb-4">
+              <span className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-amber-100 text-amber-800 font-semibold text-sm">
+                {zakazani.length}
+              </span>
+              <h3 className="font-semibold text-stone-800">Zakazani za budućnost</h3>
+            </div>
+            {zakazani.length === 0 ? (
+              <p className="text-sm text-stone-500">Nema zakazanih termina u budućnosti.</p>
+            ) : (
+              <ul className="space-y-2 max-h-[320px] overflow-y-auto pr-1">
+                {zakazani.map((p) => (
+                  <li key={p.id}>{renderTermLink(p, false)}</li>
+                ))}
+              </ul>
+            )}
+          </div>
+          <div className="p-5">
             <div className="flex items-center gap-2 mb-4">
               <span className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 font-semibold text-sm">
                 {odrzani.length}
@@ -155,23 +175,6 @@ export default async function AdminKlijentEditPage({
               <ul className="space-y-2 max-h-[320px] overflow-y-auto pr-1">
                 {odrzani.map((p) => (
                   <li key={p.id}>{renderTermLink(p, true)}</li>
-                ))}
-              </ul>
-            )}
-          </div>
-          <div className="p-5">
-            <div className="flex items-center gap-2 mb-4">
-              <span className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-amber-100 text-amber-800 font-semibold text-sm">
-                {zakazani.length}
-              </span>
-              <h3 className="font-semibold text-stone-800">Zakazani</h3>
-            </div>
-            {zakazani.length === 0 ? (
-              <p className="text-sm text-stone-500">Nema zakazanih (neodržanih) termina.</p>
-            ) : (
-              <ul className="space-y-2 max-h-[320px] overflow-y-auto pr-1">
-                {zakazani.map((p) => (
-                  <li key={p.id}>{renderTermLink(p, false)}</li>
                 ))}
               </ul>
             )}
