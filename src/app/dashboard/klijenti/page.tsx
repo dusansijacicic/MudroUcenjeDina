@@ -1,29 +1,49 @@
-import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { getDashboardInstructor } from '@/lib/dashboard';
 import ClientRow from './ClientRow';
+import type { Client } from '@/types/database';
 
+/** Klijenti koji imaju makar jedan zakazan termin (predavanje) kod ovog predavača. */
 export default async function KlijentiPage() {
-  const supabase = await createClient();
   const { instructor } = await getDashboardInstructor();
   if (!instructor) redirect('/login?reason=no_instructor');
 
-  const { data: links } = await supabase
-    .from('instructor_clients')
-    .select('client_id, placeno_casova, client:clients(*)')
-    .eq('instructor_id', instructor.id);
-
-  type Row = { client: import('@/types/database').Client & { placeno_casova?: number }; placeno_casova: number };
-  const rows: Row[] = (links ?? [])
-    .map((l) => ({
-      client: { ...(l.client as unknown as import('@/types/database').Client), placeno_casova: l.placeno_casova } as Row['client'],
-      placeno_casova: l.placeno_casova,
-    }))
-    .sort((a, b) => {
-      const p = (a.client.prezime ?? '').localeCompare(b.client.prezime ?? '');
-      return p !== 0 ? p : (a.client.ime ?? '').localeCompare(b.client.ime ?? '');
-    });
+  type Row = { client: Client & { placeno_casova?: number }; placeno_casova: number };
+  let rows: Row[] = [];
+  try {
+    const admin = createAdminClient();
+    const { data: terms } = await admin.from('terms').select('id').eq('instructor_id', instructor.id);
+    const termIds = (terms ?? []).map((t) => t.id);
+    if (termIds.length === 0) {
+      rows = [];
+    } else {
+      const { data: predavanja } = await admin.from('predavanja').select('client_id').in('term_id', termIds);
+      const clientIds = [...new Set((predavanja ?? []).map((p) => p.client_id))];
+      if (clientIds.length === 0) {
+        rows = [];
+      } else {
+        const { data: clients } = await admin.from('clients').select('*').in('id', clientIds);
+        const { data: icRows } = await admin
+          .from('instructor_clients')
+          .select('client_id, placeno_casova')
+          .eq('instructor_id', instructor.id)
+          .in('client_id', clientIds);
+        const placenoMap = new Map((icRows ?? []).map((r) => [r.client_id, r.placeno_casova]));
+        rows = (clients ?? []).map((c) => ({
+          client: { ...c, placeno_casova: placenoMap.get(c.id) ?? 0 } as Client & { placeno_casova?: number },
+          placeno_casova: placenoMap.get(c.id) ?? 0,
+        }));
+        rows.sort((a, b) => {
+          const p = (a.client.prezime ?? '').localeCompare(b.client.prezime ?? '');
+          return p !== 0 ? p : (a.client.ime ?? '').localeCompare(b.client.ime ?? '');
+        });
+      }
+    }
+  } catch (e) {
+    console.error('[klijenti page] load failed', e);
+  }
 
   return (
     <div>
@@ -37,7 +57,7 @@ export default async function KlijentiPage() {
         </Link>
       </div>
       <p className="text-stone-500 text-sm mb-4">
-        Isti klijent (dete) može biti vezan za više predavača. Ovde su klijenti povezani sa vama; „Plaćeno časova” je za vas.
+        Prikazani su samo klijenti sa kojima imate makar jedan zakazan čas. „Plaćeno časova” je broj unapred plaćenih kod vas.
       </p>
       <div className="rounded-xl border border-stone-200 bg-white overflow-hidden">
         <table className="w-full text-sm">
@@ -60,7 +80,7 @@ export default async function KlijentiPage() {
         </table>
         {(rows.length === 0) && (
           <div className="p-8 text-center text-stone-500">
-            Nema klijenata. Dodajte prvog preko „Novi klijent”.
+            Nema klijenata sa zakazanom časom. Dodajte predavanje u kalendaru (termin → Dodaj predavanje) ili prvo „Novi klijent” pa zakážite čas.
           </div>
         )}
       </div>

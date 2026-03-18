@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { getDashboardInstructor } from '@/lib/dashboard';
 import PodesavanjaForm from './PodesavanjaForm';
 import type { Instructor } from '@/types/database';
@@ -18,14 +19,25 @@ export default async function PodesavanjaPage() {
   const { instructor } = await getDashboardInstructor();
   if (!instructor) redirect('/login?reason=no_instructor');
 
-  const supabase = await createClient();
-  const { data: availabilityRows } = await supabase
-    .from('instructor_weekly_availability')
-    .select('day_of_week, slot_index')
-    .eq('instructor_id', instructor.id);
+  let availabilityRows: { day_of_week: number; slot_index: number }[] = [];
+  try {
+    const adminSupabase = createAdminClient();
+    const { data } = await adminSupabase
+      .from('instructor_weekly_availability')
+      .select('day_of_week, slot_index')
+      .eq('instructor_id', instructor.id);
+    availabilityRows = (data ?? []) as { day_of_week: number; slot_index: number }[];
+  } catch {
+    const supabase = await createClient();
+    const { data } = await supabase
+      .from('instructor_weekly_availability')
+      .select('day_of_week, slot_index')
+      .eq('instructor_id', instructor.id);
+    availabilityRows = (data ?? []) as { day_of_week: number; slot_index: number }[];
+  }
 
   const initialAvailability: Record<number, number[]> = { 1: [], 2: [], 3: [], 4: [], 5: [], 6: [], 7: [] };
-  for (const row of availabilityRows ?? []) {
+  for (const row of availabilityRows) {
     const d = row.day_of_week as number;
     if (initialAvailability[d]) initialAvailability[d].push(row.slot_index as number);
   }

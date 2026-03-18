@@ -1,22 +1,33 @@
-import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { getDashboardInstructor } from '@/lib/dashboard';
 import { TIME_SLOTS } from '@/lib/constants';
 import ZahteviList, { type Zahtev } from './ZahteviList';
 
 export default async function DashboardZahteviPage() {
-  const supabase = await createClient();
   const { instructor } = await getDashboardInstructor();
   if (!instructor) redirect('/login?reason=no_instructor');
 
-  const { data: zahtevi } = await supabase
-    .from('zahtevi_za_cas')
-    .select('id, client_id, instructor_id, requested_date, requested_slot_index, status, note_from_instructor, created_at, client:clients(ime, prezime)')
-    .order('created_at', { ascending: false });
+  let zahtevi: unknown[] = [];
+  try {
+    const adminSupabase = createAdminClient();
+    const { data, error } = await adminSupabase
+      .from('zahtevi_za_cas')
+      .select('id, client_id, instructor_id, requested_date, requested_slot_index, status, note_from_instructor, created_at, client:clients(ime, prezime)')
+      .or(`instructor_id.eq.${instructor.id},instructor_id.is.null`)
+      .order('created_at', { ascending: false });
+    if (error) {
+      console.error('[zahtevi page] load failed', error.message, error.code);
+    } else {
+      zahtevi = data ?? [];
+    }
+  } catch (e) {
+    console.error('[zahtevi page] createAdminClient or query failed', e);
+  }
 
-  const pending = (zahtevi ?? []).filter((z) => z.status === 'pending') as unknown as Zahtev[];
-  const resolved = (zahtevi ?? []).filter((z) => z.status !== 'pending') as unknown as Zahtev[];
+  const pending = zahtevi.filter((z: { status?: string }) => z.status === 'pending') as Zahtev[];
+  const resolved = zahtevi.filter((z: { status?: string }) => z.status !== 'pending') as Zahtev[];
 
   return (
     <div>

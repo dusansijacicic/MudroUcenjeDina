@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import toast from 'react-hot-toast';
 import {
   preuzmiZahtev,
   potvrdiZahtev,
@@ -43,10 +44,17 @@ export default function ZahteviList({
   const run = async (id: string, fn: () => Promise<{ error?: string }>) => {
     setError('');
     setLoadingId(id);
+    console.log('[ZahteviList] run action for', id);
     const result = await fn();
     setLoadingId(null);
-    if (result.error) setError(result.error);
-    else router.refresh();
+    if (result.error) {
+      console.error('[ZahteviList] action error', result.error);
+      setError(result.error);
+      toast.error(result.error);
+    } else {
+      toast.success('Uspešno.');
+      router.refresh();
+    }
   };
 
   const handlePotvrdi = (z: Zahtev) => run(z.id, () => potvrdiZahtev(z.id));
@@ -55,13 +63,18 @@ export default function ZahteviList({
     if (!newDate) return;
     setError('');
     setLoadingId(z.id);
+    console.log('[ZahteviList] promeniTermin', z.id);
     const result = await promeniTerminZahtev(z.id, newDate, newSlot, note || undefined);
     setLoadingId(null);
-    if (result.error) setError(result.error);
-    else {
+    if (result.error) {
+      console.error('[ZahteviList] promeni error', result.error);
+      setError(result.error);
+      toast.error(result.error);
+    } else {
       setPromeniId(null);
       setNewDate('');
       setNote('');
+      toast.success('Termin promenjen.');
       router.refresh();
     }
   };

@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import Link from 'next/link';
+import toast from 'react-hot-toast';
 import { createClient } from '@/lib/supabase/client';
 import { createPredavanje } from '@/app/dashboard/termin/actions';
 import type { Predavanje } from '@/types/database';
@@ -47,6 +48,7 @@ export default function PredavanjeForm({
     setError('');
     if (atLimit) return;
     setLoading(true);
+    console.log('[PredavanjeForm] submit', { termId, clientId, predavanje: !!predavanje });
     try {
       if (predavanje) {
         const payload = {
@@ -60,15 +62,26 @@ export default function PredavanjeForm({
           .from('predavanja')
           .update(payload)
           .eq('id', predavanje.id);
-        if (updateError) throw updateError;
+        if (updateError) {
+          console.error('[PredavanjeForm] update error', updateError.message, updateError.code);
+          throw updateError;
+        }
+        toast.success('Predavanje sačuvano.');
       } else {
         const result = await createPredavanje(termId, clientId, odrzano, placeno, komentar.trim() || null);
-        if (result.error) throw new Error(result.error);
+        if (result.error) {
+          console.error('[PredavanjeForm] createPredavanje error', result.error);
+          throw new Error(result.error);
+        }
+        toast.success('Predavanje dodato.');
       }
       router.push(`/dashboard/termin/${termId}`);
       router.refresh();
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Greška pri čuvanju.');
+      const msg = err instanceof Error ? err.message : 'Greška pri čuvanju.';
+      setError(msg);
+      toast.error(msg);
+      console.error('[PredavanjeForm] catch', err);
     } finally {
       setLoading(false);
     }
@@ -78,11 +91,20 @@ export default function PredavanjeForm({
     if (!predavanje || !confirm('Obrisati ovo predavanje?')) return;
     setLoading(true);
     try {
-      await supabase.from('predavanja').delete().eq('id', predavanje.id);
+      const { error } = await supabase.from('predavanja').delete().eq('id', predavanje.id);
+      if (error) {
+        console.error('[PredavanjeForm] delete error', error.message);
+        setError(error.message);
+        toast.error(error.message);
+        return;
+      }
+      toast.success('Predavanje obrisano.');
       router.push(`/dashboard/termin/${termId}`);
       router.refresh();
-    } catch {
+    } catch (err) {
+      console.error('[PredavanjeForm] delete catch', err);
       setError('Greška pri brisanju.');
+      toast.error('Greška pri brisanju.');
     } finally {
       setLoading(false);
     }

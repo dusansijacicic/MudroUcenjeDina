@@ -1,6 +1,7 @@
 'use server';
 
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { getDashboardInstructor } from '@/lib/dashboard';
 import { termMozeNovoPredavanje } from '@/lib/settings';
 import { revalidatePath } from 'next/cache';
@@ -12,17 +13,32 @@ export async function createPredavanje(
   placeno: boolean,
   komentar: string | null
 ): Promise<{ error?: string }> {
-  const supabase = await createClient();
+  console.log('[termin] createPredavanje', { termId, clientId });
   const { instructor } = await getDashboardInstructor();
-  if (!instructor) return { error: 'Niste predavač.' };
+  if (!instructor) {
+    console.error('[termin] createPredavanje: no instructor');
+    return { error: 'Niste predavač.' };
+  }
 
-  const { data: term } = await supabase
+  let admin;
+  try {
+    admin = createAdminClient();
+  } catch (e) {
+    console.error('[termin] createPredavanje: createAdminClient failed', e);
+    return { error: 'Server greška (admin klijent).' };
+  }
+
+  const { data: term, error: termErr } = await admin
     .from('terms')
     .select('id, instructor_id')
     .eq('id', termId)
     .single();
-  if (!term || (term as { instructor_id: string }).instructor_id !== instructor.id) {
-    return { error: 'Termin nije pronađen ili niste ovlašćeni.' };
+  if (termErr || !term) {
+    console.error('[termin] createPredavanje: term fetch', termErr?.message);
+    return { error: termErr?.message ?? 'Termin nije pronađen.' };
+  }
+  if (term.instructor_id !== instructor.id) {
+    return { error: 'Niste ovlašćeni za ovaj termin.' };
   }
 
   const check = await termMozeNovoPredavanje(termId);
@@ -32,15 +48,27 @@ export async function createPredavanje(
     };
   }
 
-  const { error } = await supabase.from('predavanja').insert({
+  const { error: insErr } = await admin.from('predavanja').insert({
     term_id: termId,
     client_id: clientId,
     odrzano,
     placeno,
     komentar: komentar?.trim() || null,
   });
-  if (error) return { error: error.message };
+  if (insErr) {
+    console.error('[termin] createPredavanje: predavanja insert', insErr.message);
+    return { error: insErr.message };
+  }
+
+  const { error: icErr } = await admin
+    .from('instructor_clients')
+    .insert({ instructor_id: instructor.id, client_id: clientId, placeno_casova: 0 });
+  if (icErr && icErr.code !== '23505') {
+    console.warn('[termin] instructor_clients insert (non-fatal)', icErr.message);
+  }
   revalidatePath(`/dashboard/termin/${termId}`);
   revalidatePath('/dashboard');
+  revalidatePath('/dashboard/klijenti');
+  console.log('[termin] createPredavanje success');
   return {};
 }

@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
-import { createClient } from '@/lib/supabase/client';
+import { createClientAsInstructor, updateClientAsInstructor } from './actions';
 import type { Client } from '@/types/database';
 
 interface ClientFormProps {
@@ -43,66 +43,40 @@ export default function ClientForm({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const supabase = createClient();
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setLoading(true);
+    const clientPayload = {
+      ime: ime.trim(),
+      prezime: prezime.trim(),
+      godiste: godiste ? parseInt(godiste, 10) : null,
+      razred: razred.trim() || null,
+      skola: skola.trim() || null,
+      roditelj: roditelj.trim() || null,
+      kontakt_telefon: kontakt_telefon.trim() || null,
+      login_email: login_email.trim() || null,
+    };
+    const placeno = Math.max(0, placeno_casova);
     try {
-      const clientPayload = {
-        ime: ime.trim(),
-        prezime: prezime.trim(),
-        godiste: godiste ? parseInt(godiste, 10) : null,
-        razred: razred.trim() || null,
-        skola: skola.trim() || null,
-        roditelj: roditelj.trim() || null,
-        kontakt_telefon: kontakt_telefon.trim() || null,
-        login_email: login_email.trim() || null,
-      };
-      const placeno = Math.max(0, placeno_casova);
-
       if (client) {
         console.log('[ClientForm] update client', client.id);
-        const { error: updateError } = await supabase
-          .from('clients')
-          .update(clientPayload)
-          .eq('id', client.id);
-        if (updateError) {
-          console.error('[ClientForm] clients update failed', updateError);
-          throw updateError;
-        }
-        const { error: linkError } = await supabase
-          .from('instructor_clients')
-          .update({ placeno_casova: placeno })
-          .eq('instructor_id', instructorId)
-          .eq('client_id', client.id);
-        if (linkError) {
-          console.error('[ClientForm] instructor_clients update failed', linkError);
-          throw linkError;
+        const result = await updateClientAsInstructor(client.id, clientPayload, placeno);
+        if (result.error) {
+          console.error('[ClientForm] update failed', result.error);
+          setError(result.error);
+          toast.error(result.error);
+          return;
         }
         toast.success('Klijent sačuvan.');
       } else {
         console.log('[ClientForm] insert client', clientPayload.ime, clientPayload.prezime);
-        const { data: newClient, error: insertError } = await supabase
-          .from('clients')
-          .insert(clientPayload)
-          .select('id')
-          .single();
-        if (insertError) {
-          console.error('[ClientForm] clients insert failed', insertError.message, insertError.code);
-          throw insertError;
-        }
-        if (!newClient) throw new Error('Klijent nije kreiran.');
-        console.log('[ClientForm] client created', newClient.id, 'linking to instructor', instructorId);
-        const { error: linkError } = await supabase.from('instructor_clients').insert({
-          instructor_id: instructorId,
-          client_id: newClient.id,
-          placeno_casova: placeno,
-        });
-        if (linkError) {
-          console.error('[ClientForm] instructor_clients insert failed', linkError.message, linkError.code);
-          throw linkError;
+        const result = await createClientAsInstructor(clientPayload, placeno);
+        if (result.error) {
+          console.error('[ClientForm] create failed', result.error);
+          setError(result.error);
+          toast.error(result.error);
+          return;
         }
         toast.success('Klijent je dodat.');
       }

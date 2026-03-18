@@ -3,8 +3,9 @@
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import Link from 'next/link';
-import { createClient } from '@/lib/supabase/client';
+import toast from 'react-hot-toast';
 import { INSTRUCTOR_COLORS, DEFAULT_INSTRUCTOR_COLOR, TIME_SLOTS } from '@/lib/constants';
+import { saveInstructorSettings } from './actions';
 import type { Instructor } from '@/types/database';
 
 const DAY_ORDER = [1, 2, 3, 4, 5, 6, 7] as const;
@@ -31,8 +32,6 @@ export default function PodesavanjaForm({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const supabase = createClient();
-
   const toggleSlot = (day: number, slotIndex: number) => {
     setAvailability((prev) => {
       const list = prev[day] ?? [];
@@ -48,32 +47,35 @@ export default function PodesavanjaForm({
     e.preventDefault();
     setError('');
     setLoading(true);
+    console.log('[PodesavanjaForm] submit start', { instructorId: instructor.id });
     try {
-      const { error: updateError } = await supabase
-        .from('instructors')
-        .update({
-          ime: ime.trim(),
-          prezime: prezime.trim(),
-          telefon: telefon.trim() || null,
-          color: color.trim() || null,
-        })
-        .eq('id', instructor.id);
-      if (updateError) throw updateError;
-
-      await supabase.from('instructor_weekly_availability').delete().eq('instructor_id', instructor.id);
-      const rows: { instructor_id: string; day_of_week: number; slot_index: number }[] = [];
+      const availabilityRows: Array<{ day_of_week: number; slot_index: number }> = [];
       for (const d of DAY_ORDER) {
         for (const slotIndex of availability[d] ?? []) {
-          rows.push({ instructor_id: instructor.id, day_of_week: d, slot_index: slotIndex });
+          availabilityRows.push({ day_of_week: d, slot_index: slotIndex });
         }
       }
-      if (rows.length > 0) {
-        const { error: insErr } = await supabase.from('instructor_weekly_availability').insert(rows);
-        if (insErr) throw insErr;
+      const result = await saveInstructorSettings(instructor.id, {
+        ime: ime.trim(),
+        prezime: prezime.trim(),
+        telefon: telefon.trim() || null,
+        color: color.trim() || null,
+        availability: availabilityRows,
+      });
+      if (result.error) {
+        console.error('[PodesavanjaForm] save failed', result.error);
+        setError(result.error);
+        toast.error(result.error);
+        return;
       }
+      console.log('[PodesavanjaForm] save success');
+      toast.success('Podešavanja sačuvana.');
       router.refresh();
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Greška pri čuvanju.');
+      const msg = err instanceof Error ? err.message : 'Greška pri čuvanju.';
+      console.error('[PodesavanjaForm] catch', err);
+      setError(msg);
+      toast.error(msg);
     } finally {
       setLoading(false);
     }
