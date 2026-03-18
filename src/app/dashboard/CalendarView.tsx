@@ -300,8 +300,11 @@ function CalendarWeek({
           </thead>
           <tbody>
             {TIME_SLOTS.map((time, slotIndex) => (
-              <tr key={slotIndex} className="border-b border-stone-100">
-                <td className="p-2 text-stone-500 font-medium">{time}</td>
+              <tr
+                key={slotIndex}
+                className="border-b border-stone-200 last:border-b-0"
+              >
+                <td className="p-2 text-stone-600 font-semibold bg-stone-50/70">{time}</td>
                 {dates.map((date) => {
                   const term = termByKey(terms, date, slotIndex);
                   const otherTermsInSlot = otherTermsByKey(otherTerms, date, slotIndex);
@@ -386,7 +389,7 @@ function CalendarDay({
           </Link>
         </div>
       </div>
-      <div className="rounded-xl border border-stone-200 bg-white divide-y divide-stone-100">
+      <div className="rounded-xl border border-stone-200 bg-white divide-y-2 divide-stone-200">
         {TIME_SLOTS.map((time, slotIndex) => {
           const term = termByKey(terms, date, slotIndex);
           const otherTermsInSlot = otherTermsByKey(otherTerms, date, slotIndex);

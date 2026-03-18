@@ -31,6 +31,11 @@ export default async function AdminTerminNoviPage({
     .select('id, ime, prezime')
     .order('prezime')
     .order('ime');
+  const { data: clients } = await adminSupabase
+    .from('clients')
+    .select('id, ime, prezime')
+    .order('prezime')
+    .order('ime');
 
   const tomorrow = new Date();
   tomorrow.setDate(tomorrow.getDate() + 1);
@@ -41,10 +46,11 @@ export default async function AdminTerminNoviPage({
     <div className="max-w-lg">
       <h1 className="text-xl font-semibold text-stone-800 mb-2">Zakaži termin za predavača</h1>
       <p className="text-stone-500 text-sm mb-6">
-        Izaberite predavača. Datum i vreme su već izabrani iz kalendara (možete ih promeniti). Termin će biti kreiran, pa na sledećem koraku dodajte predavanje (klijenta).
+        Izaberite predavača i klijenta. Datum i vreme su već izabrani iz kalendara (možete ih promeniti). Termin i predavanje će biti kreirani u jednom koraku.
       </p>
       <AdminTerminForm
         instructors={instructors ?? []}
+        clients={clients ?? []}
         defaultDate={defaultDate}
         defaultSlotIndex={defaultSlot}
         slotLabels={TIME_SLOTS}
