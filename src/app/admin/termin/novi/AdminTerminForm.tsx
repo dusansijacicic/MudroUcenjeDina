@@ -7,11 +7,13 @@ import { createTermAsAdmin, createPredavanjeAsAdmin } from '../../actions';
 type Instructor = { id: string; ime: string; prezime: string };
 type Client = { id: string; ime: string; prezime: string };
 type Classroom = { id: string; naziv: string };
+type TermTypeOption = { id: string; naziv: string; opis: string | null };
 
 export default function AdminTerminForm({
   instructors,
   clients,
   classrooms,
+  termTypes = [],
   defaultDate,
   defaultSlotIndex = 0,
   slotLabels,
@@ -19,6 +21,7 @@ export default function AdminTerminForm({
   instructors: Instructor[];
   clients: Client[];
   classrooms: Classroom[];
+  termTypes?: TermTypeOption[];
   defaultDate: string;
   defaultSlotIndex?: number;
   slotLabels: readonly string[];
@@ -31,6 +34,7 @@ export default function AdminTerminForm({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [classroomId, setClassroomId] = useState(classrooms[0]?.id ?? '');
+  const [termTypeId, setTermTypeId] = useState(termTypes[0]?.id ?? '');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -43,6 +47,14 @@ export default function AdminTerminForm({
       }
       if (!classroomId) {
         setError('Izaberite učionicu.');
+        return;
+      }
+      if (termTypes.length > 0 && !termTypeId) {
+        setError('Izaberite vrstu termina.');
+        return;
+      }
+      if (termTypes.length === 0) {
+        setError('Prvo dodajte bar jednu vrstu termina u Admin → Vrste termina.');
         return;
       }
 
@@ -58,7 +70,7 @@ export default function AdminTerminForm({
         false,
         false,
         null,
-        null
+        termTypeId || null
       );
       if (predavanjeResult.error) {
         setError(predavanjeResult.error);
@@ -92,6 +104,14 @@ export default function AdminTerminForm({
     return (
       <p className="text-stone-500 text-sm">
         Nema učionica. Dodajte učionice u sekciji „Učionice”, pa se vratite na zakazivanje.
+      </p>
+    );
+  }
+
+  if (termTypes.length === 0) {
+    return (
+      <p className="text-stone-500 text-sm">
+        Nema vrsta termina. Dodajte bar jednu vrstu u Admin → Vrste termina, pa se vratite na zakazivanje.
       </p>
     );
   }
@@ -142,6 +162,20 @@ export default function AdminTerminForm({
             <option key={c.id} value={c.id}>
               {c.naziv}
             </option>
+          ))}
+        </select>
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-stone-700 mb-1">Vrsta termina</label>
+        <select
+          value={termTypeId}
+          onChange={(e) => setTermTypeId(e.target.value)}
+          required
+          className="w-full rounded-lg border border-stone-300 px-3 py-2 text-stone-800"
+        >
+          <option value="">Izaberite vrstu termina</option>
+          {termTypes.map((tt) => (
+            <option key={tt.id} value={tt.id}>{tt.naziv}</option>
           ))}
         </select>
       </div>

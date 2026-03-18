@@ -2,7 +2,7 @@ import { redirect, notFound } from 'next/navigation';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getDashboardInstructor } from '@/lib/dashboard';
 import { getMaxCasovaPoTerminu } from '@/lib/settings';
-import { getTermTypes } from '@/app/admin/actions';
+import { getTermTypes, getClassrooms } from '@/app/admin/actions';
 import PredavanjeForm from '../../../PredavanjeForm';
 import { TIME_SLOTS } from '@/lib/constants';
 
@@ -18,16 +18,18 @@ export default async function NoviPredavanjePage({
   const admin = createAdminClient();
   const { data: term } = await admin
     .from('terms')
-    .select('*')
+    .select('*, classroom_id')
     .eq('id', termId)
     .eq('instructor_id', instructor.id)
     .single();
 
   if (!term) notFound();
 
-  const [predRes, maxCasova] = await Promise.all([
+  const [predRes, maxCasova, termTypes, classrooms] = await Promise.all([
     admin.from('predavanja').select('*', { count: 'exact', head: true }).eq('term_id', termId),
     getMaxCasovaPoTerminu(),
+    getTermTypes(),
+    getClassrooms(),
   ]);
   const currentCount = predRes.count ?? 0;
 
@@ -39,8 +41,7 @@ export default async function NoviPredavanjePage({
   }));
 
   const slotLabel = TIME_SLOTS[term.slot_index] ?? '—';
-  const termTypes = await getTermTypes();
-
+  const termWithClassroom = term as { classroom_id?: string | null };
   return (
     <div className="max-w-lg">
       <h1 className="text-xl font-semibold text-stone-800 mb-4">
@@ -54,6 +55,8 @@ export default async function NoviPredavanjePage({
         termTypes={termTypes}
         maxCasova={maxCasova}
         currentCount={currentCount}
+        classrooms={classrooms}
+        initialClassroomId={termWithClassroom.classroom_id ?? null}
       />
     </div>
   );

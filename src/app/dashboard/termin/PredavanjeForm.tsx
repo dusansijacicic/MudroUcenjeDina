@@ -53,6 +53,14 @@ export default function PredavanjeForm({
     e.preventDefault();
     setError('');
     if (atLimit) return;
+    if (termTypes.length === 0) {
+      setError('Prvo dodajte bar jednu vrstu termina (Admin → Vrste termina).');
+      return;
+    }
+    if (!termTypeId) {
+      setError('Izaberite vrstu termina.');
+      return;
+    }
     setLoading(true);
     console.log('[PredavanjeForm] submit', { termId, clientId, predavanje: !!predavanje });
     try {
@@ -162,21 +170,23 @@ export default function PredavanjeForm({
           ))}
         </select>
       </div>
-      {termTypes.length > 0 && (
-        <div>
-          <label className="block text-sm font-medium text-stone-700 mb-1">Vrsta termina</label>
-          <select
-            value={termTypeId}
-            onChange={(e) => setTermTypeId(e.target.value)}
-            className="w-full rounded-lg border border-stone-300 px-3 py-2 text-stone-800"
-          >
-            <option value="">—</option>
-            {termTypes.map((tt) => (
-              <option key={tt.id} value={tt.id}>{tt.naziv}</option>
-            ))}
-          </select>
-        </div>
-      )}
+      <div>
+        <label className="block text-sm font-medium text-stone-700 mb-1">Vrsta termina <span className="text-red-600">*</span></label>
+        <select
+          value={termTypeId}
+          onChange={(e) => setTermTypeId(e.target.value)}
+          required
+          className="w-full rounded-lg border border-stone-300 px-3 py-2 text-stone-800"
+        >
+          <option value="">Izaberite vrstu termina</option>
+          {termTypes.map((tt) => (
+            <option key={tt.id} value={tt.id}>{tt.naziv}</option>
+          ))}
+        </select>
+        {termTypes.length === 0 && (
+          <p className="text-xs text-amber-600 mt-0.5">Admin mora dodati bar jednu vrstu u Admin → Vrste termina.</p>
+        )}
+      </div>
       {classrooms.length > 0 && (
         <div>
           <label className="block text-sm font-medium text-stone-700 mb-1">

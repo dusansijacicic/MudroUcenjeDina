@@ -69,6 +69,11 @@ INSERT INTO classrooms (naziv, color) VALUES
   ('Učionica 5', '#facc15'),
   ('Učionica 6', '#6b7280');
 
+-- 5b) Vrste termina (obavezno za zakazivanje)
+INSERT INTO term_types (naziv, opis) VALUES
+  ('Individualni', 'Jedan na jedan'),
+  ('Grupni', 'Grupa učenika');
+
 -- 6) Termini: Dina, ponedeljak–petak naredne nedelje, slotovi 0–8, sa učionicama
 DO $$
 DECLARE

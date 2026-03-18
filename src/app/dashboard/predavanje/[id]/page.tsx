@@ -2,7 +2,7 @@ import { redirect, notFound } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getDashboardInstructor } from '@/lib/dashboard';
-import { getTermTypes } from '@/app/admin/actions';
+import { getTermTypes, getClassrooms } from '@/app/admin/actions';
 import { termMozeNovoPredavanje } from '@/lib/settings';
 import PredavanjeForm from '@/app/dashboard/termin/PredavanjeForm';
 import { TIME_SLOTS } from '@/lib/constants';
@@ -113,7 +113,7 @@ export default async function EditPredavanjePage({
     notFound();
   }
 
-  const term = predavanje.term as { id: string; date: string; slot_index: number };
+  const term = predavanje.term as { id: string; date: string; slot_index: number; classroom_id?: string | null };
   const slotLabel = TIME_SLOTS[term.slot_index] ?? '—';
 
   const { data: linkRows } = await admin
@@ -129,7 +129,7 @@ export default async function EditPredavanjePage({
     (a, b) =>
       (a.prezime ?? '').localeCompare(b.prezime ?? '') || (a.ime ?? '').localeCompare(b.ime ?? '')
   );
-  const termTypes = await getTermTypes();
+  const [termTypes, classrooms] = await Promise.all([getTermTypes(), getClassrooms()]);
 
   return (
     <div className="max-w-lg space-y-6">
@@ -141,6 +141,8 @@ export default async function EditPredavanjePage({
           slotLabel={slotLabel}
           clients={clients ?? []}
           termTypes={termTypes}
+          classrooms={classrooms}
+          initialClassroomId={term.classroom_id ?? null}
           predavanje={{
             ...predavanje,
             term_type_id: (predavanje as { term_type_id?: string | null }).term_type_id,

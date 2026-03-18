@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import AdminTerminForm from './AdminTerminForm';
 import { TIME_SLOTS } from '@/lib/constants';
+import { getTermTypes } from '@/app/admin/actions';
 
 export default async function AdminTerminNoviPage({
   searchParams,
@@ -40,6 +41,7 @@ export default async function AdminTerminNoviPage({
     .from('classrooms')
     .select('id, naziv')
     .order('naziv');
+  const termTypes = await getTermTypes();
 
   const tomorrow = new Date();
   tomorrow.setDate(tomorrow.getDate() + 1);
@@ -56,6 +58,7 @@ export default async function AdminTerminNoviPage({
         instructors={instructors ?? []}
         clients={clients ?? []}
         classrooms={(classrooms ?? []) as { id: string; naziv: string }[]}
+        termTypes={termTypes}
         defaultDate={defaultDate}
         defaultSlotIndex={defaultSlot}
         slotLabels={TIME_SLOTS}

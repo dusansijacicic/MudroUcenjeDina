@@ -4,11 +4,11 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
-import { createPredavanjeAsAdmin, updatePredavanjeAsAdmin, deletePredavanjeAsAdmin } from '@/app/admin/actions';
+import { createPredavanjeAsAdmin, updatePredavanjeAsAdmin, deletePredavanjeAsAdmin, updateTermClassroomAsAdmin } from '@/app/admin/actions';
 
 type ClientOption = { id: string; ime: string; prezime: string };
-
 type TermTypeOption = { id: string; naziv: string; opis: string | null };
+type ClassroomOption = { id: string; naziv: string; color: string | null };
 
 interface AdminPredavanjeFormProps {
   termId: string;
@@ -16,6 +16,8 @@ interface AdminPredavanjeFormProps {
   slotLabel: string;
   clients: ClientOption[];
   termTypes?: TermTypeOption[];
+  classrooms?: ClassroomOption[];
+  initialClassroomId?: string | null;
   predavanje?: { id: string; client_id: string; odrzano: boolean; placeno: boolean; komentar: string | null; term_type_id?: string | null } | null;
   maxCasova?: number;
   currentCount?: number;
@@ -27,6 +29,8 @@ export default function AdminPredavanjeForm({
   slotLabel,
   clients,
   termTypes = [],
+  classrooms = [],
+  initialClassroomId = null,
   predavanje,
   maxCasova = 4,
   currentCount = 0,
@@ -34,6 +38,7 @@ export default function AdminPredavanjeForm({
   const router = useRouter();
   const [clientId, setClientId] = useState(predavanje?.client_id ?? '');
   const [termTypeId, setTermTypeId] = useState(predavanje?.term_type_id ?? '');
+  const [classroomId, setClassroomId] = useState(initialClassroomId ?? '');
   const [odrzano, setOdrzano] = useState(predavanje?.odrzano ?? false);
   const [placeno, setPlaceno] = useState(predavanje?.placeno ?? false);
   const [komentar, setKomentar] = useState(predavanje?.komentar ?? '');
@@ -48,8 +53,20 @@ export default function AdminPredavanjeForm({
     e.preventDefault();
     setError('');
     if (atLimit) return;
+    if (termTypes.length === 0) {
+      setError('Prvo dodajte bar jednu vrstu termina u Admin → Vrste termina.');
+      return;
+    }
+    if (!termTypeId) {
+      setError('Izaberite vrstu termina.');
+      return;
+    }
     setLoading(true);
     try {
+      if (classrooms.length > 0 && classroomId) {
+        const res = await updateTermClassroomAsAdmin(termId, classroomId);
+        if (res.error) throw new Error(res.error);
+      }
       if (predavanje) {
         const result = await updatePredavanjeAsAdmin(
           predavanje.id,
@@ -137,21 +154,38 @@ export default function AdminPredavanjeForm({
           ))}
         </select>
       </div>
-      {termTypes.length > 0 && (
+      {classrooms.length > 0 && (
         <div>
-          <label className="block text-sm font-medium text-stone-700 mb-1">Vrsta termina</label>
+          <label className="block text-sm font-medium text-stone-700 mb-1">Učionica</label>
           <select
-            value={termTypeId}
-            onChange={(e) => setTermTypeId(e.target.value)}
+            value={classroomId}
+            onChange={(e) => setClassroomId(e.target.value)}
             className="w-full rounded-lg border border-stone-300 px-3 py-2 text-stone-800"
           >
-            <option value="">—</option>
-            {termTypes.map((tt) => (
-              <option key={tt.id} value={tt.id}>{tt.naziv}</option>
+            <option value="">Izaberite učionicu</option>
+            {classrooms.map((c) => (
+              <option key={c.id} value={c.id}>{c.naziv}</option>
             ))}
           </select>
         </div>
       )}
+      <div>
+        <label className="block text-sm font-medium text-stone-700 mb-1">Vrsta termina <span className="text-red-600">*</span></label>
+        <select
+          value={termTypeId}
+          onChange={(e) => setTermTypeId(e.target.value)}
+          required
+          className="w-full rounded-lg border border-stone-300 px-3 py-2 text-stone-800"
+        >
+          <option value="">Izaberite vrstu termina</option>
+          {termTypes.map((tt) => (
+            <option key={tt.id} value={tt.id}>{tt.naziv}</option>
+          ))}
+        </select>
+        {termTypes.length === 0 && (
+          <p className="text-xs text-amber-600 mt-0.5">Dodajte bar jednu vrstu u Admin → Vrste termina.</p>
+        )}
+      </div>
       <div className="flex gap-4">
         <label className="flex items-center gap-2 cursor-pointer">
           <input type="checkbox" checked={odrzano} onChange={(e) => setOdrzano(e.target.checked)} className="rounded border-stone-300 text-amber-600" />

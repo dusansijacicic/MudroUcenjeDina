@@ -253,6 +253,16 @@ export async function deleteTermAsAdmin(termId: string): Promise<{ error?: strin
   return {};
 }
 
+export async function updateTermClassroomAsAdmin(termId: string, classroomId: string): Promise<{ error?: string }> {
+  const { admin, error: authErr } = await requireAdmin();
+  if (authErr || !admin) return { error: authErr ?? 'Niste ovlašćeni.' };
+  const { error } = await admin.from('terms').update({ classroom_id: classroomId }).eq('id', termId);
+  if (error) return { error: error.message };
+  revalidatePath('/admin/kalendar');
+  revalidatePath(`/admin/termin/${termId}`);
+  return {};
+}
+
 export type TermTypeRow = { id: string; naziv: string; opis: string | null };
 
 export async function getTermTypes(): Promise<TermTypeRow[]> {

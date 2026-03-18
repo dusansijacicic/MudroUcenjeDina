@@ -4,7 +4,7 @@ import { redirect, notFound } from 'next/navigation';
 import Link from 'next/link';
 import { getMaxCasovaPoTerminu } from '@/lib/settings';
 import { TIME_SLOTS } from '@/lib/constants';
-import { getTermTypes } from '@/app/admin/actions';
+import { getTermTypes, getClassrooms } from '@/app/admin/actions';
 import AdminPredavanjeForm from '@/app/admin/termin/AdminPredavanjeForm';
 
 export default async function AdminNoviPredavanjePage({
@@ -20,12 +20,14 @@ export default async function AdminNoviPredavanjePage({
   if (!adminRow) redirect('/login');
 
   const admin = createAdminClient();
-  const { data: term } = await admin.from('terms').select('*').eq('id', termId).single();
+  const { data: term } = await admin.from('terms').select('*, classroom_id').eq('id', termId).single();
   if (!term) notFound();
 
-  const [predRes, maxCasova] = await Promise.all([
+  const [predRes, maxCasova, termTypes, classrooms] = await Promise.all([
     admin.from('predavanja').select('*', { count: 'exact', head: true }).eq('term_id', termId),
     getMaxCasovaPoTerminu(),
+    getTermTypes(),
+    getClassrooms(),
   ]);
   const currentCount = predRes.count ?? 0;
 
@@ -37,8 +39,7 @@ export default async function AdminNoviPredavanjePage({
   }));
 
   const slotLabel = TIME_SLOTS[term.slot_index] ?? '—';
-  const termTypes = await getTermTypes();
-
+  const termWithClassroom = term as { classroom_id?: string | null };
   return (
     <div className="max-w-lg">
       <h1 className="text-xl font-semibold text-stone-800 mb-4">
@@ -52,6 +53,8 @@ export default async function AdminNoviPredavanjePage({
         termTypes={termTypes}
         maxCasova={maxCasova}
         currentCount={currentCount}
+        classrooms={classrooms}
+        initialClassroomId={termWithClassroom.classroom_id ?? null}
       />
       <p className="mt-4">
         <Link href={`/admin/termin/${termId}`} className="text-sm text-amber-700 hover:underline">← Nazad na termin</Link>
