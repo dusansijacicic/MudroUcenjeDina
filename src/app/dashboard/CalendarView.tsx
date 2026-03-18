@@ -172,19 +172,45 @@ function CellContent({
   const bgLight = hexWithAlpha(term?.classroom?.color ?? instructorColor, 0.08);
   if (!term) {
     return (
-      <Link
-        href={`/dashboard/termin/novi?date=${emptyDate}&slot=${emptySlot}`}
-        className="block rounded-lg border border-dashed border-stone-200 p-2 text-stone-400 hover:border-stone-400 hover:bg-stone-50/50 min-h-[52px]"
-        onDragOver={(e) => {
-          if (draggedTermId) e.preventDefault();
-        }}
-        onDrop={(e) => {
-          e.preventDefault();
-          if (draggedTermId) onDropCell(emptyDate, emptySlot);
-        }}
-      >
-        +
-      </Link>
+      <div className="space-y-1.5 min-h-[52px]">
+        <Link
+          href={`/dashboard/termin/novi?date=${emptyDate}&slot=${emptySlot}`}
+          className="block rounded-lg border border-dashed border-stone-200 p-2 text-stone-400 hover:border-stone-400 hover:bg-stone-50/50"
+          onDragOver={(e) => {
+            if (draggedTermId) e.preventDefault();
+          }}
+          onDrop={(e) => {
+            e.preventDefault();
+            if (draggedTermId) onDropCell(emptyDate, emptySlot);
+          }}
+        >
+          +
+        </Link>
+        {otherTermsInSlot.map((ot) => {
+          const iname = ot.instructor ? `${ot.instructor.ime} ${ot.instructor.prezime}` : '—';
+          const preds = ot.predavanja ?? [];
+          const otBorder = ot.classroom?.color ?? '#e5e7eb';
+          const otTextColor = ot.instructor?.color ?? '#475569';
+          const otBg = ot.classroom?.color ? hexWithAlpha(ot.classroom.color, 0.08) : 'rgba(0,0,0,0.03)';
+          return (
+            <div
+              key={ot.id}
+              className="rounded-lg border-2 p-2 text-xs"
+              style={{ borderColor: otBorder, backgroundColor: otBg, color: otTextColor }}
+            >
+              {ot.classroom && (
+                <span className="block text-stone-500 font-medium">{ot.classroom.naziv}</span>
+              )}
+              <span className="font-medium">{iname}</span>
+              {preds.length > 0 && (
+                <span className="ml-1 opacity-90">
+                  {preds.map((p) => (p.client ? `${p.client.ime} ${p.client.prezime}` : '—')).join(', ')}
+                </span>
+              )}
+            </div>
+          );
+        })}
+      </div>
     );
   }
   return (
