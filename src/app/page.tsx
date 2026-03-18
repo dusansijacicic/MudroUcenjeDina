@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { redirect } from 'next/navigation';
 
 export default async function Home() {
@@ -17,7 +18,8 @@ export default async function Home() {
     redirect('/admin');
   }
 
-  const { data: instructor } = await supabase
+  const adminSupabase = createAdminClient();
+  const { data: instructor } = await adminSupabase
     .from('instructors')
     .select('id')
     .eq('user_id', user.id)
@@ -26,7 +28,7 @@ export default async function Home() {
     redirect('/dashboard');
   }
 
-  const { data: client } = await supabase
+  const { data: client } = await adminSupabase
     .from('clients')
     .select('id')
     .eq('user_id', user.id)

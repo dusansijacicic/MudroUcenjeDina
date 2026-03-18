@@ -1,5 +1,5 @@
-import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { getDashboardInstructor } from '@/lib/dashboard';
 import CalendarView from './CalendarView';
 import AddTermButton from './AddTermButton';
@@ -34,7 +34,6 @@ export default async function DashboardPage({
     instructor?: string;
   }>;
 }) {
-  const supabase = await createClient();
   const { instructor } = await getDashboardInstructor();
   if (!instructor) redirect('/login?reason=no_instructor');
 
@@ -82,7 +81,8 @@ export default async function DashboardPage({
     dateTo = end.toISOString().slice(0, 10);
   }
 
-  const { data: termsRaw } = await supabase
+  const admin = createAdminClient();
+  const { data: termsRaw } = await admin
     .from('terms')
     .select('*, predavanja(*, client:clients(id, ime, prezime))')
     .eq('instructor_id', instructorId)
@@ -101,7 +101,7 @@ export default async function DashboardPage({
       .filter((t) => (t.predavanja?.length ?? 0) > 0);
   }
 
-  const { data: links } = await supabase
+  const { data: links } = await admin
     .from('instructor_clients')
     .select('client:clients(id, ime, prezime)')
     .eq('instructor_id', instructorId);

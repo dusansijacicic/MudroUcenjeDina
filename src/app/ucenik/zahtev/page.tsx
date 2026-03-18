@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import ZahtevForm from './ZahtevForm';
@@ -9,14 +10,11 @@ export default async function UcenikZahtevPage() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login');
 
-  const { data: client } = await supabase
-    .from('clients')
-    .select('id')
-    .eq('user_id', user.id)
-    .single();
+  const admin = createAdminClient();
+  const { data: client } = await admin.from('clients').select('id').eq('user_id', user.id).single();
   if (!client) redirect('/login');
 
-  const { data: links } = await supabase
+  const { data: links } = await admin
     .from('instructor_clients')
     .select('instructor_id, instructor:instructors(id, ime, prezime)')
     .eq('client_id', client.id);
@@ -31,7 +29,7 @@ export default async function UcenikZahtevPage() {
   tomorrow.setDate(tomorrow.getDate() + 1);
   const defaultDate = tomorrow.toISOString().slice(0, 10);
 
-  const { data: occupiedForDefault } = await supabase.rpc('get_occupied_slots', {
+  const { data: occupiedForDefault } = await admin.rpc('get_occupied_slots', {
     p_date: defaultDate,
   });
   const defaultOccupiedSlots = (occupiedForDefault ?? []) as number[];

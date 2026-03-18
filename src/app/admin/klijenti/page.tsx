@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 
@@ -16,7 +17,8 @@ export default async function AdminSviKlijentiPage() {
     .single();
   if (!admin) redirect('/login');
 
-  const { data: links } = await supabase
+  const adminSupabase = createAdminClient();
+  const { data: links } = await adminSupabase
     .from('instructor_clients')
     .select('instructor_id, client_id, placeno_casova, client:clients(id, ime, prezime, login_email, godiste, razred, skola, kontakt_telefon), instructor:instructors(id, ime, prezime)')
     .order('client_id');

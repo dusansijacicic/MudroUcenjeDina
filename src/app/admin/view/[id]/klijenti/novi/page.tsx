@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { redirect, notFound } from 'next/navigation';
 import Link from 'next/link';
 import ClientForm from '@/app/dashboard/klijenti/ClientForm';
@@ -22,7 +23,8 @@ export default async function AdminViewNoviKlijentPage({
     .single();
   if (!admin) redirect('/login?reason=not_authorized');
 
-  const { data: instructor } = await supabase
+  const adminSupabase = createAdminClient();
+  const { data: instructor } = await adminSupabase
     .from('instructors')
     .select('id, ime, prezime')
     .eq('id', id)

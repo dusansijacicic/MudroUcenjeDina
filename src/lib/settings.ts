@@ -17,13 +17,25 @@ export async function getMaxCasovaPoTerminu(): Promise<number> {
 
 /** Da li termin sme da primi još jedno predavanje (broj predavanja < max). */
 export async function termMozeNovoPredavanje(termId: string): Promise<{ ok: boolean; count: number; max: number; error?: string }> {
-  const supabase = await createClient();
   const max = await getMaxCasovaPoTerminu();
-  const { count, error } = await supabase
-    .from('predavanja')
-    .select('*', { count: 'exact', head: true })
-    .eq('term_id', termId);
-  if (error) return { ok: false, count: 0, max, error: error.message };
-  const n = count ?? 0;
-  return { ok: n < max, count: n, max };
+  try {
+    const { createAdminClient } = await import('@/lib/supabase/admin');
+    const admin = createAdminClient();
+    const { count, error } = await admin
+      .from('predavanja')
+      .select('*', { count: 'exact', head: true })
+      .eq('term_id', termId);
+    if (error) return { ok: false, count: 0, max, error: error.message };
+    const n = count ?? 0;
+    return { ok: n < max, count: n, max };
+  } catch {
+    const supabase = await createClient();
+    const { count, error } = await supabase
+      .from('predavanja')
+      .select('*', { count: 'exact', head: true })
+      .eq('term_id', termId);
+    if (error) return { ok: false, count: 0, max, error: error.message };
+    const n = count ?? 0;
+    return { ok: n < max, count: n, max };
+  }
 }

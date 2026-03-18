@@ -1,5 +1,5 @@
-import { createClient } from '@/lib/supabase/server';
 import { redirect, notFound } from 'next/navigation';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { getDashboardInstructor } from '@/lib/dashboard';
 import PredavanjeForm from '@/app/dashboard/termin/PredavanjeForm';
 import { TIME_SLOTS } from '@/lib/constants';
@@ -10,11 +10,11 @@ export default async function EditPredavanjePage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const supabase = await createClient();
   const { instructor } = await getDashboardInstructor();
   if (!instructor) redirect('/login?reason=no_instructor');
 
-  const { data: predavanje } = await supabase
+  const admin = createAdminClient();
+  const { data: predavanje } = await admin
     .from('predavanja')
     .select('*, term:terms(*)')
     .eq('id', id)
@@ -27,7 +27,7 @@ export default async function EditPredavanjePage({
   const term = predavanje.term as { id: string; date: string; slot_index: number };
   const slotLabel = TIME_SLOTS[term.slot_index] ?? '—';
 
-  const { data: linkRows } = await supabase
+  const { data: linkRows } = await admin
     .from('instructor_clients')
     .select('client:clients(id, ime, prezime)')
     .eq('instructor_id', instructor.id);

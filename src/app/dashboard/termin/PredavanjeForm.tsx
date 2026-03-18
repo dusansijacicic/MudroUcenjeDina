@@ -4,8 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
-import { createClient } from '@/lib/supabase/client';
-import { createPredavanje } from '@/app/dashboard/termin/actions';
+import { createPredavanje, updatePredavanje, deletePredavanje } from '@/app/dashboard/termin/actions';
 import type { Predavanje } from '@/types/database';
 
 type ClientOption = { id: string; ime: string; prezime: string };
@@ -39,7 +38,6 @@ export default function PredavanjeForm({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const supabase = createClient();
   const isNew = !predavanje;
   const atLimit = isNew && currentCount >= maxCasova;
 
@@ -51,20 +49,17 @@ export default function PredavanjeForm({
     console.log('[PredavanjeForm] submit', { termId, clientId, predavanje: !!predavanje });
     try {
       if (predavanje) {
-        const payload = {
-          term_id: termId,
-          client_id: clientId,
+        const result = await updatePredavanje(
+          predavanje.id,
+          termId,
+          clientId,
           odrzano,
           placeno,
-          komentar: komentar.trim() || null,
-        };
-        const { error: updateError } = await supabase
-          .from('predavanja')
-          .update(payload)
-          .eq('id', predavanje.id);
-        if (updateError) {
-          console.error('[PredavanjeForm] update error', updateError.message, updateError.code);
-          throw updateError;
+          komentar.trim() || null
+        );
+        if (result.error) {
+          console.error('[PredavanjeForm] update error', result.error);
+          throw new Error(result.error);
         }
         toast.success('Predavanje sačuvano.');
       } else {
@@ -91,11 +86,10 @@ export default function PredavanjeForm({
     if (!predavanje || !confirm('Obrisati ovo predavanje?')) return;
     setLoading(true);
     try {
-      const { error } = await supabase.from('predavanja').delete().eq('id', predavanje.id);
-      if (error) {
-        console.error('[PredavanjeForm] delete error', error.message);
-        setError(error.message);
-        toast.error(error.message);
+      const result = await deletePredavanje(predavanje.id, termId);
+      if (result.error) {
+        setError(result.error);
+        toast.error(result.error);
         return;
       }
       toast.success('Predavanje obrisano.');

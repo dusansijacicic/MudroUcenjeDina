@@ -1,6 +1,6 @@
-import { createClient } from '@/lib/supabase/server';
 import { redirect, notFound } from 'next/navigation';
 import Link from 'next/link';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { getDashboardInstructor } from '@/lib/dashboard';
 import ClientForm from '../ClientForm';
 import type { Client, Predavanje } from '@/types/database';
@@ -12,11 +12,11 @@ export default async function KlijentPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const supabase = await createClient();
   const { instructor } = await getDashboardInstructor();
   if (!instructor) redirect('/login?reason=no_instructor');
 
-  const { data: link } = await supabase
+  const admin = createAdminClient();
+  const { data: link } = await admin
     .from('instructor_clients')
     .select('placeno_casova, client:clients(*)')
     .eq('instructor_id', instructor.id)
@@ -26,7 +26,7 @@ export default async function KlijentPage({
   if (!link?.client) notFound();
   const client = { ...(link.client as unknown as Client), placeno_casova: link.placeno_casova };
 
-  const { data: predavanja } = await supabase
+  const { data: predavanja } = await admin
     .from('predavanja')
     .select('*, term:terms(date, slot_index, instructor_id)')
     .eq('client_id', id)

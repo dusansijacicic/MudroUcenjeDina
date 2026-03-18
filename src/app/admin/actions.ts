@@ -91,8 +91,9 @@ export async function createTermAsAdmin(instructorId: string, date: string, slot
 
   const slot = Math.min(12, Math.max(0, slotIndex));
   const dateStr = date.slice(0, 10);
+  const adminSupabase = createAdminClient();
 
-  const { data: existing } = await supabase
+  const { data: existing } = await adminSupabase
     .from('terms')
     .select('id')
     .eq('instructor_id', instructorId)
@@ -104,7 +105,7 @@ export async function createTermAsAdmin(instructorId: string, date: string, slot
     return { termId: existing.id, instructorId };
   }
 
-  const { data: inserted, error } = await supabase
+  const { data: inserted, error } = await adminSupabase
     .from('terms')
     .insert({ instructor_id: instructorId, date: dateStr, slot_index: slot })
     .select('id')
@@ -113,4 +114,15 @@ export async function createTermAsAdmin(instructorId: string, date: string, slot
   if (error) return { error: error.message };
   if (!inserted) return { error: 'Termin nije kreiran.' };
   return { termId: inserted.id, instructorId };
+}
+
+export async function getAdminInstructorsList(): Promise<{ id: string; ime: string; prezime: string }[]> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return [];
+  const { data: admin } = await supabase.from('admin_users').select('user_id').eq('user_id', user.id).single();
+  if (!admin) return [];
+  const adminSupabase = createAdminClient();
+  const { data } = await adminSupabase.from('instructors').select('id, ime, prezime').order('prezime').order('ime');
+  return data ?? [];
 }

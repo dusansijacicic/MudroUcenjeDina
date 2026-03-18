@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { redirect, notFound } from 'next/navigation';
 import { cookies } from 'next/headers';
 import type { Instructor } from '@/types/database';
@@ -25,7 +26,8 @@ export default async function AdminViewLayout({
     .single();
   if (!admin) redirect('/login');
 
-  const { data: instructor } = await supabase
+  const adminSupabase = createAdminClient();
+  const { data: instructor } = await adminSupabase
     .from('instructors')
     .select('*')
     .eq('id', id)

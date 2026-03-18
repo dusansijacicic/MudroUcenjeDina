@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { createClient } from '@/lib/supabase/client';
+import { createZahtevAsClient, getOccupiedSlotsServer, getInstructorAvailableSlotsServer } from './actions';
 
 function consecutiveBlocks(slots: number[]): number[][] {
   if (slots.length === 0) return [];
@@ -48,9 +48,7 @@ export default function ZahtevForm({
 
   useEffect(() => {
     if (!date) return;
-    const supabase = createClient();
-    supabase.rpc('get_occupied_slots', { p_date: date.slice(0, 10) }).then(({ data }) => {
-      const next = (data ?? []) as number[];
+    getOccupiedSlotsServer(date).then((next) => {
       setOccupiedSlots(next);
       if (next.includes(slotIndex)) {
         const firstFree = slotLabels.findIndex((_, i) => !next.includes(i));
@@ -64,15 +62,7 @@ export default function ZahtevForm({
       setInstructorAvailableSlots(null);
       return;
     }
-    const supabase = createClient();
-    supabase
-      .rpc('get_instructor_available_slots', {
-        p_instructor_id: instructorId,
-        p_date: date.slice(0, 10),
-      })
-      .then(({ data }) => {
-        setInstructorAvailableSlots((data ?? []) as number[]);
-      });
+    getInstructorAvailableSlotsServer(instructorId, date).then(setInstructorAvailableSlots);
   }, [instructorId, date]);
 
   const allSlotIndices = useMemo(() => slotLabels.map((_, i) => i), [slotLabels.length]);
@@ -102,16 +92,14 @@ export default function ZahtevForm({
     if (!canSubmit) return;
     setError('');
     setLoading(true);
-    const supabase = createClient();
-    const { error: err } = await supabase.from('zahtevi_za_cas').insert({
-      client_id: clientId,
-      instructor_id: instructorId || null,
-      requested_date: date.slice(0, 10),
-      requested_slot_index: effectiveSlotIndex,
-      status: 'pending',
-    });
-    if (err) {
-      setError(err.message);
+    const result = await createZahtevAsClient(
+      clientId,
+      instructorId || null,
+      date.slice(0, 10),
+      effectiveSlotIndex
+    );
+    if (result.error) {
+      setError(result.error);
       setLoading(false);
       return;
     }

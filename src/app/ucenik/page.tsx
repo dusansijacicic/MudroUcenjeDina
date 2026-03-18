@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { redirect } from 'next/navigation';
 import { TIME_SLOTS } from '@/lib/constants';
 import type { Predavanje } from '@/types/database';
@@ -10,19 +11,16 @@ export default async function UcenikPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect('/login');
 
-  const { data: client } = await supabase
-    .from('clients')
-    .select('*')
-    .eq('user_id', user.id)
-    .single();
+  const admin = createAdminClient();
+  const { data: client } = await admin.from('clients').select('*').eq('user_id', user.id).single();
   if (!client) redirect('/login');
 
-  const { data: links } = await supabase
+  const { data: links } = await admin
     .from('instructor_clients')
     .select('instructor_id, placeno_casova')
     .eq('client_id', client.id);
 
-  const { data: predavanjaRaw } = await supabase
+  const { data: predavanjaRaw } = await admin
     .from('predavanja')
     .select('*, term:terms(date, slot_index, instructor_id, instructor:instructors(ime, prezime))')
     .eq('client_id', client.id);
@@ -36,7 +34,7 @@ export default async function UcenikPage() {
       return (b.term?.slot_index ?? 0) - (a.term?.slot_index ?? 0);
     });
 
-  const { data: zahteviRaw } = await supabase
+  const { data: zahteviRaw } = await admin
     .from('zahtevi_za_cas')
     .select('id, requested_date, requested_slot_index, status, instructor_id, instructor:instructors(ime, prezime), note_from_instructor, created_at, resolved_at')
     .eq('client_id', client.id)

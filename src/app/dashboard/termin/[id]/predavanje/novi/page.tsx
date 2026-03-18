@@ -1,5 +1,4 @@
 import { redirect, notFound } from 'next/navigation';
-import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getDashboardInstructor } from '@/lib/dashboard';
 import { getMaxCasovaPoTerminu } from '@/lib/settings';
@@ -12,11 +11,11 @@ export default async function NoviPredavanjePage({
   params: Promise<{ id: string }>;
 }) {
   const { id: termId } = await params;
-  const supabase = await createClient();
   const { instructor } = await getDashboardInstructor();
   if (!instructor) redirect('/login?reason=no_instructor');
 
-  const { data: term } = await supabase
+  const admin = createAdminClient();
+  const { data: term } = await admin
     .from('terms')
     .select('*')
     .eq('id', termId)
@@ -25,23 +24,18 @@ export default async function NoviPredavanjePage({
 
   if (!term) notFound();
 
-  const [{ count: currentCount }, maxCasova] = await Promise.all([
-    supabase.from('predavanja').select('*', { count: 'exact', head: true }).eq('term_id', termId).then((r) => ({ count: r.count ?? 0 })),
+  const [predRes, maxCasova] = await Promise.all([
+    admin.from('predavanja').select('*', { count: 'exact', head: true }).eq('term_id', termId),
     getMaxCasovaPoTerminu(),
   ]);
+  const currentCount = predRes.count ?? 0;
 
-  let clients: { id: string; ime: string; prezime: string }[] = [];
-  try {
-    const admin = createAdminClient();
-    const { data: linkRows } = await admin
-      .from('instructor_clients')
-      .select('client:clients(id, ime, prezime)')
-      .eq('instructor_id', instructor.id);
-    clients = (linkRows ?? []).map((r) => r.client).filter(Boolean) as unknown as { id: string; ime: string; prezime: string }[];
-    clients.sort((a, b) => (a.prezime ?? '').localeCompare(b.prezime ?? '') || (a.ime ?? '').localeCompare(b.ime ?? ''));
-  } catch (e) {
-    console.error('[novi predavanje page] load clients failed', e);
-  }
+  const { data: linkRows } = await admin
+    .from('instructor_clients')
+    .select('client:clients(id, ime, prezime)')
+    .eq('instructor_id', instructor.id);
+  const clients = (linkRows ?? []).map((r) => r.client).filter(Boolean) as unknown as { id: string; ime: string; prezime: string }[];
+  clients.sort((a, b) => (a.prezime ?? '').localeCompare(b.prezime ?? '') || (a.ime ?? '').localeCompare(b.ime ?? ''));
 
   const slotLabel = TIME_SLOTS[term.slot_index] ?? '—';
 

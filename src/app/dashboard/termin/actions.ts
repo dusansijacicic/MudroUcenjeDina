@@ -72,3 +72,60 @@ export async function createPredavanje(
   console.log('[termin] createPredavanje success');
   return {};
 }
+
+export async function updatePredavanje(
+  predavanjeId: string,
+  termId: string,
+  clientId: string,
+  odrzano: boolean,
+  placeno: boolean,
+  komentar: string | null
+): Promise<{ error?: string }> {
+  const { instructor } = await getDashboardInstructor();
+  if (!instructor) return { error: 'Niste predavač.' };
+  let admin;
+  try {
+    admin = createAdminClient();
+  } catch (e) {
+    return { error: 'Server greška.' };
+  }
+  const { data: term } = await admin.from('terms').select('instructor_id').eq('id', termId).single();
+  if (!term || term.instructor_id !== instructor.id) return { error: 'Niste ovlašćeni.' };
+  const { error } = await admin
+    .from('predavanja')
+    .update({
+      term_id: termId,
+      client_id: clientId,
+      odrzano,
+      placeno,
+      komentar: komentar?.trim() || null,
+    })
+    .eq('id', predavanjeId);
+  if (error) return { error: error.message };
+  revalidatePath(`/dashboard/termin/${termId}`);
+  revalidatePath('/dashboard');
+  revalidatePath('/dashboard/klijenti');
+  revalidatePath(`/dashboard/predavanje/${predavanjeId}`);
+  return {};
+}
+
+export async function deletePredavanje(predavanjeId: string, termId: string): Promise<{ error?: string }> {
+  const { instructor } = await getDashboardInstructor();
+  if (!instructor) return { error: 'Niste predavač.' };
+  let admin;
+  try {
+    admin = createAdminClient();
+  } catch (e) {
+    return { error: 'Server greška.' };
+  }
+  const { data: pred } = await admin.from('predavanja').select('term_id').eq('id', predavanjeId).single();
+  if (!pred) return { error: 'Predavanje nije pronađeno.' };
+  const { data: term } = await admin.from('terms').select('instructor_id').eq('id', pred.term_id).single();
+  if (!term || term.instructor_id !== instructor.id) return { error: 'Niste ovlašćeni.' };
+  const { error } = await admin.from('predavanja').delete().eq('id', predavanjeId);
+  if (error) return { error: error.message };
+  revalidatePath(`/dashboard/termin/${termId}`);
+  revalidatePath('/dashboard');
+  revalidatePath('/dashboard/klijenti');
+  return {};
+}

@@ -1,6 +1,6 @@
-import { createClient } from '@/lib/supabase/server';
 import { redirect, notFound } from 'next/navigation';
 import Link from 'next/link';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { getDashboardInstructor } from '@/lib/dashboard';
 import { getMaxCasovaPoTerminu } from '@/lib/settings';
 import { TIME_SLOTS } from '@/lib/constants';
@@ -12,11 +12,11 @@ export default async function TerminDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id: termId } = await params;
-  const supabase = await createClient();
   const { instructor } = await getDashboardInstructor();
   if (!instructor) redirect('/login?reason=no_instructor');
 
-  const { data: term } = await supabase
+  const admin = createAdminClient();
+  const { data: term } = await admin
     .from('terms')
     .select('*')
     .eq('id', termId)
@@ -25,19 +25,17 @@ export default async function TerminDetailPage({
 
   if (!term) notFound();
 
-  const { data: predavanja } = await supabase
+  const { data: predavanja } = await admin
     .from('predavanja')
     .select('*, client:clients(id, ime, prezime)')
     .eq('term_id', termId)
     .order('created_at');
 
-  const [maxCasova] = await Promise.all([
-    getMaxCasovaPoTerminu(),
-  ]);
+  const maxCasova = await getMaxCasovaPoTerminu();
   const currentCount = (predavanja ?? []).length;
   const canAddMore = currentCount < maxCasova;
 
-  const { data: otherTerms } = await supabase
+  const { data: otherTerms } = await admin
     .from('terms')
     .select('id, instructor_id, instructor:instructors(ime, prezime)')
     .eq('date', term.date)
@@ -51,7 +49,7 @@ export default async function TerminDetailPage({
   }> = [];
   if (otherTerms?.length) {
     for (const t of otherTerms) {
-      const { data: pred } = await supabase
+      const { data: pred } = await admin
         .from('predavanja')
         .select('id, client:clients(ime, prezime)')
         .eq('term_id', t.id);

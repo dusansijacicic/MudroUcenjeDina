@@ -3,7 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { createClient } from '@/lib/supabase/client';
+import { getAdminInstructorsList } from '../actions';
 
 export default function AdminNoviKlijentPage() {
   const router = useRouter();
@@ -12,16 +12,11 @@ export default function AdminNoviKlijentPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const supabase = createClient();
-    supabase
-      .from('instructors')
-      .select('id, ime, prezime')
-      .order('prezime')
-      .then(({ data }) => {
-        setInstructors(data ?? []);
-        if ((data ?? []).length > 0 && !selectedId) setSelectedId(data![0].id);
-        setLoading(false);
-      });
+    getAdminInstructorsList().then((data) => {
+      setInstructors(data);
+      if (data.length > 0 && !selectedId) setSelectedId(data[0].id);
+      setLoading(false);
+    });
   }, []);
 
   const handleGo = () => {

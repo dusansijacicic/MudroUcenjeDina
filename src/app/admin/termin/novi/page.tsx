@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import AdminTerminForm from './AdminTerminForm';
@@ -16,7 +17,8 @@ export default async function AdminTerminNoviPage() {
     .single();
   if (!admin) redirect('/login');
 
-  const { data: instructors } = await supabase
+  const adminSupabase = createAdminClient();
+  const { data: instructors } = await adminSupabase
     .from('instructors')
     .select('id, ime, prezime')
     .order('prezime')
