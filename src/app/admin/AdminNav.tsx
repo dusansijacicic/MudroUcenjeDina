@@ -24,6 +24,9 @@ export default function AdminNav() {
           <Link href="/admin" className="text-sm text-stone-300 hover:text-white">
             Predavači
           </Link>
+          <Link href="/admin/termin/novi" className="text-sm text-stone-300 hover:text-white">
+            Zakaži termin
+          </Link>
           <button
             onClick={signOut}
             className="text-sm text-stone-400 hover:text-white"

@@ -19,6 +19,7 @@ export default function DashboardNav({ instructor, isAdminView }: { instructor: 
 
   const nav = [
     { href: '/dashboard', label: 'Kalendar' },
+    { href: '/dashboard/zahtevi', label: 'Zahtevi' },
     { href: '/dashboard/klijenti', label: 'Klijenti' },
     { href: '/dashboard/podesavanja', label: 'Podešavanja' },
   ];

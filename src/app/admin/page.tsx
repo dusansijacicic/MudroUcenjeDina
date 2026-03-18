@@ -31,19 +31,33 @@ export default async function AdminPage({
     <div>
       <AdminFromDashboardToast from={params?.from} />
       <h1 className="text-xl font-semibold text-stone-800 mb-2">
-        Super admin – izaberi predavača
+        Super admin
       </h1>
       <p className="text-stone-500 text-sm mb-6">
-        Kao admin vidiš sve predavače. Klikni da vidiš kalendar i klijente tog predavača.
+        Možete da dodate predavača, klijenta/djaka, da zakažete termin za bilo kog predavača, ili da kliknete na predavača da vidite njegov kalendar i klijente.
       </p>
-      <div className="mb-4">
+
+      <div className="flex flex-wrap gap-3 mb-8">
         <Link
           href="/admin/predavaci/novi"
           className="inline-flex items-center rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700"
         >
           + Novi predavač
         </Link>
+        <Link
+          href="/admin/termin/novi"
+          className="inline-flex items-center rounded-lg bg-stone-700 px-4 py-2 text-sm font-medium text-white hover:bg-stone-800"
+        >
+          Zakaži termin za predavača
+        </Link>
       </div>
+
+      <h2 className="text-sm font-medium text-stone-600 mb-2">Dodaj klijenta/djaka za predavača</h2>
+      <p className="text-stone-500 text-xs mb-3">
+        Izaberite predavača ispod pa „Klijenti” → „Novi polaznik”, ili kliknite na predavača da uđete u njegov pregled.
+      </p>
+
+      <h2 className="text-sm font-medium text-stone-600 mb-2">Predavači (klik za kalendar i klijente)</h2>
       <div className="rounded-xl border border-stone-200 bg-white divide-y divide-stone-100">
         {(instructors ?? []).length === 0 ? (
           <div className="p-6 text-center text-stone-500">
@@ -51,16 +65,20 @@ export default async function AdminPage({
           </div>
         ) : (
           (instructors ?? []).map((inst) => (
-            <Link
-              key={inst.id}
-              href={`/admin/view/${inst.id}`}
-              className="flex items-center justify-between p-4 hover:bg-stone-50"
-            >
-              <span className="font-medium text-stone-800">
-                {inst.ime} {inst.prezime}
-              </span>
-              <span className="text-sm text-stone-500">{inst.email}</span>
-            </Link>
+            <div key={inst.id} className="flex items-center justify-between p-4 hover:bg-stone-50 gap-2">
+              <Link href={`/admin/view/${inst.id}`} className="flex-1 flex items-center justify-between min-w-0">
+                <span className="font-medium text-stone-800">
+                  {inst.ime} {inst.prezime}
+                </span>
+                <span className="text-sm text-stone-500 shrink-0 ml-2">{inst.email}</span>
+              </Link>
+              <Link
+                href={`/admin/view/${inst.id}/klijenti/novi`}
+                className="text-sm text-amber-600 hover:text-amber-700 shrink-0"
+              >
+                + Klijent
+              </Link>
+            </div>
           ))
         )}
       </div>

@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server';
 import { redirect, notFound } from 'next/navigation';
 import Link from 'next/link';
 import { getDashboardInstructor } from '@/lib/dashboard';
+import { getMaxCasovaPoTerminu } from '@/lib/settings';
 import { TIME_SLOTS } from '@/lib/constants';
 import type { Predavanje } from '@/types/database';
 
@@ -30,6 +31,38 @@ export default async function TerminDetailPage({
     .eq('term_id', termId)
     .order('created_at');
 
+  const [maxCasova] = await Promise.all([
+    getMaxCasovaPoTerminu(),
+  ]);
+  const currentCount = (predavanja ?? []).length;
+  const canAddMore = currentCount < maxCasova;
+
+  const { data: otherTerms } = await supabase
+    .from('terms')
+    .select('id, instructor_id, instructor:instructors(ime, prezime)')
+    .eq('date', term.date)
+    .eq('slot_index', term.slot_index)
+    .neq('instructor_id', instructor.id);
+
+  const otherTermsWithPredavanja: Array<{
+    id: string;
+    instructor: { ime: string; prezime: string } | null;
+    predavanja: Array<{ id: string; client?: { ime: string; prezime: string } | null }>;
+  }> = [];
+  if (otherTerms?.length) {
+    for (const t of otherTerms) {
+      const { data: pred } = await supabase
+        .from('predavanja')
+        .select('id, client:clients(ime, prezime)')
+        .eq('term_id', t.id);
+      otherTermsWithPredavanja.push({
+        id: t.id,
+        instructor: (t as unknown as { instructor?: { ime: string; prezime: string } | null }).instructor ?? null,
+        predavanja: (pred ?? []).map((p) => ({ id: p.id, client: (p as unknown as { client?: { ime: string; prezime: string } | null }).client })),
+      });
+    }
+  }
+
   const slotLabel = TIME_SLOTS[term.slot_index] ?? '—';
   const dateLabel = new Date(term.date + 'T12:00:00').toLocaleDateString(
     'sr-Latn-RS',
@@ -54,12 +87,19 @@ export default async function TerminDetailPage({
       </div>
 
       <div className="mb-6">
-        <Link
-          href={`/dashboard/termin/${termId}/predavanje/novi`}
-          className="inline-flex items-center rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700"
-        >
-          + Dodaj predavanje
-        </Link>
+        {canAddMore ? (
+          <Link
+            href={`/dashboard/termin/${termId}/predavanje/novi`}
+            className="inline-flex items-center rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700"
+          >
+            + Dodaj predavanje
+          </Link>
+        ) : (
+          <p className="text-sm text-amber-700 bg-amber-50 rounded-lg px-3 py-2 inline-block">
+            Maksimalan broj časova u ovom terminu ({maxCasova}) je dostignut. Superadmin može da poveća limit u Podešavanjima.
+          </p>
+        )}
+        <span className="ml-2 text-stone-500 text-sm">{currentCount} / {maxCasova} časova</span>
       </div>
 
       <div className="rounded-xl border border-stone-200 bg-white divide-y divide-stone-100">
@@ -73,6 +113,30 @@ export default async function TerminDetailPage({
           ))
         )}
       </div>
+
+      {otherTermsWithPredavanja.length > 0 && (
+        <section className="mt-8 rounded-xl border border-stone-200 bg-stone-50/80 p-4">
+          <h2 className="text-sm font-medium text-stone-600 mb-3">
+            U istom terminu ({slotLabel}) drže čas i drugi predavači
+          </h2>
+          <ul className="space-y-2 text-sm">
+            {otherTermsWithPredavanja.map((ot) => (
+              <li key={ot.id} className="text-stone-700">
+                <span className="font-medium">
+                  {ot.instructor ? `${ot.instructor.ime} ${ot.instructor.prezime}` : '—'}
+                </span>
+                {ot.predavanja.length > 0 ? (
+                  <span className="text-stone-600">
+                    {' '}: {ot.predavanja.map((p) => p.client ? `${p.client.ime} ${p.client.prezime}` : '—').join(', ')}
+                  </span>
+                ) : (
+                  <span className="text-stone-500"> (nema predavanja)</span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
     </div>
   );
 }

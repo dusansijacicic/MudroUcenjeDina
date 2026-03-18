@@ -99,12 +99,12 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-stone-100 px-4">
-      <div className="w-full max-w-sm rounded-2xl bg-white shadow-lg border border-stone-200 p-8">
-        <h1 className="text-2xl font-semibold text-stone-800 text-center mb-2">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[var(--kid-butter)] via-[var(--kid-sky)]/40 to-[var(--kid-peach)]/50 px-4 py-8">
+      <div className="w-full max-w-sm rounded-3xl bg-white/95 backdrop-blur-sm shadow-xl border-2 border-white/60 p-8 animate-scale-in">
+        <h1 className="text-2xl font-bold text-center mb-2 text-[var(--kid-text)]">
           Dina Kalendar
         </h1>
-        <p className="text-stone-500 text-center text-sm mb-6">
+        <p className="text-[var(--kid-text-muted)] text-center text-sm mb-6">
           Prijava (predavač ili učenik)
         </p>
 
@@ -112,7 +112,7 @@ export default function LoginPage() {
           {isSignUp && (
             <>
               <div>
-                <label className="block text-sm font-medium text-stone-700 mb-1">
+                <label className="block text-sm font-medium text-[var(--kid-text)] mb-1">
                   Ime
                 </label>
                 <input
@@ -120,11 +120,11 @@ export default function LoginPage() {
                   value={ime}
                   onChange={(e) => setIme(e.target.value)}
                   required={isSignUp}
-                  className="w-full rounded-lg border border-stone-300 px-3 py-2 text-stone-800 focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
+                  className="w-full rounded-xl border-2 border-[var(--kid-sky-dark)]/40 px-3 py-2.5 text-[var(--kid-text)] focus:ring-2 focus:ring-[var(--kid-teal)] focus:border-[var(--kid-teal)] transition-smooth"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-stone-700 mb-1">
+                <label className="block text-sm font-medium text-[var(--kid-text)] mb-1">
                   Prezime
                 </label>
                 <input
@@ -132,13 +132,13 @@ export default function LoginPage() {
                   value={prezime}
                   onChange={(e) => setPrezime(e.target.value)}
                   required={isSignUp}
-                  className="w-full rounded-lg border border-stone-300 px-3 py-2 text-stone-800 focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
+                  className="w-full rounded-xl border-2 border-[var(--kid-sky-dark)]/40 px-3 py-2.5 text-[var(--kid-text)] focus:ring-2 focus:ring-[var(--kid-teal)] focus:border-[var(--kid-teal)] transition-smooth"
                 />
               </div>
             </>
           )}
           <div>
-            <label className="block text-sm font-medium text-stone-700 mb-1">
+            <label className="block text-sm font-medium text-[var(--kid-text)] mb-1">
               Email
             </label>
             <input
@@ -146,11 +146,11 @@ export default function LoginPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              className="w-full rounded-lg border border-stone-300 px-3 py-2 text-stone-800 focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
+              className="w-full rounded-xl border-2 border-[var(--kid-sky-dark)]/40 px-3 py-2.5 text-[var(--kid-text)] focus:ring-2 focus:ring-[var(--kid-teal)] focus:border-[var(--kid-teal)] transition-smooth"
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-stone-700 mb-1">
+            <label className="block text-sm font-medium text-[var(--kid-text)] mb-1">
               Lozinka
             </label>
             <input
@@ -159,12 +159,12 @@ export default function LoginPage() {
               onChange={(e) => setPassword(e.target.value)}
               required
               minLength={6}
-              className="w-full rounded-lg border border-stone-300 px-3 py-2 text-stone-800 focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
+              className="w-full rounded-xl border-2 border-[var(--kid-sky-dark)]/40 px-3 py-2.5 text-[var(--kid-text)] focus:ring-2 focus:ring-[var(--kid-teal)] focus:border-[var(--kid-teal)] transition-smooth"
             />
           </div>
 
           {error && (
-            <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">
+            <p className="text-sm text-red-600 bg-red-50 rounded-xl px-3 py-2">
               {error}
             </p>
           )}
@@ -172,7 +172,7 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full rounded-lg bg-amber-600 text-white font-medium py-2.5 hover:bg-amber-700 focus:ring-2 focus:ring-amber-500 focus:ring-offset-2 disabled:opacity-50"
+            className="w-full rounded-xl bg-[#0d9488] text-white font-semibold py-3 hover:bg-[#0f766e] focus:ring-2 focus:ring-[var(--kid-teal)] focus:ring-offset-2 disabled:opacity-50 transition-smooth hover-lift"
           >
             {loading ? 'Sačekajte...' : isSignUp ? 'Registracija (predavač)' : 'Prijava'}
           </button>
@@ -185,14 +185,14 @@ export default function LoginPage() {
               setIsSignUp((v) => !v);
               setError('');
             }}
-            className="w-full text-sm text-amber-700 hover:text-amber-800"
+            className="w-full text-sm text-[#0d9488] hover:text-[#0f766e] font-medium transition-smooth"
           >
             {isSignUp ? 'Već imate nalog? Prijavite se' : 'Predavač? Registrujte se ovde'}
           </button>
           {!isSignUp && (
-            <p className="text-center text-sm text-stone-500">
+            <p className="text-center text-sm text-[var(--kid-text-muted)]">
               Učenik?{' '}
-              <Link href="/registracija-ucenik" className="text-amber-700 hover:underline">
+              <Link href="/registracija-ucenik" className="text-[#0d9488] hover:underline font-medium">
                 Registracija učenika
               </Link>
             </p>

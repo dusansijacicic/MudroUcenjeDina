@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
+import { createPredavanje } from '@/app/dashboard/termin/actions';
 import type { Predavanje } from '@/types/database';
 
 type ClientOption = { id: string; ime: string; prezime: string };
@@ -14,6 +15,10 @@ interface PredavanjeFormProps {
   slotLabel: string;
   clients: ClientOption[];
   predavanje?: Predavanje | null;
+  /** Za novo predavanje: maksimalan broj časova u terminu (od superadmin podešavanja). */
+  maxCasova?: number;
+  /** Za novo predavanje: trenutni broj predavanja u terminu. */
+  currentCount?: number;
 }
 
 export default function PredavanjeForm({
@@ -22,6 +27,8 @@ export default function PredavanjeForm({
   slotLabel,
   clients,
   predavanje,
+  maxCasova = 4,
+  currentCount = 0,
 }: PredavanjeFormProps) {
   const router = useRouter();
   const [clientId, setClientId] = useState(predavanje?.client_id ?? '');
@@ -32,30 +39,31 @@ export default function PredavanjeForm({
   const [error, setError] = useState('');
 
   const supabase = createClient();
+  const isNew = !predavanje;
+  const atLimit = isNew && currentCount >= maxCasova;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    if (atLimit) return;
     setLoading(true);
     try {
-      const payload = {
-        term_id: termId,
-        client_id: clientId,
-        odrzano,
-        placeno,
-        komentar: komentar.trim() || null,
-      };
       if (predavanje) {
+        const payload = {
+          term_id: termId,
+          client_id: clientId,
+          odrzano,
+          placeno,
+          komentar: komentar.trim() || null,
+        };
         const { error: updateError } = await supabase
           .from('predavanja')
           .update(payload)
           .eq('id', predavanje.id);
         if (updateError) throw updateError;
       } else {
-        const { error: insertError } = await supabase
-          .from('predavanja')
-          .insert(payload);
-        if (insertError) throw insertError;
+        const result = await createPredavanje(termId, clientId, odrzano, placeno, komentar.trim() || null);
+        if (result.error) throw new Error(result.error);
       }
       router.push(`/dashboard/termin/${termId}`);
       router.refresh();
@@ -84,7 +92,17 @@ export default function PredavanjeForm({
     <form onSubmit={handleSubmit} className="space-y-4">
       <div className="text-sm text-stone-500">
         {termDate} • {slotLabel}
+        {isNew && (
+          <span className="ml-2 text-stone-400">
+            ({currentCount} / {maxCasova} časova u terminu)
+          </span>
+        )}
       </div>
+      {atLimit && (
+        <p className="text-sm text-amber-700 bg-amber-50 rounded-lg px-3 py-2">
+          Maksimalan broj časova u ovom terminu je {maxCasova}. Podešavanje može da menja superadmin u Admin → Podešavanja.
+        </p>
+      )}
       <div>
         <label className="block text-sm font-medium text-stone-700 mb-1">
           Klijent
@@ -143,7 +161,7 @@ export default function PredavanjeForm({
       <div className="flex items-center gap-3">
         <button
           type="submit"
-          disabled={loading}
+          disabled={loading || atLimit}
           className="rounded-lg bg-amber-600 px-4 py-2 text-white font-medium hover:bg-amber-700 disabled:opacity-50"
         >
           {loading ? 'Čuvanje...' : predavanje ? 'Sačuvaj' : 'Dodaj predavanje'}

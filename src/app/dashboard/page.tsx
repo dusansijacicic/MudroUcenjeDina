@@ -101,12 +101,12 @@ export default async function DashboardPage({
       .filter((t) => (t.predavanja?.length ?? 0) > 0);
   }
 
-  const { data: clients } = await supabase
-    .from('clients')
-    .select('id, ime, prezime')
-    .eq('instructor_id', instructorId)
-    .order('prezime')
-    .order('ime');
+  const { data: links } = await supabase
+    .from('instructor_clients')
+    .select('client:clients(id, ime, prezime)')
+    .eq('instructor_id', instructorId);
+  const clients = (links ?? []).map((l) => l.client).filter(Boolean) as unknown as { id: string; ime: string; prezime: string }[];
+  clients.sort((a, b) => (a.prezime ?? '').localeCompare(b.prezime ?? '') || (a.ime ?? '').localeCompare(b.ime ?? ''));
 
   return (
     <div>

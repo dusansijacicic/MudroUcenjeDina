@@ -34,7 +34,7 @@ export default function ClientForm({
     client?.kontakt_telefon ?? ''
   );
   const [placeno_casova, setPlacenoCasova] = useState(
-    client?.placeno_casova ?? 0
+    (client as { placeno_casova?: number } | null)?.placeno_casova ?? 0
   );
   const [login_email, setLoginEmail] = useState(
     (client as { login_email?: string | null })?.login_email ?? ''
@@ -49,8 +49,7 @@ export default function ClientForm({
     setError('');
     setLoading(true);
     try {
-      const payload = {
-        instructor_id: instructorId,
+      const clientPayload = {
         ime: ime.trim(),
         prezime: prezime.trim(),
         godiste: godiste ? parseInt(godiste, 10) : null,
@@ -58,18 +57,36 @@ export default function ClientForm({
         skola: skola.trim() || null,
         roditelj: roditelj.trim() || null,
         kontakt_telefon: kontakt_telefon.trim() || null,
-        placeno_casova: Math.max(0, placeno_casova),
         login_email: login_email.trim() || null,
       };
+      const placeno = Math.max(0, placeno_casova);
+
       if (client) {
         const { error: updateError } = await supabase
           .from('clients')
-          .update(payload)
+          .update(clientPayload)
           .eq('id', client.id);
         if (updateError) throw updateError;
+        const { error: linkError } = await supabase
+          .from('instructor_clients')
+          .update({ placeno_casova: placeno })
+          .eq('instructor_id', instructorId)
+          .eq('client_id', client.id);
+        if (linkError) throw linkError;
       } else {
-        const { error: insertError } = await supabase.from('clients').insert(payload);
+        const { data: newClient, error: insertError } = await supabase
+          .from('clients')
+          .insert(clientPayload)
+          .select('id')
+          .single();
         if (insertError) throw insertError;
+        if (!newClient) throw new Error('Klijent nije kreiran.');
+        const { error: linkError } = await supabase.from('instructor_clients').insert({
+          instructor_id: instructorId,
+          client_id: newClient.id,
+          placeno_casova: placeno,
+        });
+        if (linkError) throw linkError;
       }
       router.push(redirectAfterSave ?? '/dashboard/klijenti');
       router.refresh();
@@ -185,7 +202,7 @@ export default function ClientForm({
       </div>
       <div>
         <label className="block text-sm font-medium text-stone-700 mb-1">
-          Plaćeno časova (do sada)
+          Plaćeno časova (paket kod vas)
         </label>
         <input
           type="number"
@@ -194,6 +211,9 @@ export default function ClientForm({
           onChange={(e) => setPlacenoCasova(parseInt(e.target.value, 10) || 0)}
           className="w-full rounded-lg border border-stone-300 px-3 py-2 text-stone-800 max-w-[120px]"
         />
+        <p className="mt-1 text-xs text-stone-500 max-w-md">
+          Broj časova koje je klijent platio kod vas (paket). „Održano” se računa automatski: svaki put kada na predavanju označite „Održano”, taj čas se uračunava. Ostalo = Plaćeno − broj održanih časova kod vas.
+        </p>
       </div>
       {error && (
         <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">

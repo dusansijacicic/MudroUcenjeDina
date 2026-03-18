@@ -16,21 +16,29 @@ export default async function KlijentPage({
   const { instructor } = await getDashboardInstructor();
   if (!instructor) redirect('/login?reason=no_instructor');
 
-  const { data: client } = await supabase
-    .from('clients')
-    .select('*')
-    .eq('id', id)
+  const { data: link } = await supabase
+    .from('instructor_clients')
+    .select('placeno_casova, client:clients(*)')
     .eq('instructor_id', instructor.id)
+    .eq('client_id', id)
     .single();
 
-  if (!client) notFound();
+  if (!link?.client) notFound();
+  const client = { ...(link.client as unknown as Client), placeno_casova: link.placeno_casova };
 
   const { data: predavanja } = await supabase
     .from('predavanja')
-    .select('*, term:terms(date, slot_index)')
+    .select('*, term:terms(date, slot_index, instructor_id)')
     .eq('client_id', id)
     .order('created_at', { ascending: false })
     .limit(50);
+
+  const predavanjaForThisInstructor = (predavanja ?? []).filter(
+    (p) => (p.term as { instructor_id?: string })?.instructor_id === instructor.id
+  );
+  const odrzanoCount = predavanjaForThisInstructor.filter((p) => p.odrzano).length;
+  const placenoPaket = client.placeno_casova ?? 0;
+  const ostalo = Math.max(0, placenoPaket - odrzanoCount);
 
   return (
     <div className="space-y-8">
@@ -46,19 +54,35 @@ export default async function KlijentPage({
         </Link>
       </div>
 
-      <ClientForm instructorId={instructor.id} client={client as Client} />
+      <div className="rounded-lg bg-amber-50 border border-amber-100 p-4 text-sm">
+        <p className="font-medium text-stone-800 mb-1">Kako rade „plaćeno” i „održano”</p>
+        <p className="text-stone-600 mb-2">
+          <strong>Plaćeno (paket)</strong> = broj časova koje je klijent platio kod vas (unosite vi u formi ispod).{' '}
+          <strong>Održano</strong> = broj časova koje ste održali (označavate „Održano” na svakom predavanju).{' '}
+          <strong>Ostalo</strong> = koliko još časova iz paketa preostaje.
+        </p>
+        <p className="text-stone-700">
+          Kod vas: plaćeno <strong>{placenoPaket}</strong> · održano <strong>{odrzanoCount}</strong> → ostalo <strong>{ostalo}</strong>
+        </p>
+      </div>
+
+      <ClientForm instructorId={instructor.id} client={client} />
+
+      <p className="text-stone-500 text-sm">
+        „Plaćeno časova” je za vašu vezu sa ovim klijentom. Isti klijent može imati druge predavače.
+      </p>
 
       <section>
         <h2 className="text-lg font-medium text-stone-800 mb-3">
-          Istorija časova (šta je rađeno)
+          Istorija časova (šta je rađeno) – kod vas
         </h2>
         <div className="rounded-xl border border-stone-200 bg-white divide-y divide-stone-100">
-          {(predavanja ?? []).length === 0 ? (
+          {predavanjaForThisInstructor.length === 0 ? (
             <div className="p-6 text-center text-stone-500">
-              Nema zabeleženih predavanja za ovog klijenta.
+              Nema zabeleženih predavanja za ovog klijenta (kod vas).
             </div>
           ) : (
-            (predavanja ?? []).map((p) => (
+            predavanjaForThisInstructor.map((p) => (
               <PredavanjeHistoryRow key={p.id} predavanje={p} />
             ))
           )}

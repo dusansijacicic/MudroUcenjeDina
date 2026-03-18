@@ -26,9 +26,9 @@ export default async function UcenikLayout({
   }
 
   return (
-    <div className="min-h-screen bg-stone-50">
+    <div className="ucenik-layout min-h-screen bg-gradient-to-b from-[var(--kid-butter)] via-[#d6eaf880] to-[#ffe5d966]">
       <UcenikNav client={client as Client} />
-      <main className="max-w-3xl mx-auto px-4 py-6">{children}</main>
+      <main className="max-w-3xl mx-auto px-4 py-6 animate-in">{children}</main>
     </div>
   );
 }

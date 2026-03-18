@@ -19,7 +19,6 @@ export interface Instructor {
 
 export interface Client {
   id: string;
-  instructor_id: string;
   user_id: string | null;
   login_email: string | null; // email za prijavu učenika (povezuje nalog sa klijentom)
   ime: string;
@@ -29,8 +28,14 @@ export interface Client {
   skola: string | null;
   roditelj: string | null;
   kontakt_telefon: string | null;
-  placeno_casova: number;
   created_at: string;
+}
+
+/** Veza predavač–klijent (jedno dete može imati više predavača). placeno_casova je po ovoj vezi. */
+export interface InstructorClient {
+  instructor_id: string;
+  client_id: string;
+  placeno_casova: number;
 }
 
 /** Termin = jedan slot (datum + vreme). Može imati više predavanja. */
@@ -60,4 +65,20 @@ export interface TermWithPredavanja extends Term {
 export interface PredavanjeWithRelations extends Predavanje {
   term?: Term | null;
   client?: Client | null;
+}
+
+/** Zahtev klijenta za zakazivanje časa. instructor_id null = bilo koji predavač. */
+export interface ZahtevZaCas {
+  id: string;
+  client_id: string;
+  instructor_id: string | null;
+  requested_date: string;
+  requested_slot_index: number;
+  status: 'pending' | 'confirmed' | 'changed' | 'rejected';
+  resolved_at: string | null;
+  resolved_by: string | null;
+  created_term_id: string | null;
+  created_predavanje_id: string | null;
+  note_from_instructor: string | null;
+  created_at: string;
 }

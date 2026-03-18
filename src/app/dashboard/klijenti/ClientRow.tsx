@@ -3,7 +3,11 @@
 import Link from 'next/link';
 import type { Client } from '@/types/database';
 
-export default function ClientRow({ client }: { client: Client }) {
+export default function ClientRow({
+  client,
+}: {
+  client: Client & { placeno_casova?: number };
+}) {
   return (
     <tr className="border-b border-stone-100 hover:bg-stone-50/50">
       <td className="p-3">
@@ -24,7 +28,7 @@ export default function ClientRow({ client }: { client: Client }) {
         )}
       </td>
       <td className="p-3 text-right font-medium text-stone-700">
-        {client.placeno_casova}
+        {client.placeno_casova ?? 0}
       </td>
       <td className="p-3">
         <Link

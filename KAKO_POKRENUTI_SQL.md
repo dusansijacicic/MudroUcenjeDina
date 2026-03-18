@@ -30,8 +30,38 @@ SQL fajlovi iz projekta **ne pokreću se automatski**. Morate ih ručno izvršit
    - Kopiraj ceo sadržaj iz `supabase/migrations/003_instructor_color.sql`.
    - Nalepi i **Run**.
 
+   ### Četvrta migracija (004) – admin
+   - Kopiraj i pokreni `supabase/migrations/004_admin_users.sql`.
+
+   ### Peta migracija (005) – RLS fix za admin
+   - Kopiraj i pokreni `supabase/migrations/005_admin_users_select_fix.sql`.
+
+   ### Šesta migracija (006) – više predavača po klijentu
+   - Kopiraj i pokreni `supabase/migrations/006_instructor_clients_many_to_many.sql`.
+   - Dodaje tabelu `instructor_clients` i uklanja `instructor_id` iz `clients` (jedno dete može imati više predavača).
+
+   ### Sedma migracija (007) – predavači vide ko drži čas u istom terminu
+   - Kopiraj i pokreni `supabase/migrations/007_instructors_read_all_terms.sql`.
+   - Dozvoljava predavačima da čitaju sve termine i predavanja (da vide ko još drži čas u istom slotu).
+
+   ### Osma migracija (008) – učenik vidi ko je držao termin
+   - Kopiraj i pokreni `supabase/migrations/008_clients_read_terms_instructors.sql`.
+   - Dozvoljava učeniku (klijentu) da čita termine i predavače za svoja predavanja (ko je držao čas, šta je rađeno).
+
+   ### Deveta migracija (009) – zahtevi za čas
+   - Kopiraj i pokreni `supabase/migrations/009_zahtevi_za_cas.sql`.
+   - Tabela zahtevi_za_cas: klijent šalje zahtev (predavač, datum, slot), predavač potvrdi ili promeni termin.
+
+   ### Jedanaesta migracija (011) – zauzeti slotovi pri zakazivanju
+   - Kopiraj i pokreni `supabase/migrations/011_occupied_slots_rpc.sql`.
+   - RPC `get_occupied_slots(datum)`: klijent pri „Zatraži zakazivanje časa” vidi koji slotovi su zauzeti (označeno „zauzeto”).
+
+   ### Dvanaesta migracija (012) – dostupnost predavača
+   - Kopiraj i pokreni `supabase/migrations/012_instructor_availability.sql`.
+   - Tabele `instructor_weekly_availability` i `instructor_availability_periods`; RPC `get_instructor_available_slots(instructor_id, datum)`. Predavač u Podešavanjima postavlja kada je dostupan; klijent pri zakazivanju vidi samo te slotove (spojene u blokove).
+
 4. **Provera**  
-   U levom meniju otvori **Table Editor**. Trebalo bi da vidiš tabele: `instructors`, `clients`, `terms`, `predavanja`. Ako ih nema, vrati se na korak 3 i pokreni 001 (pa 002, pa 003).
+   U levom meniju otvori **Table Editor**. Trebalo bi da vidiš tabele: `instructors`, `clients`, `terms`, `predavanja`, `admin_users`, `instructor_clients`. Ako ih nema, vrati se na korak 3 i pokreni migracije redom.
 
 ---
 

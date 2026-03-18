@@ -27,11 +27,12 @@ export default async function EditPredavanjePage({
   const term = predavanje.term as { id: string; date: string; slot_index: number };
   const slotLabel = TIME_SLOTS[term.slot_index] ?? '—';
 
-  const { data: clients } = await supabase
-    .from('clients')
-    .select('id, ime, prezime')
-    .eq('instructor_id', instructor.id)
-    .order('prezime');
+  const { data: linkRows } = await supabase
+    .from('instructor_clients')
+    .select('client:clients(id, ime, prezime)')
+    .eq('instructor_id', instructor.id);
+  const clients = (linkRows ?? []).map((r) => r.client).filter(Boolean) as unknown as { id: string; ime: string; prezime: string }[];
+  clients.sort((a, b) => (a.prezime ?? '').localeCompare(b.prezime ?? '') || (a.ime ?? '').localeCompare(b.ime ?? ''));
 
   return (
     <div className="max-w-lg">

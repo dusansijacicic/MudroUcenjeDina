@@ -28,12 +28,16 @@ export default async function AdminViewKlijentiPage({
     .single();
   if (!instructor) notFound();
 
-  const { data: clients } = await supabase
-    .from('clients')
-    .select('*')
-    .eq('instructor_id', id)
-    .order('prezime')
-    .order('ime');
+  const { data: links } = await supabase
+    .from('instructor_clients')
+    .select('client_id, placeno_casova, client:clients(*)')
+    .eq('instructor_id', id);
+  type Row = { id: string; ime: string; prezime: string; godiste?: number; razred?: string; skola?: string; kontakt_telefon?: string; placeno_casova: number };
+  const rows = (links ?? []).map((l) => ({
+    ...(l.client as unknown as Record<string, unknown>),
+    placeno_casova: l.placeno_casova,
+  })) as Row[];
+  rows.sort((a, b) => (a.prezime ?? '').localeCompare(b.prezime ?? '') || (a.ime ?? '').localeCompare(b.ime ?? ''));
 
   const listHref = `/admin/view/${id}/klijenti`;
 
@@ -63,7 +67,7 @@ export default async function AdminViewKlijentiPage({
             </tr>
           </thead>
           <tbody>
-            {(clients ?? []).map((c) => (
+            {rows.map((c) => (
               <tr key={c.id} className="border-b border-stone-100">
                 <td className="p-3 font-medium text-stone-800">{c.ime} {c.prezime}</td>
                 <td className="p-3 text-stone-600">{c.godiste ?? '—'}</td>
@@ -75,7 +79,7 @@ export default async function AdminViewKlijentiPage({
             ))}
           </tbody>
         </table>
-        {(!clients || clients.length === 0) && (
+        {rows.length === 0 && (
           <div className="p-6 text-center text-stone-500">Nema klijenata.</div>
         )}
       </div>

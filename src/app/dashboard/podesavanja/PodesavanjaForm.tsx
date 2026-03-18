@@ -4,19 +4,45 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
-import { INSTRUCTOR_COLORS, DEFAULT_INSTRUCTOR_COLOR } from '@/lib/constants';
+import { INSTRUCTOR_COLORS, DEFAULT_INSTRUCTOR_COLOR, TIME_SLOTS } from '@/lib/constants';
 import type { Instructor } from '@/types/database';
 
-export default function PodesavanjaForm({ instructor }: { instructor: Instructor }) {
+const DAY_ORDER = [1, 2, 3, 4, 5, 6, 7] as const;
+
+export default function PodesavanjaForm({
+  instructor,
+  dayNames,
+  initialAvailability,
+}: {
+  instructor: Instructor;
+  dayNames: Record<number, string>;
+  initialAvailability: Record<number, number[]>;
+}) {
   const router = useRouter();
   const [ime, setIme] = useState(instructor.ime);
   const [prezime, setPrezime] = useState(instructor.prezime);
   const [telefon, setTelefon] = useState(instructor.telefon ?? '');
   const [color, setColor] = useState(instructor.color ?? DEFAULT_INSTRUCTOR_COLOR);
+  const [availability, setAvailability] = useState<Record<number, number[]>>(() => {
+    const next: Record<number, number[]> = { 1: [], 2: [], 3: [], 4: [], 5: [], 6: [], 7: [] };
+    for (const d of DAY_ORDER) next[d] = [...(initialAvailability[d] ?? [])];
+    return next;
+  });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
   const supabase = createClient();
+
+  const toggleSlot = (day: number, slotIndex: number) => {
+    setAvailability((prev) => {
+      const list = prev[day] ?? [];
+      const has = list.includes(slotIndex);
+      return {
+        ...prev,
+        [day]: has ? list.filter((s) => s !== slotIndex) : [...list, slotIndex].sort((a, b) => a - b),
+      };
+    });
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -33,6 +59,18 @@ export default function PodesavanjaForm({ instructor }: { instructor: Instructor
         })
         .eq('id', instructor.id);
       if (updateError) throw updateError;
+
+      await supabase.from('instructor_weekly_availability').delete().eq('instructor_id', instructor.id);
+      const rows: { instructor_id: string; day_of_week: number; slot_index: number }[] = [];
+      for (const d of DAY_ORDER) {
+        for (const slotIndex of availability[d] ?? []) {
+          rows.push({ instructor_id: instructor.id, day_of_week: d, slot_index: slotIndex });
+        }
+      }
+      if (rows.length > 0) {
+        const { error: insErr } = await supabase.from('instructor_weekly_availability').insert(rows);
+        if (insErr) throw insErr;
+      }
       router.refresh();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Greška pri čuvanju.');
@@ -102,6 +140,42 @@ export default function PodesavanjaForm({ instructor }: { instructor: Instructor
           ))}
         </div>
       </div>
+
+      <div className="border-t border-stone-200 pt-6">
+        <h2 className="text-base font-medium text-stone-800 mb-1">Dostupnost (nedeljni raspored)</h2>
+        <p className="text-xs text-stone-500 mb-4">
+          Označi u kojim terminima si dostupan tokom nedelje. Klijenti će pri zakazivanju videti samo ove slotove. Ako ništa ne označiš, za taj dan se neće nuditi nijedan termin.
+        </p>
+        <div className="space-y-3">
+          {DAY_ORDER.map((day) => (
+            <div key={day} className="flex flex-wrap items-center gap-2">
+              <span className="w-24 text-sm font-medium text-stone-700">{dayNames[day] ?? day}</span>
+              <div className="flex flex-wrap gap-1">
+                {TIME_SLOTS.map((label, slotIndex) => {
+                  const checked = (availability[day] ?? []).includes(slotIndex);
+                  return (
+                    <label
+                      key={slotIndex}
+                      className={`inline-flex items-center rounded px-2 py-1 text-xs cursor-pointer border ${
+                        checked ? 'bg-amber-100 border-amber-400 text-amber-900' : 'bg-stone-50 border-stone-200 text-stone-600'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggleSlot(day, slotIndex)}
+                        className="sr-only"
+                      />
+                      {label}
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
       {error && (
         <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">
           {error}

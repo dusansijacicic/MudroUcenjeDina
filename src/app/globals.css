@@ -3,13 +3,42 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  /* Dečje / prijateljske boje (klijentska strana) */
+  --kid-mint: #d4edda;
+  --kid-mint-dark: #a8dfb4;
+  --kid-peach: #ffe5d9;
+  --kid-peach-dark: #ffc9b9;
+  --kid-sky: #d6eaf8;
+  --kid-sky-dark: #aed6f1;
+  --kid-lavender: #e8daef;
+  --kid-lavender-dark: #d7bde2;
+  --kid-butter: #fef9e7;
+  --kid-butter-dark: #f9e79f;
+  --kid-coral: #fadbd8;
+  --kid-teal: #a3e4d7;
+  --kid-text: #2c3e50;
+  --kid-text-muted: #5d6d7e;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+  /* Dečje boje u Tailwind */
+  --color-kid-mint: var(--kid-mint);
+  --color-kid-peach: var(--kid-peach);
+  --color-kid-sky: var(--kid-sky);
+  --color-kid-lavender: var(--kid-lavender);
+  --color-kid-butter: var(--kid-butter);
+  --color-kid-coral: var(--kid-coral);
+  --color-kid-teal: var(--kid-teal);
+  --color-kid-text: var(--kid-text);
+  --color-kid-text-muted: var(--kid-text-muted);
+  /* Animacije */
+  --animate-fade-in-up: fade-in-up 0.5s ease-out forwards;
+  --animate-scale-in: scale-in 0.35s ease-out forwards;
+  --animate-gentle-pulse: gentle-pulse 2s ease-in-out infinite;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -19,8 +48,81 @@
   }
 }
 
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes gentle-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.92; }
+}
+
+@keyframes slide-in-right {
+  from {
+    opacity: 0;
+    transform: translateX(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans);
+}
+
+/* Utility za animacije (pošteda prefers-reduced-motion) */
+.animate-in {
+  animation: fade-in-up 0.5s ease-out forwards;
+}
+.animate-in-delay-1 { animation-delay: 0.08s; opacity: 0; animation: fade-in-up 0.5s ease-out forwards; animation-fill-mode: forwards; }
+.animate-in-delay-2 { animation-delay: 0.16s; opacity: 0; animation: fade-in-up 0.5s ease-out forwards; animation-fill-mode: forwards; }
+.animate-in-delay-3 { animation-delay: 0.24s; opacity: 0; animation: fade-in-up 0.5s ease-out forwards; animation-fill-mode: forwards; }
+.animate-in-delay-4 { animation-delay: 0.32s; opacity: 0; animation: fade-in-up 0.5s ease-out forwards; animation-fill-mode: forwards; }
+.animate-scale-in {
+  animation: scale-in 0.35s ease-out forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-in,
+  .animate-in-delay-1,
+  .animate-in-delay-2,
+  .animate-in-delay-3,
+  .animate-in-delay-4,
+  .animate-scale-in {
+    animation: none;
+    opacity: 1;
+  }
+}
+
+/* Blaga tranzicija za interaktivne elemente */
+.transition-smooth {
+  transition: color 0.2s ease, background-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+}
+.hover-lift:hover {
+  transform: translateY(-2px);
+}
+.hover-lift:active {
+  transform: translateY(0);
 }

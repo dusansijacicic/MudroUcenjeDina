@@ -54,3 +54,43 @@ export async function createInstructorAsAdmin(formData: FormData) {
 
   redirect('/admin');
 }
+
+export async function createTermAsAdmin(instructorId: string, date: string, slotIndex: number): Promise<{ termId?: string; instructorId?: string; error?: string }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: 'Niste ulogovani.' };
+
+  const { data: admin } = await supabase
+    .from('admin_users')
+    .select('user_id')
+    .eq('user_id', user.id)
+    .single();
+  if (!admin) return { error: 'Samo admin može da zakazuje termine za predavače.' };
+
+  const slot = Math.min(12, Math.max(0, slotIndex));
+  const dateStr = date.slice(0, 10);
+
+  const { data: existing } = await supabase
+    .from('terms')
+    .select('id')
+    .eq('instructor_id', instructorId)
+    .eq('date', dateStr)
+    .eq('slot_index', slot)
+    .single();
+
+  if (existing) {
+    return { termId: existing.id, instructorId };
+  }
+
+  const { data: inserted, error } = await supabase
+    .from('terms')
+    .insert({ instructor_id: instructorId, date: dateStr, slot_index: slot })
+    .select('id')
+    .single();
+
+  if (error) return { error: error.message };
+  if (!inserted) return { error: 'Termin nije kreiran.' };
+  return { termId: inserted.id, instructorId };
+}
