@@ -9,7 +9,7 @@ export default async function DashboardZahteviPage() {
   const { instructor } = await getDashboardInstructor();
   if (!instructor) redirect('/login?reason=no_instructor');
 
-  let zahtevi: unknown[] = [];
+  let zahtevi: Zahtev[] = [];
   try {
     const adminSupabase = createAdminClient();
     const { data, error } = await adminSupabase
@@ -20,14 +20,20 @@ export default async function DashboardZahteviPage() {
     if (error) {
       console.error('[zahtevi page] load failed', error.message, error.code);
     } else {
-      zahtevi = data ?? [];
+      const raw = (data ?? []) as unknown[];
+      zahtevi = raw.map((r) => {
+        const row = r as Record<string, unknown>;
+        const client = row.client;
+        const clientObj = Array.isArray(client) ? client[0] : client;
+        return { ...row, client: clientObj ?? null } as Zahtev;
+      });
     }
   } catch (e) {
     console.error('[zahtevi page] createAdminClient or query failed', e);
   }
 
-  const pending = zahtevi.filter((z: { status?: string }) => z.status === 'pending') as Zahtev[];
-  const resolved = zahtevi.filter((z: { status?: string }) => z.status !== 'pending') as Zahtev[];
+  const pending = zahtevi.filter((z) => z.status === 'pending');
+  const resolved = zahtevi.filter((z) => z.status !== 'pending');
 
   return (
     <div>
