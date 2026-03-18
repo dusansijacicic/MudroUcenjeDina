@@ -32,7 +32,8 @@ export default function TermTypeEditForm({
       return;
     }
     const cena = cenaPoCasu.trim() ? parseFloat(cenaPoCasu.replace(',', '.')) : null;
-    if (cenaPoCasu.trim() && (cena === undefined || !Number.isFinite(cena) || cena < 0)) {
+    const cenaInvalid = cenaPoCasu.trim() && (cena == null || !Number.isFinite(cena) || Number(cena) < 0);
+    if (cenaInvalid) {
       setError('Cena mora biti nenegativan broj.');
       return;
     }
