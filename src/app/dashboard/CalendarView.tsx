@@ -168,7 +168,8 @@ function CellContent({
   onDropCell: (date: string, slot: number) => void | Promise<void>;
 }) {
   const borderColor = term?.classroom?.color ?? instructorColor;
-  const bgLight = hexWithAlpha(instructorColor, 0.15);
+  const textColor = instructorColor;
+  const bgLight = hexWithAlpha(term?.classroom?.color ?? instructorColor, 0.08);
   if (!term) {
     return (
       <Link
@@ -192,23 +193,21 @@ function CellContent({
         <Link
           href={`/dashboard/termin/${term.id}`}
           className="block rounded-lg border-2 p-2 transition-opacity hover:opacity-90"
-          style={{ borderColor, backgroundColor: term.classroom?.color ? hexWithAlpha(term.classroom.color, 0.12) : bgLight }}
+          style={{ borderColor, backgroundColor: bgLight }}
           draggable
           onDragStart={() => setDraggedTermId(term.id)}
           onDragEnd={() => setDraggedTermId(null)}
         >
           {term.classroom && (
-            <span className="text-xs text-stone-500 block mb-0.5" style={{ color: term.classroom.color }}>
-              {term.classroom.naziv}
-            </span>
+            <span className="text-xs block mb-0.5 text-stone-500">{term.classroom.naziv}</span>
           )}
           {(term.predavanja ?? []).length === 0 ? (
-            <span className="text-stone-500 text-sm">+ Dodaj predavanje</span>
+            <span className="text-sm" style={{ color: textColor }}>+ Dodaj predavanje</span>
           ) : (
             <>
               {(term.predavanja ?? []).map((p) => (
-                <div key={p.id} className="text-sm">
-                  <span className="font-medium text-stone-800">
+                <div key={p.id} className="text-sm" style={{ color: textColor }}>
+                  <span className="font-medium">
                     {p.client ? `${p.client.ime} ${p.client.prezime}` : '—'}
                   </span>
                   <div className="flex gap-1 mt-0.5 flex-wrap">
@@ -224,22 +223,21 @@ function CellContent({
       {otherTermsInSlot.map((ot) => {
         const iname = ot.instructor ? `${ot.instructor.ime} ${ot.instructor.prezime}` : '—';
         const preds = ot.predavanja ?? [];
-        const otBorder = ot.classroom?.color ?? ot.instructor?.color ?? '#e5e7eb';
-        const otBg = ot.classroom?.color ? hexWithAlpha(ot.classroom.color, 0.12) : hexWithAlpha(ot.instructor?.color ?? '#94a3b8', 0.15);
+        const otBorder = ot.classroom?.color ?? '#e5e7eb';
+        const otTextColor = ot.instructor?.color ?? '#475569';
+        const otBg = ot.classroom?.color ? hexWithAlpha(ot.classroom.color, 0.08) : 'rgba(0,0,0,0.03)';
         return (
           <div
             key={ot.id}
             className="rounded-lg border-2 p-2 text-xs"
-            style={{ borderColor: otBorder, backgroundColor: otBg }}
+            style={{ borderColor: otBorder, backgroundColor: otBg, color: otTextColor }}
           >
             {ot.classroom && (
-              <span className="block text-stone-600 font-medium" style={{ color: ot.classroom.color }}>
-                {ot.classroom.naziv}
-              </span>
+              <span className="block text-stone-500 font-medium">{ot.classroom.naziv}</span>
             )}
-            <span className="font-medium text-stone-700">{iname}</span>
+            <span className="font-medium">{iname}</span>
             {preds.length > 0 && (
-              <span className="ml-1 text-stone-600">
+              <span className="ml-1 opacity-90">
                 {preds.map((p) => (p.client ? `${p.client.ime} ${p.client.prezime}` : '—')).join(', ')}
               </span>
             )}

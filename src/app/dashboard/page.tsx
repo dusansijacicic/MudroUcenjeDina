@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation';
+import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getDashboardInstructor } from '@/lib/dashboard';
 import { getOdrzanoPoVrstamaZaPredavaca } from '@/app/admin/actions';
@@ -71,15 +72,6 @@ export default async function DashboardPage({
     dateTo = end.toISOString().slice(0, 10);
   }
 
-  const admin = createAdminClient();
-  const { data: allTermsRaw } = await admin
-    .from('terms')
-    .select('id, instructor_id, date, slot_index, classroom_id, instructor:instructors(id, ime, prezime, color), classroom:classrooms(id, naziv, color), predavanja(*, client:clients(id, ime, prezime))')
-    .gte('date', dateFrom)
-    .lte('date', dateTo)
-    .order('date')
-    .order('slot_index');
-
   type TermRow = {
     id: string;
     instructor_id: string;
@@ -90,6 +82,30 @@ export default async function DashboardPage({
     classroom?: { id: string; naziv: string; color?: string | null } | { id: string; naziv: string; color?: string | null }[] | null;
     predavanja?: RawTerm['predavanja'];
   };
+
+  let allTermsRaw: TermRow[] | null = null;
+  let classroomsRaw: { id: string; naziv: string | null; color: string | null }[] = [];
+  let serviceRoleUsed = false;
+  try {
+    const admin = createAdminClient();
+    serviceRoleUsed = true;
+    const [termsRes, classRes] = await Promise.all([
+      admin.from('terms').select('id, instructor_id, date, slot_index, classroom_id, instructor:instructors(id, ime, prezime, color), classroom:classrooms(id, naziv, color), predavanja(*, client:clients(id, ime, prezime))').gte('date', dateFrom).lte('date', dateTo).order('date').order('slot_index'),
+      admin.from('classrooms').select('id, naziv, color').order('naziv'),
+    ]);
+    allTermsRaw = (termsRes.data ?? []) as TermRow[];
+    classroomsRaw = (classRes.data ?? []);
+  } catch (err) {
+    console.error('[dashboard] createAdminClient or terms fetch failed – using fallback (samo vaši termini). Postavite SUPABASE_SERVICE_ROLE_KEY na Vercel.', err);
+    const supabase = await createClient();
+    const [termsRes, classRes] = await Promise.all([
+      supabase.from('terms').select('id, instructor_id, date, slot_index, classroom_id, instructor:instructors(id, ime, prezime, color), classroom:classrooms(id, naziv, color), predavanja(*, client:clients(id, ime, prezime))').eq('instructor_id', instructorId).gte('date', dateFrom).lte('date', dateTo).order('date').order('slot_index'),
+      supabase.from('classrooms').select('id, naziv, color').order('naziv'),
+    ]);
+    allTermsRaw = (termsRes.data ?? []) as TermRow[];
+    classroomsRaw = (classRes.data ?? []);
+  }
+
   const allTerms = (allTermsRaw ?? []) as TermRow[];
   const norm = (t: TermRow) => ({
     instructor: Array.isArray(t.instructor) ? t.instructor[0] : t.instructor,
@@ -135,8 +151,6 @@ export default async function DashboardPage({
       .filter((ot) => (ot.predavanja?.length ?? 0) > 0);
   }
 
-  const { data: classroomsRaw } = await admin.from('classrooms').select('id, naziv, color').order('naziv');
-
   const clientMap = new Map<string, { id: string; ime: string; prezime: string }>();
   for (const t of allTerms) {
     for (const p of t.predavanja ?? []) {
@@ -175,6 +189,11 @@ export default async function DashboardPage({
   return (
     <div className="animate-in">
       <DashboardErrorToast />
+      {!serviceRoleUsed && (
+        <div className="mb-4 rounded-xl border-2 border-amber-300 bg-amber-50 p-4 text-amber-900 text-sm" role="alert">
+          <strong>Termini drugih predavača nisu učitani.</strong> Na Vercel-u u Environment Variables dodajte <code className="bg-amber-100 px-1 rounded">SUPABASE_SERVICE_ROLE_KEY</code> (Supabase → Project Settings → API → service_role secret), pa redeploy.
+        </div>
+      )}
       <div className="flex items-center justify-between mb-4 flex-wrap gap-2 animate-in-delay-1">
         <h1 className="text-xl font-semibold text-stone-800">Kalendar</h1>
         <div className="flex items-center gap-2 flex-wrap">
