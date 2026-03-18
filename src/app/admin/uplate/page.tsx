@@ -34,11 +34,11 @@ export default async function AdminUplatePage() {
 
   type UplataRow = {
     id: string;
-    created_at: unknown;
-    iznos: unknown;
-    broj_casova: unknown;
+    created_at: string | null;
+    iznos: number | null;
+    broj_casova: number | null;
     popust_percent: number | null | undefined;
-    napomena: unknown;
+    napomena: string | null;
     instructor: { ime?: string; prezime?: string } | null;
     client: { ime?: string; prezime?: string } | null;
     term_type: { naziv?: string } | null;
@@ -49,11 +49,11 @@ export default async function AdminUplatePage() {
     const tt = Array.isArray(r.term_type) ? r.term_type[0] : r.term_type;
     return {
       id: r.id as string,
-      created_at: r.created_at,
-      iznos: r.iznos,
-      broj_casova: r.broj_casova,
+      created_at: (r.created_at as string | null) ?? null,
+      iznos: typeof r.iznos === 'number' ? r.iznos : null,
+      broj_casova: typeof r.broj_casova === 'number' ? r.broj_casova : null,
       popust_percent: r.popust_percent as number | null | undefined,
-      napomena: r.napomena,
+      napomena: (r.napomena as string | null) ?? null,
       instructor: instr as { ime?: string; prezime?: string } | null,
       client: client as { ime?: string; prezime?: string } | null,
       term_type: tt as { naziv?: string } | null,
