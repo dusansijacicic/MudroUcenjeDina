@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
+import Link from 'next/link';
 import { getDashboardInstructor } from '@/lib/dashboard';
 import ClientRow from './ClientRow';
 
@@ -26,11 +27,17 @@ export default async function KlijentiPage() {
 
   return (
     <div>
-      <div className="mb-6">
+      <div className="flex items-center justify-between mb-6">
         <h1 className="text-xl font-semibold text-stone-800">Klijenti</h1>
+        <Link
+          href="/dashboard/klijenti/novi"
+          className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700"
+        >
+          Novi klijent
+        </Link>
       </div>
       <p className="text-stone-500 text-sm mb-4">
-        Isti klijent (dete) može biti vezan za više predavača. Ovde su klijenti povezani sa vama; „Plaćeno časova” je za vas. Novog klijenta može da doda samo super admin.
+        Isti klijent (dete) može biti vezan za više predavača. Ovde su klijenti povezani sa vama; „Plaćeno časova” je za vas.
       </p>
       <div className="rounded-xl border border-stone-200 bg-white overflow-hidden">
         <table className="w-full text-sm">
@@ -53,7 +60,7 @@ export default async function KlijentiPage() {
         </table>
         {(rows.length === 0) && (
           <div className="p-8 text-center text-stone-500">
-            Nema klijenata povezanih sa vama. Super admin ih dodaje u Admin → Svi klijenti.
+            Nema klijenata. Dodajte prvog preko „Novi klijent”.
           </div>
         )}
       </div>

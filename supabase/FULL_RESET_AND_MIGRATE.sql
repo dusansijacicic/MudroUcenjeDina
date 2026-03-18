@@ -6,9 +6,7 @@
 -- Zatim: Authentication → Users → Add user (dusan, dina, nekodete, lozinka 123456).
 -- Zatim pokreni seed_mock_data.sql u SQL Editoru.
 --
--- Šema uključuje: tabele (instructors, clients, instructor_clients, terms,
--- predavanja, admin_users, app_settings, zahtevi_za_cas, availability), RLS
--- (samo admin kreira predavače i klijente; predavači vide/ažuriraju svoje),
+-- Šema: tabele, RLS (admin + predavač mogu dodavati klijente; predavač vidi/menja svoje),
 -- funkcije (link_client_to_user, get_occupied_slots, get_instructor_available_slots).
 -- =============================================================================
 
@@ -190,14 +188,17 @@ CREATE POLICY "Instructors see linked clients" ON clients FOR SELECT USING (
 CREATE POLICY "Instructors update linked clients" ON clients FOR UPDATE USING (
   id IN (SELECT client_id FROM instructor_clients WHERE instructor_id IN (SELECT id FROM instructors WHERE user_id = auth.uid()))
 );
-CREATE POLICY "Admins insert clients" ON clients FOR INSERT WITH CHECK (
-  auth.uid() IN (SELECT user_id FROM admin_users)
+CREATE POLICY "Instructors or admin insert clients" ON clients FOR INSERT WITH CHECK (
+  auth.uid() IN (SELECT user_id FROM instructors) OR auth.uid() IN (SELECT user_id FROM admin_users)
 );
 CREATE POLICY "Clients read own row" ON clients FOR SELECT USING (user_id = auth.uid());
 CREATE POLICY "Admins full access clients" ON clients FOR ALL USING (auth.uid() IN (SELECT user_id FROM admin_users));
 
--- instructor_clients
-CREATE POLICY "Instructors own instructor_clients" ON instructor_clients FOR SELECT USING (
+-- instructor_clients (predavač može da dodaje i menja svoje veze)
+CREATE POLICY "Instructors own instructor_clients" ON instructor_clients FOR ALL USING (
+  instructor_id IN (SELECT id FROM instructors WHERE user_id = auth.uid())
+);
+CREATE POLICY "Instructors insert instructor_clients" ON instructor_clients FOR INSERT WITH CHECK (
   instructor_id IN (SELECT id FROM instructors WHERE user_id = auth.uid())
 );
 CREATE POLICY "Instructors update instructor_clients" ON instructor_clients FOR UPDATE USING (

@@ -43,7 +43,9 @@ export async function createInstructorAsAdmin(formData: FormData) {
     email_confirm: true,
   });
   if (authError) {
-    return { error: authError.message };
+    const msg = authError.message || 'Greška pri kreiranju naloga.';
+    const hint = authError.status === 422 ? ' Email je možda već u upotrebi.' : '';
+    return { error: msg + hint };
   }
   if (!newUser.user) {
     return { error: 'Korisnik nije kreiran.' };
@@ -57,7 +59,7 @@ export async function createInstructorAsAdmin(formData: FormData) {
     color: '#0d9488',
   });
   if (insertError) {
-    return { error: insertError.message };
+    return { error: 'Profil predavača: ' + (insertError.message || insertError.code || 'nepoznata greška.') };
   }
 
   redirect('/admin');
