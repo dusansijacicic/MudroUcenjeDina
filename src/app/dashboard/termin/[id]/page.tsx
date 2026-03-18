@@ -38,7 +38,11 @@ export default async function TerminDetailPage({
 
   const maxCasova = await getMaxCasovaPoTerminu();
   const currentCount = (predavanja ?? []).length;
-  const canAddMore = currentCount < maxCasova;
+  // U jednom slotu (npr. 9:00) može biti više termina (max_termina_po_slotu), svaki termin = jedan predavač.
+  // Ovaj termin pripada ulogovanom predavaču; predavanja u njemu su samo njegova.
+  // "Dodaj predavanje" sakriti ako ovaj predavač već ima bar jedno predavanje u ovom (svom) terminu.
+  const ovajPredavacImaPredavanjeUTerminu = currentCount > 0;
+  const canAddMore = currentCount < maxCasova && !ovajPredavacImaPredavanjeUTerminu;
 
   const { data: otherTerms } = await admin
     .from('terms')
@@ -124,7 +128,9 @@ export default async function TerminDetailPage({
           </Link>
         ) : (
           <p className="text-sm text-amber-700 bg-amber-50 rounded-lg px-3 py-2 inline-block">
-            Maksimalan broj časova u ovom terminu ({maxCasova}) je dostignut. Superadmin može da poveća limit u Podešavanjima.
+            {ovajPredavacImaPredavanjeUTerminu
+              ? 'Vi (ulogovani predavač) već imate zakazan čas u ovom terminu. Dodavanje novog predavanja nije dozvoljeno.'
+              : `Maksimalan broj časova u ovom terminu (${maxCasova}) je dostignut.`}
           </p>
         )}
         <span className="ml-2 text-stone-500 text-sm">{currentCount} / {maxCasova} časova</span>
