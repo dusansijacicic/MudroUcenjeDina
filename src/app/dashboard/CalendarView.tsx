@@ -14,6 +14,7 @@ export type RawTerm = {
   instructor_id: string;
   date: string;
   slot_index: number;
+  classroom?: { id: string; naziv: string; color?: string } | null;
   predavanja?: Array<{
     id: string;
     term_id: string;
@@ -25,8 +26,11 @@ export type RawTerm = {
   }>;
 };
 
-/** Tuđi termin (samo prikaz, bez linka) */
-export type OtherTerm = RawTerm & { instructor?: { ime: string; prezime: string } | null };
+/** Tuđi termin (samo prikaz, bez linka) – boja predavača i učionice za color coding */
+export type OtherTerm = RawTerm & {
+  instructor?: { ime: string; prezime: string; color?: string } | null;
+  classroom?: { id: string; naziv: string; color?: string } | null;
+};
 
 function getWeekDates(start: string) {
   const dates: string[] = [];
@@ -163,6 +167,7 @@ function CellContent({
   setDraggedTermId: (id: string | null) => void;
   onDropCell: (date: string, slot: number) => void | Promise<void>;
 }) {
+  const borderColor = term?.classroom?.color ?? instructorColor;
   const bgLight = hexWithAlpha(instructorColor, 0.15);
   if (!term) {
     return (
@@ -187,11 +192,16 @@ function CellContent({
         <Link
           href={`/dashboard/termin/${term.id}`}
           className="block rounded-lg border-2 p-2 transition-opacity hover:opacity-90"
-          style={{ borderColor: instructorColor, backgroundColor: bgLight }}
+          style={{ borderColor, backgroundColor: term.classroom?.color ? hexWithAlpha(term.classroom.color, 0.12) : bgLight }}
           draggable
           onDragStart={() => setDraggedTermId(term.id)}
           onDragEnd={() => setDraggedTermId(null)}
         >
+          {term.classroom && (
+            <span className="text-xs text-stone-500 block mb-0.5" style={{ color: term.classroom.color }}>
+              {term.classroom.naziv}
+            </span>
+          )}
           {(term.predavanja ?? []).length === 0 ? (
             <span className="text-stone-500 text-sm">+ Dodaj predavanje</span>
           ) : (
@@ -214,11 +224,22 @@ function CellContent({
       {otherTermsInSlot.map((ot) => {
         const iname = ot.instructor ? `${ot.instructor.ime} ${ot.instructor.prezime}` : '—';
         const preds = ot.predavanja ?? [];
+        const otBorder = ot.classroom?.color ?? ot.instructor?.color ?? '#e5e7eb';
+        const otBg = ot.classroom?.color ? hexWithAlpha(ot.classroom.color, 0.12) : hexWithAlpha(ot.instructor?.color ?? '#94a3b8', 0.15);
         return (
-          <div key={ot.id} className="rounded-lg border border-stone-200 bg-stone-50/80 p-2 text-stone-600 text-xs">
-            <span className="font-medium">{iname}</span>
+          <div
+            key={ot.id}
+            className="rounded-lg border-2 p-2 text-xs"
+            style={{ borderColor: otBorder, backgroundColor: otBg }}
+          >
+            {ot.classroom && (
+              <span className="block text-stone-600 font-medium" style={{ color: ot.classroom.color }}>
+                {ot.classroom.naziv}
+              </span>
+            )}
+            <span className="font-medium text-stone-700">{iname}</span>
             {preds.length > 0 && (
-              <span className="ml-1">
+              <span className="ml-1 text-stone-600">
                 {preds.map((p) => (p.client ? `${p.client.ime} ${p.client.prezime}` : '—')).join(', ')}
               </span>
             )}

@@ -9,6 +9,9 @@ import DashboardErrorToast from './DashboardErrorToast';
 import { DEFAULT_INSTRUCTOR_COLOR } from '@/lib/constants';
 import type { RawTerm, OtherTerm } from './CalendarView';
 
+// Uvek sveži podaci po korisniku – predavač mora da vidi i tuđe termine (samo pregled).
+export const dynamic = 'force-dynamic';
+
 export default async function DashboardPage({
   searchParams,
 }: {
@@ -71,32 +74,54 @@ export default async function DashboardPage({
   const admin = createAdminClient();
   const { data: allTermsRaw } = await admin
     .from('terms')
-    .select('*, instructor:instructors(id, ime, prezime), predavanja(*, client:clients(id, ime, prezime))')
+    .select('id, instructor_id, date, slot_index, classroom_id, instructor:instructors(id, ime, prezime, color), classroom:classrooms(id, naziv, color), predavanja(*, client:clients(id, ime, prezime))')
     .gte('date', dateFrom)
     .lte('date', dateTo)
     .order('date')
     .order('slot_index');
 
-  const allTerms = (allTermsRaw ?? []) as Array<RawTerm & { instructor?: { ime: string; prezime: string } | null }>;
+  type TermRow = {
+    id: string;
+    instructor_id: string;
+    date: string;
+    slot_index: number;
+    classroom_id?: string | null;
+    instructor?: { id: string; ime: string; prezime: string; color?: string | null } | { id: string; ime: string; prezime: string; color?: string | null }[] | null;
+    classroom?: { id: string; naziv: string; color?: string | null } | { id: string; naziv: string; color?: string | null }[] | null;
+    predavanja?: RawTerm['predavanja'];
+  };
+  const allTerms = (allTermsRaw ?? []) as TermRow[];
+  const norm = (t: TermRow) => ({
+    instructor: Array.isArray(t.instructor) ? t.instructor[0] : t.instructor,
+    classroom: Array.isArray(t.classroom) ? t.classroom[0] : t.classroom,
+  });
   const myTerms = allTerms.filter((t) => t.instructor_id === instructorId);
   const otherTerms: OtherTerm[] = allTerms
     .filter((t) => t.instructor_id !== instructorId)
-    .map((t) => ({
+    .map((t) => {
+      const { instructor: inst, classroom: room } = norm(t);
+      return {
+        id: t.id,
+        instructor_id: t.instructor_id,
+        date: t.date,
+        slot_index: t.slot_index,
+        predavanja: t.predavanja,
+        instructor: inst ? { ime: inst.ime, prezime: inst.prezime, color: inst.color ?? undefined } : null,
+        classroom: room ? { id: room.id, naziv: room.naziv, color: room.color ?? undefined } : null,
+      };
+    });
+
+  let terms: RawTerm[] = myTerms.map((t) => {
+    const { instructor: inst, classroom: room } = norm(t);
+    return {
       id: t.id,
       instructor_id: t.instructor_id,
       date: t.date,
       slot_index: t.slot_index,
       predavanja: t.predavanja,
-      instructor: t.instructor ?? null,
-    }));
-
-  let terms: RawTerm[] = myTerms.map((t) => ({
-    id: t.id,
-    instructor_id: t.instructor_id,
-    date: t.date,
-    slot_index: t.slot_index,
-    predavanja: t.predavanja,
-  }));
+      classroom: room ? { id: room.id, naziv: room.naziv, color: room.color ?? undefined } : null,
+    };
+  });
   if (clientFilterId) {
     terms = terms
       .map((t) => ({
@@ -106,14 +131,34 @@ export default async function DashboardPage({
       .filter((t) => (t.predavanja?.length ?? 0) > 0);
   }
 
-  const { data: links } = await admin
-    .from('instructor_clients')
-    .select('client:clients(id, ime, prezime)')
-    .eq('instructor_id', instructorId);
+  const [{ data: links }, { data: classroomsRaw }] = await Promise.all([
+    admin.from('instructor_clients').select('client:clients(id, ime, prezime)').eq('instructor_id', instructorId),
+    admin.from('classrooms').select('id, naziv, color').order('naziv'),
+  ]);
   const clients = (links ?? []).map((l) => l.client).filter(Boolean) as unknown as { id: string; ime: string; prezime: string }[];
   clients.sort((a, b) => (a.prezime ?? '').localeCompare(b.prezime ?? '') || (a.ime ?? '').localeCompare(b.ime ?? ''));
 
   const odrzanoPoVrstama = await getOdrzanoPoVrstamaZaPredavaca(instructorId);
+
+  const legendClassrooms = (classroomsRaw ?? []).map((c) => ({
+    id: c.id,
+    naziv: c.naziv ?? '',
+    color: c.color ?? '#94a3b8',
+  }));
+  const seenInstructorIds = new Set<string>();
+  const legendInstructors: { id: string; ime: string; prezime: string; color: string }[] = [];
+  for (const t of allTerms) {
+    const { instructor: inst } = norm(t);
+    if (!inst || seenInstructorIds.has(inst.id)) continue;
+    seenInstructorIds.add(inst.id);
+    legendInstructors.push({
+      id: inst.id,
+      ime: inst.ime ?? '',
+      prezime: inst.prezime ?? '',
+      color: inst.color ?? DEFAULT_INSTRUCTOR_COLOR,
+    });
+  }
+  legendInstructors.sort((a, b) => (a.prezime || '').localeCompare(b.prezime || '') || (a.ime || '').localeCompare(b.ime || ''));
 
   return (
     <div className="animate-in">
@@ -130,18 +175,31 @@ export default async function DashboardPage({
           <AddTermButton instructorId={instructorId} />
         </div>
       </div>
-      <div className="mb-3 flex items-center gap-3 text-sm text-stone-600 animate-in-delay-1">
-        <span className="font-medium">Legenda:</span>
-        <span className="flex items-center gap-1.5">
-          <span
-            className="inline-block h-4 w-4 rounded border border-stone-300"
-            style={{ backgroundColor: instructorColor }}
-          />
-          <span>Vi ({instructor.ime} {instructor.prezime})</span>
-        </span>
-        {otherTerms.length > 0 && (
-          <span className="text-stone-400">| Ostali predavači: sivi blokovi (samo pregled)</span>
-        )}
+      <div className="mb-4 rounded-xl border border-stone-200 bg-white p-4 text-sm animate-in-delay-1">
+        <p className="font-medium text-stone-700 mb-2">Legenda</p>
+        <div className="flex flex-wrap gap-x-6 gap-y-2">
+          <span className="text-stone-500">Učionice:</span>
+          {legendClassrooms.length === 0 ? (
+            <span className="text-stone-400">Nema učionica</span>
+          ) : (
+            legendClassrooms.map((c) => (
+              <span key={c.id} className="flex items-center gap-1.5">
+                <span className="inline-block h-3.5 w-3.5 rounded border border-stone-300 shrink-0" style={{ backgroundColor: c.color }} />
+                <span className="text-stone-700">{c.naziv}</span>
+              </span>
+            ))
+          )}
+          <span className="w-px h-4 bg-stone-200 shrink-0" aria-hidden />
+          <span className="text-stone-500">Predavači (zauzeli termin):</span>
+          {legendInstructors.map((inst) => (
+            <span key={inst.id} className="flex items-center gap-1.5">
+              <span className="inline-block h-3.5 w-3.5 rounded border border-stone-300 shrink-0" style={{ backgroundColor: inst.color }} />
+              <span className={inst.id === instructorId ? 'font-medium text-stone-800' : 'text-stone-700'}>
+                {inst.ime} {inst.prezime}{inst.id === instructorId ? ' (vi)' : ''}
+              </span>
+            </span>
+          ))}
+        </div>
       </div>
       {odrzanoPoVrstama.length > 0 && (
         <div className="mb-4 rounded-xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm text-stone-700 animate-in-delay-2 ui-transition shadow-sm">
