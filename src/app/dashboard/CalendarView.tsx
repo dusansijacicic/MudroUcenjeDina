@@ -21,6 +21,9 @@ export type RawTerm = {
   }>;
 };
 
+/** Tuđi termin (samo prikaz, bez linka) */
+export type OtherTerm = RawTerm & { instructor?: { ime: string; prezime: string } | null };
+
 function getWeekDates(start: string) {
   const dates: string[] = [];
   const d = new Date(start + 'T12:00:00');
@@ -43,6 +46,10 @@ function termByKey(terms: RawTerm[], date: string, slot: number) {
   return terms.find((t) => t.date === date && t.slot_index === slot);
 }
 
+function otherTermsByKey(terms: OtherTerm[], date: string, slot: number): OtherTerm[] {
+  return terms.filter((t) => t.date === date && t.slot_index === slot);
+}
+
 function hexWithAlpha(hex: string, alpha: number) {
   const n = Math.round(alpha * 255).toString(16).padStart(2, '0');
   return `${hex}${n}`;
@@ -57,6 +64,7 @@ export default function CalendarView({
   singleDay,
   monthStart,
   clientFilterId,
+  otherTerms = [],
 }: {
   view: string;
   terms: RawTerm[];
@@ -66,6 +74,8 @@ export default function CalendarView({
   singleDay?: string;
   monthStart?: string;
   clientFilterId?: string | null;
+  /** Tuđi termini (drugi predavači) – samo prikaz, bez linka */
+  otherTerms?: OtherTerm[];
 }) {
   const linkSuffix = clientFilterId ? `&client=${clientFilterId}` : '';
   if (view === 'dan' && singleDay) {
@@ -73,6 +83,7 @@ export default function CalendarView({
       <CalendarDay
         date={singleDay}
         terms={terms}
+        otherTerms={otherTerms}
         instructorId={instructorId}
         instructorColor={instructorColor}
         linkSuffix={linkSuffix}
@@ -84,6 +95,7 @@ export default function CalendarView({
       <CalendarMonth
         monthStart={monthStart}
         terms={terms}
+        otherTerms={otherTerms}
         instructorId={instructorId}
         instructorColor={instructorColor}
         linkSuffix={linkSuffix}
@@ -94,6 +106,7 @@ export default function CalendarView({
     <CalendarWeek
       startOfWeek={startOfWeek}
       terms={terms}
+      otherTerms={otherTerms}
       instructorId={instructorId}
       instructorColor={instructorColor}
       linkSuffix={linkSuffix}
@@ -103,19 +116,21 @@ export default function CalendarView({
 
 function CellContent({
   term,
+  otherTermsInSlot,
   instructorId,
   instructorColor,
   emptyDate,
   emptySlot,
 }: {
   term: RawTerm | undefined;
+  otherTermsInSlot: OtherTerm[];
   instructorId: string;
   instructorColor: string;
   emptyDate: string;
   emptySlot: number;
 }) {
   const bgLight = hexWithAlpha(instructorColor, 0.15);
-  if (!term) {
+  if (!term && otherTermsInSlot.length === 0) {
     return (
       <Link
         href={`/dashboard/termin/novi?date=${emptyDate}&slot=${emptySlot}`}
@@ -125,54 +140,62 @@ function CellContent({
       </Link>
     );
   }
-  const predavanja = term.predavanja ?? [];
   return (
-    <Link
-      href={`/dashboard/termin/${term.id}`}
-      className="block rounded-lg border-2 p-2 min-h-[52px] transition-opacity hover:opacity-90"
-      style={{
-        borderColor: instructorColor,
-        backgroundColor: bgLight,
-      }}
-    >
-      {predavanja.length === 0 ? (
-        <span className="text-stone-500 text-sm">+ Dodaj predavanje</span>
-      ) : (
-        <>
-          {predavanja.map((p) => (
-            <div key={p.id} className="text-sm">
-              <span className="font-medium text-stone-800">
-                {p.client ? `${p.client.ime} ${p.client.prezime}` : '—'}
-              </span>
-              <div className="flex gap-1 mt-0.5 flex-wrap">
-                {p.odrzano && (
-                  <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded">
-                    Održano
+    <div className="space-y-1.5 min-h-[52px]">
+      {term && (
+        <Link
+          href={`/dashboard/termin/${term.id}`}
+          className="block rounded-lg border-2 p-2 transition-opacity hover:opacity-90"
+          style={{ borderColor: instructorColor, backgroundColor: bgLight }}
+        >
+          {(term.predavanja ?? []).length === 0 ? (
+            <span className="text-stone-500 text-sm">+ Dodaj predavanje</span>
+          ) : (
+            <>
+              {(term.predavanja ?? []).map((p) => (
+                <div key={p.id} className="text-sm">
+                  <span className="font-medium text-stone-800">
+                    {p.client ? `${p.client.ime} ${p.client.prezime}` : '—'}
                   </span>
-                )}
-                {p.placeno && (
-                  <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">
-                    Plaćeno
-                  </span>
-                )}
-              </div>
-            </div>
-          ))}
-        </>
+                  <div className="flex gap-1 mt-0.5 flex-wrap">
+                    {p.odrzano && <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded">Održano</span>}
+                    {p.placeno && <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">Plaćeno</span>}
+                  </div>
+                </div>
+              ))}
+            </>
+          )}
+        </Link>
       )}
-    </Link>
+      {otherTermsInSlot.map((ot) => {
+        const iname = ot.instructor ? `${ot.instructor.ime} ${ot.instructor.prezime}` : '—';
+        const preds = ot.predavanja ?? [];
+        return (
+          <div key={ot.id} className="rounded-lg border border-stone-200 bg-stone-50/80 p-2 text-stone-600 text-xs">
+            <span className="font-medium">{iname}</span>
+            {preds.length > 0 && (
+              <span className="ml-1">
+                {preds.map((p) => (p.client ? `${p.client.ime} ${p.client.prezime}` : '—')).join(', ')}
+              </span>
+            )}
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
 function CalendarWeek({
   startOfWeek,
   terms,
+  otherTerms,
   instructorId,
   instructorColor,
   linkSuffix,
 }: {
   startOfWeek: string;
   terms: RawTerm[];
+  otherTerms: OtherTerm[];
   instructorId: string;
   instructorColor: string;
   linkSuffix: string;
@@ -239,10 +262,12 @@ function CalendarWeek({
                 <td className="p-2 text-stone-500 font-medium">{time}</td>
                 {dates.map((date) => {
                   const term = termByKey(terms, date, slotIndex);
+                  const otherTermsInSlot = otherTermsByKey(otherTerms, date, slotIndex);
                   return (
                     <td key={date} className="p-1 align-top">
                       <CellContent
                         term={term}
+                        otherTermsInSlot={otherTermsInSlot}
                         instructorId={instructorId}
                         instructorColor={instructorColor}
                         emptyDate={date}
@@ -263,12 +288,14 @@ function CalendarWeek({
 function CalendarDay({
   date,
   terms,
+  otherTerms,
   instructorId,
   instructorColor,
   linkSuffix,
 }: {
   date: string;
   terms: RawTerm[];
+  otherTerms: OtherTerm[];
   instructorId: string;
   instructorColor: string;
   linkSuffix: string;
@@ -313,12 +340,14 @@ function CalendarDay({
       <div className="rounded-xl border border-stone-200 bg-white divide-y divide-stone-100">
         {TIME_SLOTS.map((time, slotIndex) => {
           const term = termByKey(terms, date, slotIndex);
+          const otherTermsInSlot = otherTermsByKey(otherTerms, date, slotIndex);
           return (
             <div key={slotIndex} className="flex items-stretch gap-4 p-3">
               <div className="w-16 shrink-0 text-stone-500 font-medium">{time}</div>
               <div className="flex-1 min-w-0">
                 <CellContent
                   term={term}
+                  otherTermsInSlot={otherTermsInSlot}
                   instructorId={instructorId}
                   instructorColor={instructorColor}
                   emptyDate={date}
@@ -336,12 +365,14 @@ function CalendarDay({
 function CalendarMonth({
   monthStart,
   terms,
+  otherTerms,
   instructorId,
   instructorColor,
   linkSuffix,
 }: {
   monthStart: string;
   terms: RawTerm[];
+  otherTerms: OtherTerm[];
   instructorId: string;
   instructorColor: string;
   linkSuffix: string;

@@ -11,7 +11,8 @@ export async function createPredavanje(
   clientId: string,
   odrzano: boolean,
   placeno: boolean,
-  komentar: string | null
+  komentar: string | null,
+  termTypeId: string | null = null
 ): Promise<{ error?: string }> {
   console.log('[termin] createPredavanje', { termId, clientId });
   const { instructor } = await getDashboardInstructor();
@@ -54,6 +55,7 @@ export async function createPredavanje(
     odrzano,
     placeno,
     komentar: komentar?.trim() || null,
+    term_type_id: termTypeId || null,
   });
   if (insErr) {
     console.error('[termin] createPredavanje: predavanja insert', insErr.message);
@@ -79,7 +81,8 @@ export async function updatePredavanje(
   clientId: string,
   odrzano: boolean,
   placeno: boolean,
-  komentar: string | null
+  komentar: string | null,
+  termTypeId: string | null = null
 ): Promise<{ error?: string }> {
   const { instructor } = await getDashboardInstructor();
   if (!instructor) return { error: 'Niste predavač.' };
@@ -99,6 +102,7 @@ export async function updatePredavanje(
       odrzano,
       placeno,
       komentar: komentar?.trim() || null,
+      term_type_id: termTypeId || null,
     })
     .eq('id', predavanjeId);
   if (error) return { error: error.message };

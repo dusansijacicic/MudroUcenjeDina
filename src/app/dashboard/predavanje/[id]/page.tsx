@@ -1,6 +1,7 @@
 import { redirect, notFound } from 'next/navigation';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getDashboardInstructor } from '@/lib/dashboard';
+import { getTermTypes } from '@/app/admin/actions';
 import PredavanjeForm from '@/app/dashboard/termin/PredavanjeForm';
 import { TIME_SLOTS } from '@/lib/constants';
 
@@ -33,6 +34,7 @@ export default async function EditPredavanjePage({
     .eq('instructor_id', instructor.id);
   const clients = (linkRows ?? []).map((r) => r.client).filter(Boolean) as unknown as { id: string; ime: string; prezime: string }[];
   clients.sort((a, b) => (a.prezime ?? '').localeCompare(b.prezime ?? '') || (a.ime ?? '').localeCompare(b.ime ?? ''));
+  const termTypes = await getTermTypes();
 
   return (
     <div className="max-w-lg">
@@ -44,7 +46,8 @@ export default async function EditPredavanjePage({
         termDate={term.date}
         slotLabel={slotLabel}
         clients={clients ?? []}
-        predavanje={predavanje}
+        termTypes={termTypes}
+        predavanje={{ ...predavanje, term_type_id: (predavanje as { term_type_id?: string | null }).term_type_id }}
       />
     </div>
   );

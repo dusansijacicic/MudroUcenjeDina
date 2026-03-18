@@ -126,3 +126,109 @@ export async function getAdminInstructorsList(): Promise<{ id: string; ime: stri
   const { data } = await adminSupabase.from('instructors').select('id, ime, prezime').order('prezime').order('ime');
   return data ?? [];
 }
+
+async function requireAdmin() {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: 'Niste ulogovani.' as const, admin: null };
+  const { data: adminRow } = await supabase.from('admin_users').select('user_id').eq('user_id', user.id).single();
+  if (!adminRow) return { error: 'Samo admin.' as const, admin: null };
+  return { admin: createAdminClient(), error: null };
+}
+
+export async function createPredavanjeAsAdmin(
+  termId: string,
+  clientId: string,
+  odrzano: boolean,
+  placeno: boolean,
+  komentar: string | null,
+  termTypeId: string | null = null
+): Promise<{ error?: string }> {
+  const { admin, error: authErr } = await requireAdmin();
+  if (authErr || !admin) return { error: authErr ?? 'Niste ovlašćeni.' };
+  const { data: term } = await admin.from('terms').select('id, instructor_id').eq('id', termId).single();
+  if (!term) return { error: 'Termin nije pronađen.' };
+  const { error: insErr } = await admin.from('predavanja').insert({
+    term_id: termId,
+    client_id: clientId,
+    odrzano,
+    placeno,
+    komentar: komentar?.trim() || null,
+    term_type_id: termTypeId || null,
+  });
+  if (insErr) return { error: insErr.message };
+  const { error: icErr } = await admin.from('instructor_clients').insert({
+    instructor_id: term.instructor_id,
+    client_id: clientId,
+    placeno_casova: 0,
+  });
+  if (icErr && icErr.code !== '23505') {
+    console.warn('[admin] instructor_clients insert (non-fatal)', icErr.message);
+  }
+  revalidatePath('/admin/kalendar');
+  revalidatePath(`/admin/termin/${termId}`);
+  return {};
+}
+
+export async function updatePredavanjeAsAdmin(
+  predavanjeId: string,
+  termId: string,
+  clientId: string,
+  odrzano: boolean,
+  placeno: boolean,
+  komentar: string | null,
+  termTypeId: string | null = null
+): Promise<{ error?: string }> {
+  const { admin, error: authErr } = await requireAdmin();
+  if (authErr || !admin) return { error: authErr ?? 'Niste ovlašćeni.' };
+  const { error } = await admin
+    .from('predavanja')
+    .update({
+      client_id: clientId,
+      odrzano,
+      placeno,
+      komentar: komentar?.trim() || null,
+      term_type_id: termTypeId || null,
+    })
+    .eq('id', predavanjeId);
+  if (error) return { error: error.message };
+  revalidatePath('/admin/kalendar');
+  revalidatePath(`/admin/termin/${termId}`);
+  return {};
+}
+
+export async function deletePredavanjeAsAdmin(predavanjeId: string, termId: string): Promise<{ error?: string }> {
+  const { admin, error: authErr } = await requireAdmin();
+  if (authErr || !admin) return { error: authErr ?? 'Niste ovlašćeni.' };
+  const { error } = await admin.from('predavanja').delete().eq('id', predavanjeId);
+  if (error) return { error: error.message };
+  revalidatePath('/admin/kalendar');
+  revalidatePath(`/admin/termin/${termId}`);
+  return {};
+}
+
+export type TermTypeRow = { id: string; naziv: string; opis: string | null };
+
+export async function getTermTypes(): Promise<TermTypeRow[]> {
+  const admin = createAdminClient();
+  const { data } = await admin.from('term_types').select('id, naziv, opis').order('naziv');
+  return (data ?? []) as TermTypeRow[];
+}
+
+export async function createTermTypeAsAdmin(naziv: string, opis: string | null): Promise<{ error?: string }> {
+  const { admin, error: authErr } = await requireAdmin();
+  if (authErr || !admin) return { error: authErr ?? 'Samo admin.' };
+  const { error } = await admin.from('term_types').insert({ naziv: naziv.trim(), opis: opis?.trim() || null });
+  if (error) return { error: error.message };
+  revalidatePath('/admin/vrste-termina');
+  return {};
+}
+
+export async function deleteTermTypeAsAdmin(id: string): Promise<{ error?: string }> {
+  const { admin, error: authErr } = await requireAdmin();
+  if (authErr || !admin) return { error: authErr ?? 'Samo admin.' };
+  const { error } = await admin.from('term_types').delete().eq('id', id);
+  if (error) return { error: error.message };
+  revalidatePath('/admin/vrste-termina');
+  return {};
+}

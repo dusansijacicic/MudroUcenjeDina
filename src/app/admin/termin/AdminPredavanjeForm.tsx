@@ -4,36 +4,36 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
-import { createPredavanje, updatePredavanje, deletePredavanje } from '@/app/dashboard/termin/actions';
-import type { Predavanje } from '@/types/database';
+import { createPredavanjeAsAdmin, updatePredavanjeAsAdmin, deletePredavanjeAsAdmin } from '@/app/admin/actions';
 
 type ClientOption = { id: string; ime: string; prezime: string };
+
 type TermTypeOption = { id: string; naziv: string; opis: string | null };
 
-interface PredavanjeFormProps {
+interface AdminPredavanjeFormProps {
   termId: string;
   termDate: string;
   slotLabel: string;
   clients: ClientOption[];
-  predavanje?: Predavanje & { term_type_id?: string | null } | null;
   termTypes?: TermTypeOption[];
+  predavanje?: { id: string; client_id: string; odrzano: boolean; placeno: boolean; komentar: string | null; term_type_id?: string | null } | null;
   maxCasova?: number;
   currentCount?: number;
 }
 
-export default function PredavanjeForm({
+export default function AdminPredavanjeForm({
   termId,
   termDate,
   slotLabel,
   clients,
-  predavanje,
   termTypes = [],
+  predavanje,
   maxCasova = 4,
   currentCount = 0,
-}: PredavanjeFormProps) {
+}: AdminPredavanjeFormProps) {
   const router = useRouter();
   const [clientId, setClientId] = useState(predavanje?.client_id ?? '');
-  const [termTypeId, setTermTypeId] = useState<string>(predavanje?.term_type_id ?? '');
+  const [termTypeId, setTermTypeId] = useState(predavanje?.term_type_id ?? '');
   const [odrzano, setOdrzano] = useState(predavanje?.odrzano ?? false);
   const [placeno, setPlaceno] = useState(predavanje?.placeno ?? false);
   const [komentar, setKomentar] = useState(predavanje?.komentar ?? '');
@@ -42,16 +42,16 @@ export default function PredavanjeForm({
 
   const isNew = !predavanje;
   const atLimit = isNew && currentCount >= maxCasova;
+  const backHref = `/admin/termin/${termId}`;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     if (atLimit) return;
     setLoading(true);
-    console.log('[PredavanjeForm] submit', { termId, clientId, predavanje: !!predavanje });
     try {
       if (predavanje) {
-        const result = await updatePredavanje(
+        const result = await updatePredavanjeAsAdmin(
           predavanje.id,
           termId,
           clientId,
@@ -60,26 +60,26 @@ export default function PredavanjeForm({
           komentar.trim() || null,
           termTypeId || null
         );
-        if (result.error) {
-          console.error('[PredavanjeForm] update error', result.error);
-          throw new Error(result.error);
-        }
+        if (result.error) throw new Error(result.error);
         toast.success('Predavanje sačuvano.');
       } else {
-        const result = await createPredavanje(termId, clientId, odrzano, placeno, komentar.trim() || null, termTypeId || null);
-        if (result.error) {
-          console.error('[PredavanjeForm] createPredavanje error', result.error);
-          throw new Error(result.error);
-        }
+        const result = await createPredavanjeAsAdmin(
+          termId,
+          clientId,
+          odrzano,
+          placeno,
+          komentar.trim() || null,
+          termTypeId || null
+        );
+        if (result.error) throw new Error(result.error);
         toast.success('Predavanje dodato.');
       }
-      router.push(`/dashboard/termin/${termId}`);
+      router.push(backHref);
       router.refresh();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Greška pri čuvanju.';
       setError(msg);
       toast.error(msg);
-      console.error('[PredavanjeForm] catch', err);
     } finally {
       setLoading(false);
     }
@@ -89,17 +89,16 @@ export default function PredavanjeForm({
     if (!predavanje || !confirm('Obrisati ovo predavanje?')) return;
     setLoading(true);
     try {
-      const result = await deletePredavanje(predavanje.id, termId);
+      const result = await deletePredavanjeAsAdmin(predavanje.id, termId);
       if (result.error) {
         setError(result.error);
         toast.error(result.error);
         return;
       }
       toast.success('Predavanje obrisano.');
-      router.push(`/dashboard/termin/${termId}`);
+      router.push(backHref);
       router.refresh();
-    } catch (err) {
-      console.error('[PredavanjeForm] delete catch', err);
+    } catch {
       setError('Greška pri brisanju.');
       toast.error('Greška pri brisanju.');
     } finally {
@@ -119,13 +118,11 @@ export default function PredavanjeForm({
       </div>
       {atLimit && (
         <p className="text-sm text-amber-700 bg-amber-50 rounded-lg px-3 py-2">
-          Maksimalan broj časova u ovom terminu je {maxCasova}. Podešavanje može da menja superadmin u Admin → Podešavanja.
+          Maksimalan broj časova u ovom terminu je {maxCasova}.
         </p>
       )}
       <div>
-        <label className="block text-sm font-medium text-stone-700 mb-1">
-          Klijent
-        </label>
+        <label className="block text-sm font-medium text-stone-700 mb-1">Klijent</label>
         <select
           value={clientId}
           onChange={(e) => setClientId(e.target.value)}
@@ -157,28 +154,16 @@ export default function PredavanjeForm({
       )}
       <div className="flex gap-4">
         <label className="flex items-center gap-2 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={odrzano}
-            onChange={(e) => setOdrzano(e.target.checked)}
-            className="rounded border-stone-300 text-amber-600"
-          />
+          <input type="checkbox" checked={odrzano} onChange={(e) => setOdrzano(e.target.checked)} className="rounded border-stone-300 text-amber-600" />
           <span className="text-sm text-stone-700">Održano</span>
         </label>
         <label className="flex items-center gap-2 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={placeno}
-            onChange={(e) => setPlaceno(e.target.checked)}
-            className="rounded border-stone-300 text-amber-600"
-          />
+          <input type="checkbox" checked={placeno} onChange={(e) => setPlaceno(e.target.checked)} className="rounded border-stone-300 text-amber-600" />
           <span className="text-sm text-stone-700">Plaćeno</span>
         </label>
       </div>
       <div>
-        <label className="block text-sm font-medium text-stone-700 mb-1">
-          Komentar (šta je rađeno)
-        </label>
+        <label className="block text-sm font-medium text-stone-700 mb-1">Komentar (šta je rađeno)</label>
         <textarea
           value={komentar}
           onChange={(e) => setKomentar(e.target.value)}
@@ -187,11 +172,7 @@ export default function PredavanjeForm({
           placeholder="Opis rada na času..."
         />
       </div>
-      {error && (
-        <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">
-          {error}
-        </p>
-      )}
+      {error && <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>}
       <div className="flex items-center gap-3">
         <button
           type="submit"
@@ -200,10 +181,7 @@ export default function PredavanjeForm({
         >
           {loading ? 'Čuvanje...' : predavanje ? 'Sačuvaj' : 'Dodaj predavanje'}
         </button>
-        <Link
-          href={`/dashboard/termin/${termId}`}
-          className="rounded-lg border border-stone-300 px-4 py-2 text-stone-700 hover:bg-stone-100"
-        >
+        <Link href={backHref} className="rounded-lg border border-stone-300 px-4 py-2 text-stone-700 hover:bg-stone-100">
           Odustani
         </Link>
         {predavanje && (

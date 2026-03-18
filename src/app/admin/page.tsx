@@ -68,6 +68,18 @@ export default async function AdminPage({
         >
           Zakaži termin za predavača
         </Link>
+        <Link
+          href="/admin/kalendar"
+          className="inline-flex items-center rounded-lg bg-stone-600 px-4 py-2 text-sm font-medium text-white hover:bg-stone-700"
+        >
+          Kalendar (svi termini)
+        </Link>
+        <Link
+          href="/admin/vrste-termina"
+          className="inline-flex items-center rounded-lg border border-stone-300 px-4 py-2 text-sm font-medium text-stone-700 hover:bg-stone-100"
+        >
+          Vrste termina
+        </Link>
       </div>
 
       <p className="text-stone-500 text-sm mb-6">

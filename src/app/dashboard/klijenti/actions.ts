@@ -35,12 +35,14 @@ export async function createClientAsInstructor(payload: ClientPayload, placeno_c
     console.error('[klijenti] clients insert', insertErr?.message);
     return { error: insertErr?.message ?? 'Klijent nije kreiran.' };
   }
+  // Veza predavač–klijent: bilo koji klijent može kasnije dobiti bilo kog predavača u terminu.
+  // Ovde odmah dodeljujemo ovog predavača da klijent uđe u "Moji klijenti" (paket = placeno_casova).
   const { error: linkErr } = await admin.from('instructor_clients').insert({
     instructor_id: instructor.id,
     client_id: newClient.id,
     placeno_casova: Math.max(0, placeno_casova),
   });
-  if (linkErr) {
+  if (linkErr && linkErr.code !== '23505') {
     console.error('[klijenti] instructor_clients insert', linkErr.message);
     return { error: linkErr.message };
   }

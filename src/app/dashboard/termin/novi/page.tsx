@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { getDashboardInstructor } from '@/lib/dashboard';
 import { getMaxCasovaPoTerminu } from '@/lib/settings';
 import { TIME_SLOTS } from '@/lib/constants';
+import { getTermTypes } from '@/app/admin/actions';
 import PredavanjeForm from '../PredavanjeForm';
 
 export default async function NoviTerminPage({
@@ -58,13 +59,18 @@ export default async function NoviTerminPage({
   ]);
   const currentCount = predRes.count ?? 0;
 
-  let clients: { id: string; ime: string; prezime: string }[] = [];
-  const { data: linkRows } = await admin
-    .from('instructor_clients')
-    .select('client:clients(id, ime, prezime)')
-    .eq('instructor_id', instructor.id);
-  clients = (linkRows ?? []).map((r) => r.client).filter(Boolean) as unknown as { id: string; ime: string; prezime: string }[];
-  clients.sort((a, b) => (a.prezime ?? '').localeCompare(b.prezime ?? '') || (a.ime ?? '').localeCompare(b.ime ?? ''));
+  const { data: allClients } = await admin
+    .from('clients')
+    .select('id, ime, prezime')
+    .order('prezime')
+    .order('ime');
+  const clients: { id: string; ime: string; prezime: string }[] = (allClients ?? []).map((c) => ({
+    id: c.id,
+    ime: c.ime ?? '',
+    prezime: c.prezime ?? '',
+  }));
+
+  const termTypes = await getTermTypes();
 
   return (
     <div className="max-w-lg">
@@ -81,6 +87,7 @@ export default async function NoviTerminPage({
         termDate={date}
         slotLabel={slotLabel}
         clients={clients ?? []}
+        termTypes={termTypes}
         maxCasova={maxCasova}
         currentCount={currentCount}
       />

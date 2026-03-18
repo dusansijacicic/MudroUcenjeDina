@@ -5,22 +5,7 @@ import CalendarView from './CalendarView';
 import AddTermButton from './AddTermButton';
 import CalendarFilters from './CalendarFilters';
 import { DEFAULT_INSTRUCTOR_COLOR } from '@/lib/constants';
-
-type RawTerm = {
-  id: string;
-  instructor_id: string;
-  date: string;
-  slot_index: number;
-  predavanja?: Array<{
-    id: string;
-    term_id: string;
-    client_id: string;
-    odrzano: boolean;
-    placeno: boolean;
-    komentar: string | null;
-    client?: { id: string; ime: string; prezime: string } | null;
-  }>;
-};
+import type { RawTerm, OtherTerm } from './CalendarView';
 
 export default async function DashboardPage({
   searchParams,
@@ -82,16 +67,34 @@ export default async function DashboardPage({
   }
 
   const admin = createAdminClient();
-  const { data: termsRaw } = await admin
+  const { data: allTermsRaw } = await admin
     .from('terms')
-    .select('*, predavanja(*, client:clients(id, ime, prezime))')
-    .eq('instructor_id', instructorId)
+    .select('*, instructor:instructors(id, ime, prezime), predavanja(*, client:clients(id, ime, prezime))')
     .gte('date', dateFrom)
     .lte('date', dateTo)
     .order('date')
     .order('slot_index');
 
-  let terms: RawTerm[] = (termsRaw ?? []) as RawTerm[];
+  const allTerms = (allTermsRaw ?? []) as Array<RawTerm & { instructor?: { ime: string; prezime: string } | null }>;
+  const myTerms = allTerms.filter((t) => t.instructor_id === instructorId);
+  const otherTerms: OtherTerm[] = allTerms
+    .filter((t) => t.instructor_id !== instructorId)
+    .map((t) => ({
+      id: t.id,
+      instructor_id: t.instructor_id,
+      date: t.date,
+      slot_index: t.slot_index,
+      predavanja: t.predavanja,
+      instructor: t.instructor ?? null,
+    }));
+
+  let terms: RawTerm[] = myTerms.map((t) => ({
+    id: t.id,
+    instructor_id: t.instructor_id,
+    date: t.date,
+    slot_index: t.slot_index,
+    predavanja: t.predavanja,
+  }));
   if (clientFilterId) {
     terms = terms
       .map((t) => ({
@@ -131,6 +134,7 @@ export default async function DashboardPage({
         singleDay={singleDay}
         monthStart={monthStart}
         clientFilterId={clientFilterId}
+        otherTerms={otherTerms}
       />
     </div>
   );
