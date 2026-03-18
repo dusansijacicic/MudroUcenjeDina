@@ -1,7 +1,10 @@
 'use client';
 
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { TIME_SLOTS } from '@/lib/constants';
 import Link from 'next/link';
+import { moveTermAsAdmin } from '@/app/admin/actions';
 
 const DAY_NAMES = ['Pon', 'Uto', 'Sre', 'Čet', 'Pet', 'Sub', 'Ned'];
 
@@ -54,6 +57,17 @@ export default function AdminCalendarView({
   monthStart?: string;
   view: string;
 }) {
+  const router = useRouter();
+  const [draggedTermId, setDraggedTermId] = useState<string | null>(null);
+
+  const handleDrop = async (date: string, slot: number) => {
+    if (!draggedTermId) return;
+    const res = await moveTermAsAdmin(draggedTermId, date, slot);
+    setDraggedTermId(null);
+    if (!res.error) {
+      router.refresh();
+    }
+  };
   const base = '/admin/kalendar';
   const linkSuffix = '';
 
@@ -64,6 +78,8 @@ export default function AdminCalendarView({
         terms={terms}
         linkSuffix={linkSuffix}
         base={base}
+        draggedTermId={draggedTermId}
+        onDropCell={handleDrop}
       />
     );
   }
@@ -83,6 +99,9 @@ export default function AdminCalendarView({
       terms={terms}
       linkSuffix={linkSuffix}
       base={base}
+      draggedTermId={draggedTermId}
+      setDraggedTermId={setDraggedTermId}
+      onDropCell={handleDrop}
     />
   );
 }
@@ -91,10 +110,16 @@ function AdminCellContent({
   termsInSlot,
   emptyDate,
   emptySlot,
+  draggedTermId,
+  setDraggedTermId,
+  onDropCell,
 }: {
   termsInSlot: AdminTerm[];
   emptyDate: string;
   emptySlot: number;
+  draggedTermId: string | null;
+  setDraggedTermId: (id: string | null) => void;
+  onDropCell: (date: string, slot: number) => void | Promise<void>;
 }) {
   const newTermHref = `/admin/termin/novi?date=${emptyDate}&slot=${emptySlot}`;
   if (termsInSlot.length === 0) {
@@ -102,6 +127,13 @@ function AdminCellContent({
       <Link
         href={newTermHref}
         className="block rounded-lg border border-dashed border-stone-200 p-2 text-stone-400 hover:border-amber-400 hover:bg-amber-50/50 min-h-[52px]"
+        onDragOver={(e) => {
+          if (draggedTermId) e.preventDefault();
+        }}
+        onDrop={(e) => {
+          e.preventDefault();
+          if (draggedTermId) onDropCell(emptyDate, emptySlot);
+        }}
       >
         +
       </Link>
@@ -122,6 +154,9 @@ function AdminCellContent({
             href={`/admin/termin/${term.id}`}
             className="block rounded-lg border-2 p-2 text-sm transition-opacity hover:opacity-90"
             style={{ borderColor: color, backgroundColor: bg }}
+            draggable
+            onDragStart={() => setDraggedTermId(term.id)}
+            onDragEnd={() => setDraggedTermId(null)}
           >
             <span className="font-medium text-stone-800">{instructorName}</span>
             {predavanja.length > 0 && (
@@ -152,11 +187,17 @@ function AdminWeekView({
   terms,
   linkSuffix,
   base,
+  draggedTermId,
+  setDraggedTermId,
+  onDropCell,
 }: {
   startOfWeek: string;
   terms: AdminTerm[];
   linkSuffix: string;
   base: string;
+  draggedTermId: string | null;
+  setDraggedTermId: (id: string | null) => void;
+  onDropCell: (date: string, slot: number) => void | Promise<void>;
 }) {
   const dates = getWeekDates(startOfWeek);
   const prevWeek = (() => {
@@ -211,6 +252,9 @@ function AdminWeekView({
                         termsInSlot={termsInSlot}
                         emptyDate={date}
                         emptySlot={slotIndex}
+                        draggedTermId={draggedTermId}
+                        setDraggedTermId={setDraggedTermId}
+                        onDropCell={onDropCell}
                       />
                     </td>
                   );
@@ -229,11 +273,15 @@ function AdminDayView({
   terms,
   linkSuffix,
   base,
+  draggedTermId,
+  onDropCell,
 }: {
   date: string;
   terms: AdminTerm[];
   linkSuffix: string;
   base: string;
+  draggedTermId: string | null;
+  onDropCell: (date: string, slot: number) => void | Promise<void>;
 }) {
   const label = new Date(date + 'T12:00:00').toLocaleDateString('sr-Latn-RS', {
     weekday: 'long',
@@ -276,6 +324,9 @@ function AdminDayView({
                   termsInSlot={termsInSlot}
                   emptyDate={date}
                   emptySlot={slotIndex}
+                  draggedTermId={draggedTermId}
+                  setDraggedTermId={() => {}}
+                  onDropCell={onDropCell}
                 />
               </div>
             </div>

@@ -133,3 +133,61 @@ export async function deletePredavanje(predavanjeId: string, termId: string): Pr
   revalidatePath('/dashboard/klijenti');
   return {};
 }
+
+export async function moveTermAsInstructor(
+  termId: string,
+  newDate: string,
+  newSlotIndex: number
+): Promise<{ error?: string }> {
+  const { instructor } = await getDashboardInstructor();
+  if (!instructor) return { error: 'Niste predavač.' };
+  let admin;
+  try {
+    admin = createAdminClient();
+  } catch (e) {
+    return { error: 'Server greška.' };
+  }
+  const slot = Math.min(12, Math.max(0, newSlotIndex));
+  const dateStr = newDate.slice(0, 10);
+
+  const { data: term } = await admin
+    .from('terms')
+    .select('instructor_id')
+    .eq('id', termId)
+    .single();
+  if (!term || term.instructor_id !== instructor.id) {
+    return { error: 'Niste ovlašćeni za ovaj termin.' };
+  }
+
+  const { error } = await admin
+    .from('terms')
+    .update({ date: dateStr, slot_index: slot })
+    .eq('id', termId);
+  if (error) return { error: error.message };
+  revalidatePath('/dashboard');
+  revalidatePath(`/dashboard/termin/${termId}`);
+  return {};
+}
+
+export async function deleteTermAsInstructor(termId: string): Promise<{ error?: string }> {
+  const { instructor } = await getDashboardInstructor();
+  if (!instructor) return { error: 'Niste predavač.' };
+  let admin;
+  try {
+    admin = createAdminClient();
+  } catch {
+    return { error: 'Server greška.' };
+  }
+  const { data: term } = await admin
+    .from('terms')
+    .select('instructor_id')
+    .eq('id', termId)
+    .maybeSingle();
+  if (!term || term.instructor_id !== instructor.id) {
+    return { error: 'Niste ovlašćeni za ovaj termin.' };
+  }
+  const { error } = await admin.from('terms').delete().eq('id', termId);
+  if (error) return { error: error.message };
+  revalidatePath('/dashboard');
+  return {};
+}

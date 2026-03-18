@@ -213,6 +213,34 @@ export async function deletePredavanjeAsAdmin(predavanjeId: string, termId: stri
   return {};
 }
 
+export async function moveTermAsAdmin(
+  termId: string,
+  newDate: string,
+  newSlotIndex: number
+): Promise<{ error?: string }> {
+  const { admin, error: authErr } = await requireAdmin();
+  if (authErr || !admin) return { error: authErr ?? 'Niste ovlašćeni.' };
+  const slot = Math.min(12, Math.max(0, newSlotIndex));
+  const dateStr = newDate.slice(0, 10);
+  const { error } = await admin
+    .from('terms')
+    .update({ date: dateStr, slot_index: slot })
+    .eq('id', termId);
+  if (error) return { error: error.message };
+  revalidatePath('/admin/kalendar');
+  revalidatePath(`/admin/termin/${termId}`);
+  return {};
+}
+
+export async function deleteTermAsAdmin(termId: string): Promise<{ error?: string }> {
+  const { admin, error: authErr } = await requireAdmin();
+  if (authErr || !admin) return { error: authErr ?? 'Niste ovlašćeni.' };
+  const { error } = await admin.from('terms').delete().eq('id', termId);
+  if (error) return { error: error.message };
+  revalidatePath('/admin/kalendar');
+  return {};
+}
+
 export type TermTypeRow = { id: string; naziv: string; opis: string | null };
 
 export async function getTermTypes(): Promise<TermTypeRow[]> {

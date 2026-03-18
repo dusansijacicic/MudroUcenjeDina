@@ -5,6 +5,7 @@ import { getDashboardInstructor } from '@/lib/dashboard';
 import { getMaxCasovaPoTerminu } from '@/lib/settings';
 import { TIME_SLOTS } from '@/lib/constants';
 import type { Predavanje } from '@/types/database';
+import { deleteTermAsInstructor } from '@/app/dashboard/termin/actions';
 
 export default async function TerminDetailPage({
   params,
@@ -76,12 +77,32 @@ export default async function TerminDetailPage({
           </h1>
           <p className="text-stone-500">{slotLabel}</p>
         </div>
-        <Link
-          href="/dashboard"
-          className="text-sm text-stone-500 hover:text-stone-700"
-        >
-          ← Kalendar
-        </Link>
+        <div className="flex items-center gap-3">
+          <Link
+            href="/dashboard"
+            className="text-sm text-stone-500 hover:text-stone-700"
+          >
+            ← Kalendar
+          </Link>
+          <form
+            action={async () => {
+              'use server';
+              const res = await deleteTermAsInstructor(termId);
+              if (res.error) {
+                // ako ima grešku, samo ne radimo redirect; greška će biti u logu
+                return;
+              }
+              redirect('/dashboard');
+            }}
+          >
+            <button
+              type="submit"
+              className="text-sm text-red-600 hover:text-red-700 border border-red-200 rounded-lg px-3 py-1"
+            >
+              Otkaži termin
+            </button>
+          </form>
+        </div>
       </div>
 
       <div className="mb-6">

@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { TIME_SLOTS } from '@/lib/constants';
 import { getMaxCasovaPoTerminu } from '@/lib/settings';
 import type { Predavanje } from '@/types/database';
+import { deleteTermAsAdmin } from '@/app/admin/actions';
 
 export default async function AdminTerminDetailPage({
   params,
@@ -58,9 +59,28 @@ export default async function AdminTerminDetailPage({
             Predavač: {instructor ? `${instructor.ime} ${instructor.prezime}` : '—'}
           </p>
         </div>
-        <Link href="/admin/kalendar" className="text-sm text-stone-500 hover:text-stone-700">
-          ← Kalendar
-        </Link>
+        <div className="flex items-center gap-3">
+          <Link href="/admin/kalendar" className="text-sm text-stone-500 hover:text-stone-700">
+            ← Kalendar
+          </Link>
+          <form
+            action={async () => {
+              'use server';
+              const res = await deleteTermAsAdmin(termId);
+              if (res.error) {
+                return;
+              }
+              redirect('/admin/kalendar');
+            }}
+          >
+            <button
+              type="submit"
+              className="text-sm text-red-600 hover:text-red-700 border border-red-200 rounded-lg px-3 py-1"
+            >
+              Otkaži termin
+            </button>
+          </form>
+        </div>
       </div>
 
       <div className="mb-6">

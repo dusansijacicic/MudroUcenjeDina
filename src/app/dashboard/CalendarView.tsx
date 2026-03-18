@@ -1,7 +1,10 @@
 'use client';
 
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { TIME_SLOTS } from '@/lib/constants';
 import Link from 'next/link';
+import { moveTermAsInstructor } from '@/app/dashboard/termin/actions';
 
 const DAY_NAMES = ['Pon', 'Uto', 'Sre', 'Čet', 'Pet', 'Sub', 'Ned'];
 
@@ -77,6 +80,18 @@ export default function CalendarView({
   /** Tuđi termini (drugi predavači) – samo prikaz, bez linka */
   otherTerms?: OtherTerm[];
 }) {
+  const router = useRouter();
+  const [draggedTermId, setDraggedTermId] = useState<string | null>(null);
+
+  const handleDrop = async (date: string, slot: number) => {
+    if (!draggedTermId) return;
+    const res = await moveTermAsInstructor(draggedTermId, date, slot);
+    setDraggedTermId(null);
+    if (!res.error) {
+      router.refresh();
+    }
+  };
+
   const linkSuffix = clientFilterId ? `&client=${clientFilterId}` : '';
   if (view === 'dan' && singleDay) {
     return (
@@ -87,6 +102,8 @@ export default function CalendarView({
         instructorId={instructorId}
         instructorColor={instructorColor}
         linkSuffix={linkSuffix}
+        draggedTermId={draggedTermId}
+        onDropCell={handleDrop}
       />
     );
   }
@@ -110,6 +127,9 @@ export default function CalendarView({
       instructorId={instructorId}
       instructorColor={instructorColor}
       linkSuffix={linkSuffix}
+      draggedTermId={draggedTermId}
+      setDraggedTermId={setDraggedTermId}
+      onDropCell={handleDrop}
     />
   );
 }
@@ -121,6 +141,9 @@ function CellContent({
   instructorColor,
   emptyDate,
   emptySlot,
+  draggedTermId,
+  setDraggedTermId,
+  onDropCell,
 }: {
   term: RawTerm | undefined;
   otherTermsInSlot: OtherTerm[];
@@ -128,6 +151,9 @@ function CellContent({
   instructorColor: string;
   emptyDate: string;
   emptySlot: number;
+  draggedTermId: string | null;
+  setDraggedTermId: (id: string | null) => void;
+  onDropCell: (date: string, slot: number) => void | Promise<void>;
 }) {
   const bgLight = hexWithAlpha(instructorColor, 0.15);
   if (!term) {
@@ -135,6 +161,13 @@ function CellContent({
       <Link
         href={`/dashboard/termin/novi?date=${emptyDate}&slot=${emptySlot}`}
         className="block rounded-lg border border-dashed border-stone-200 p-2 text-stone-400 hover:border-stone-400 hover:bg-stone-50/50 min-h-[52px]"
+        onDragOver={(e) => {
+          if (draggedTermId) e.preventDefault();
+        }}
+        onDrop={(e) => {
+          e.preventDefault();
+          if (draggedTermId) onDropCell(emptyDate, emptySlot);
+        }}
       >
         +
       </Link>
@@ -147,6 +180,9 @@ function CellContent({
           href={`/dashboard/termin/${term.id}`}
           className="block rounded-lg border-2 p-2 transition-opacity hover:opacity-90"
           style={{ borderColor: instructorColor, backgroundColor: bgLight }}
+          draggable
+          onDragStart={() => setDraggedTermId(term.id)}
+          onDragEnd={() => setDraggedTermId(null)}
         >
           {(term.predavanja ?? []).length === 0 ? (
             <span className="text-stone-500 text-sm">+ Dodaj predavanje</span>
@@ -192,6 +228,9 @@ function CalendarWeek({
   instructorId,
   instructorColor,
   linkSuffix,
+  draggedTermId,
+  setDraggedTermId,
+  onDropCell,
 }: {
   startOfWeek: string;
   terms: RawTerm[];
@@ -199,6 +238,9 @@ function CalendarWeek({
   instructorId: string;
   instructorColor: string;
   linkSuffix: string;
+  draggedTermId: string | null;
+  setDraggedTermId: (id: string | null) => void;
+  onDropCell: (date: string, slot: number) => void | Promise<void>;
 }) {
   const dates = getWeekDates(startOfWeek);
   const prevWeek = (() => {
@@ -272,6 +314,9 @@ function CalendarWeek({
                         instructorColor={instructorColor}
                         emptyDate={date}
                         emptySlot={slotIndex}
+                        draggedTermId={draggedTermId}
+                        setDraggedTermId={setDraggedTermId}
+                        onDropCell={onDropCell}
                       />
                     </td>
                   );
@@ -292,6 +337,8 @@ function CalendarDay({
   instructorId,
   instructorColor,
   linkSuffix,
+  draggedTermId,
+  onDropCell,
 }: {
   date: string;
   terms: RawTerm[];
@@ -299,6 +346,8 @@ function CalendarDay({
   instructorId: string;
   instructorColor: string;
   linkSuffix: string;
+  draggedTermId: string | null;
+  onDropCell: (date: string, slot: number) => void | Promise<void>;
 }) {
   const d = new Date(date + 'T12:00:00');
   const label = d.toLocaleDateString('sr-Latn-RS', {
@@ -352,6 +401,9 @@ function CalendarDay({
                   instructorColor={instructorColor}
                   emptyDate={date}
                   emptySlot={slotIndex}
+                  draggedTermId={draggedTermId}
+                  setDraggedTermId={() => {}}
+                  onDropCell={onDropCell}
                 />
               </div>
             </div>
