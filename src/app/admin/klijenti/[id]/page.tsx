@@ -37,6 +37,8 @@ export default async function AdminKlijentEditPage({
 
   if (error || !client) notFound();
 
+  const stanjePoVrstamaPrikaz = stanjePoVrstama.filter((s) => s.uplaceno >= 1);
+
   type TermInfo = { date: string; slot_index: number; instructor?: { ime?: string; prezime?: string } | { ime?: string; prezime?: string }[] | null };
   type PredavanjeRow = { id: string; odrzano: boolean; placeno: boolean; term_id: string; term: TermInfo | TermInfo[] | null };
   const predavanjaList = (predavanjaRaw ?? []) as PredavanjeRow[];
@@ -103,23 +105,23 @@ export default async function AdminKlijentEditPage({
       <section className="rounded-2xl border border-stone-200 bg-white shadow-sm overflow-hidden animate-in-delay-2 ui-hover-lift">
         <div className="border-b border-stone-100 bg-stone-50/80 px-5 py-3">
           <h2 className="text-base font-semibold text-stone-800">Pregled po vrstama časova</h2>
-          <p className="text-xs text-stone-500 mt-0.5">Ukupno uplaćeno, održano i preostalo po svakom tipu (svi predavači).</p>
+          <p className="text-xs text-stone-500 mt-0.5">Plaćeno / održano / preostalo – samo vrste gde je plaćen makar jedan čas.</p>
         </div>
         <div className="overflow-x-auto">
-          {stanjePoVrstama.length === 0 ? (
-            <div className="p-5 text-sm text-stone-500">Nema uplata ili održanih časova po vrstama.</div>
+          {stanjePoVrstamaPrikaz.length === 0 ? (
+            <div className="p-5 text-sm text-stone-500">Nema vrste časa gde je plaćen makar jedan.</div>
           ) : (
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-stone-200 bg-stone-50/80">
                   <th className="text-left p-3 font-medium text-stone-600">Vrsta časa</th>
-                  <th className="text-right p-3 font-medium text-stone-600">Ukupno uplaćeno</th>
+                  <th className="text-right p-3 font-medium text-stone-600">Plaćeno</th>
                   <th className="text-right p-3 font-medium text-stone-600">Održano</th>
                   <th className="text-right p-3 font-medium text-amber-700">Preostalo</th>
                 </tr>
               </thead>
               <tbody>
-                {stanjePoVrstama.map((s) => (
+                {stanjePoVrstamaPrikaz.map((s) => (
                   <tr key={s.term_type_id ?? 'bez'} className="border-b border-stone-100 hover:bg-stone-50/50 ui-transition">
                     <td className="p-3 font-medium text-stone-800">{s.term_type_naziv}</td>
                     <td className="p-3 text-right text-stone-700">{s.uplaceno}</td>

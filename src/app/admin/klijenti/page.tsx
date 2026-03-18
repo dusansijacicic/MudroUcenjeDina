@@ -50,7 +50,8 @@ export default async function AdminSviKlijentiPage() {
     list.map(async ({ client }) => {
       const stanje = await getStanjePoVrstamaZaKlijenta(client.id);
       const problemTypes = stanje.filter((s) => s.uplaceno < s.odrzano).map((s) => s.term_type_naziv);
-      return { clientId: client.id, problemTypes, stanje };
+      const samoPlaceni = stanje.filter((s) => s.uplaceno >= 1);
+      return { clientId: client.id, problemTypes, stanje: samoPlaceni };
     })
   );
   const warningByClientId = new Map(clientStanjeList.map((w) => [w.clientId, w.problemTypes]));

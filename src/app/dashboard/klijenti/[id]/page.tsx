@@ -2,6 +2,7 @@ import { redirect, notFound } from 'next/navigation';
 import Link from 'next/link';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getDashboardInstructor } from '@/lib/dashboard';
+import { getStanjePoVrstamaZaKlijenta } from '@/app/admin/actions';
 import ClientForm from '../ClientForm';
 import type { Client, Predavanje } from '@/types/database';
 import { TIME_SLOTS } from '@/lib/constants';
@@ -55,6 +56,9 @@ export default async function KlijentPage({
   const preostaloUkupno = placenoUkupno - odrzanoUkupno;
   const duguje = preostaloUkupno < 0 ? Math.abs(preostaloUkupno) : 0;
 
+  const stanjePoVrstamaRaw = await getStanjePoVrstamaZaKlijenta(id);
+  const stanjePoVrstama = stanjePoVrstamaRaw.filter((s) => s.uplaceno >= 1);
+
   return (
     <div className="space-y-8">
       <div className="flex items-center justify-between">
@@ -106,6 +110,37 @@ export default async function KlijentPage({
           )}
         </div>
       </section>
+
+      {stanjePoVrstama.length > 0 && (
+        <section className="rounded-2xl border border-stone-200 bg-white shadow-sm overflow-hidden">
+          <div className="border-b border-stone-100 bg-stone-50/80 px-5 py-3">
+            <h2 className="text-base font-semibold text-stone-800">Pregled po vrstama časova</h2>
+            <p className="text-xs text-stone-500 mt-0.5">Plaćeno / održano / preostalo – samo vrste gde je plaćen makar jedan čas.</p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-stone-200 bg-stone-50/80">
+                  <th className="text-left p-3 font-medium text-stone-600">Vrsta časa</th>
+                  <th className="text-right p-3 font-medium text-stone-600">Plaćeno</th>
+                  <th className="text-right p-3 font-medium text-stone-600">Održano</th>
+                  <th className="text-right p-3 font-medium text-amber-700">Preostalo</th>
+                </tr>
+              </thead>
+              <tbody>
+                {stanjePoVrstama.map((s) => (
+                  <tr key={s.term_type_id ?? 'bez'} className="border-b border-stone-100 hover:bg-stone-50/50">
+                    <td className="p-3 font-medium text-stone-800">{s.term_type_naziv}</td>
+                    <td className="p-3 text-right text-stone-700">{s.uplaceno}</td>
+                    <td className="p-3 text-right text-stone-700">{s.odrzano}</td>
+                    <td className="p-3 text-right font-medium text-amber-800">{s.ostalo}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
 
       <ClientForm instructorId={instructor.id} client={client} />
 
