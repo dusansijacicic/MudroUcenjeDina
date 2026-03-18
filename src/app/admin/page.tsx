@@ -100,13 +100,10 @@ export default async function AdminPage({
           </div>
         ) : (
           (instructors ?? []).map((inst) => (
-            <button
+            <Link
               key={inst.id}
-              type="button"
-              className="w-full flex items-center justify-between p-4 hover:bg-stone-50 gap-2 text-left"
-              onClick={() => {
-                window.location.href = `/admin/view/${inst.id}`;
-              }}
+              href={`/admin/view/${inst.id}`}
+              className="flex items-center justify-between p-4 hover:bg-stone-50 gap-2"
             >
               <div className="flex-1 min-w-0">
                 <div className="font-medium text-stone-800 truncate">
@@ -119,7 +116,7 @@ export default async function AdminPage({
               <span className="text-xs text-stone-400 shrink-0">
                 Statistika →
               </span>
-            </button>
+            </Link>
           ))
         )}
       </div>
