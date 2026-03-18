@@ -60,13 +60,16 @@ export default async function AdminKalendarPage({
   }
 
   const adminSupabase = createAdminClient();
-  const { data: termsRaw } = await adminSupabase
-    .from('terms')
-    .select('*, instructor:instructors(id, ime, prezime, color), predavanja(*, client:clients(id, ime, prezime))')
-    .gte('date', dateFrom)
-    .lte('date', dateTo)
-    .order('date')
-    .order('slot_index');
+  const [{ data: termsRaw }, { data: instructorsList }] = await Promise.all([
+    adminSupabase
+      .from('terms')
+      .select('*, instructor:instructors(id, ime, prezime, color), predavanja(*, client:clients(id, ime, prezime))')
+      .gte('date', dateFrom)
+      .lte('date', dateTo)
+      .order('date')
+      .order('slot_index'),
+    adminSupabase.from('instructors').select('id, ime, prezime, color').order('prezime').order('ime'),
+  ]);
 
   const terms: AdminTerm[] = (termsRaw ?? []).map((t) => {
     const instr = (t as { instructor?: { id: string; ime: string; prezime: string; color?: string | null } | Array<unknown> }).instructor;
@@ -84,6 +87,12 @@ export default async function AdminKalendarPage({
   const base = '/admin/kalendar';
   const month = params.month || new Date().toISOString().slice(0, 7);
   const day = singleDay ?? todayStr;
+  const legendInstructors = (instructorsList ?? []).map((i) => ({
+    id: i.id,
+    ime: i.ime ?? '',
+    prezime: i.prezime ?? '',
+    color: i.color ?? '#0d9488',
+  }));
 
   return (
     <div>
@@ -100,6 +109,20 @@ export default async function AdminKalendarPage({
           </Link>
         </div>
       </div>
+      {legendInstructors.length > 0 && (
+        <div className="mb-4 flex flex-wrap items-center gap-3 rounded-lg border border-stone-200 bg-stone-50/80 px-4 py-2 text-sm">
+          <span className="font-medium text-stone-600">Legenda:</span>
+          {legendInstructors.map((i) => (
+            <span key={i.id} className="flex items-center gap-1.5">
+              <span
+                className="inline-block h-4 w-4 rounded border border-stone-300"
+                style={{ backgroundColor: i.color }}
+              />
+              <span className="text-stone-800">{i.ime} {i.prezime}</span>
+            </span>
+          ))}
+        </div>
+      )}
       <AdminCalendarView
         terms={terms}
         view={view}

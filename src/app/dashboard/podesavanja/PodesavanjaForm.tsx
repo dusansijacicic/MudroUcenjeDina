@@ -123,9 +123,17 @@ export default function PodesavanjaForm({
           Boja u kalendaru
         </label>
         <p className="text-xs text-stone-500 mb-2">
-          Tvoji termini će se u kalendaru prikazivati ovom bojom.
+          Tvoji termini će se u kalendaru prikazivati ovom bojom. Svaki predavač treba da ima drugu boju.
         </p>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-3">
+          <input
+            type="color"
+            value={color}
+            onChange={(e) => setColor(e.target.value)}
+            className="h-10 w-14 cursor-pointer rounded border border-stone-300"
+          />
+          <span className="text-sm text-stone-600">{color}</span>
+          <span className="text-stone-400">|</span>
           {INSTRUCTOR_COLORS.map((c) => (
             <button
               key={c.value}

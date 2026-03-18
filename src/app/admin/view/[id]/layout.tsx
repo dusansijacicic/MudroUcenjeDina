@@ -1,9 +1,10 @@
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { redirect, notFound } from 'next/navigation';
-import { cookies } from 'next/headers';
 import type { Instructor } from '@/types/database';
 import AdminViewNav from './AdminViewNav';
+
+/** Cookie view_as_instructor se postavlja u middleware kada admin uđe u /admin/view/[id]. */
 
 export default async function AdminViewLayout({
   children,
@@ -34,9 +35,6 @@ export default async function AdminViewLayout({
     .single();
 
   if (!instructor) notFound();
-
-  const cookieStore = await cookies();
-  cookieStore.set('view_as_instructor', id, { path: '/', maxAge: 60 * 60 * 24 });
 
   return (
     <div className="min-h-screen bg-stone-50">

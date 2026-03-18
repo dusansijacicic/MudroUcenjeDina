@@ -32,10 +32,9 @@ export default function AdminTerminForm({
         setError(result.error);
         return;
       }
-      if (result.termId && result.instructorId) {
-        const redirectPath = `/dashboard/termin/${result.termId}`;
-        const setViewUrl = `/admin/set-view?instructor=${encodeURIComponent(result.instructorId)}&redirect=${encodeURIComponent(redirectPath)}`;
-        router.push(setViewUrl);
+      if (result.termId) {
+        router.push(`/admin/termin/${result.termId}`);
+        router.refresh();
         return;
       }
     } finally {

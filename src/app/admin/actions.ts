@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
+import { INSTRUCTOR_COLORS } from '@/lib/constants';
 
 export async function createInstructorAsAdmin(formData: FormData): Promise<{ error?: string; success?: boolean }> {
   const supabase = await createClient();
@@ -57,13 +58,18 @@ export async function createInstructorAsAdmin(formData: FormData): Promise<{ err
   }
   console.log('[admin] createInstructor: auth user created', newUser.user.id);
 
+  const { data: existingInstructors } = await adminSupabase.from('instructors').select('color');
+  const usedColors = new Set((existingInstructors ?? []).map((r) => (r.color ?? '').toLowerCase()));
+  const firstFreeColor =
+    INSTRUCTOR_COLORS.find((c) => !usedColors.has(c.value.toLowerCase()))?.value ?? '#0d9488';
+
   console.log('[admin] createInstructor: inserting into instructors');
   const { error: insertError } = await adminSupabase.from('instructors').insert({
     user_id: newUser.user.id,
     ime,
     prezime,
     email,
-    color: '#0d9488',
+    color: firstFreeColor,
   });
   if (insertError) {
     console.error('[admin] createInstructor: instructors insert failed', insertError.message, insertError.code);

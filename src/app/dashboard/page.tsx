@@ -125,6 +125,19 @@ export default async function DashboardPage({
           <AddTermButton instructorId={instructorId} />
         </div>
       </div>
+      <div className="mb-3 flex items-center gap-3 text-sm text-stone-600">
+        <span className="font-medium">Legenda:</span>
+        <span className="flex items-center gap-1.5">
+          <span
+            className="inline-block h-4 w-4 rounded border border-stone-300"
+            style={{ backgroundColor: instructorColor }}
+          />
+          <span>Vi ({instructor.ime} {instructor.prezime})</span>
+        </span>
+        {otherTerms.length > 0 && (
+          <span className="text-stone-400">| Ostali predavači: sivi blokovi (samo pregled)</span>
+        )}
+      </div>
       <CalendarView
         view={view}
         terms={terms}
