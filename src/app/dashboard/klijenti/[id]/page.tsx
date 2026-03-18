@@ -16,15 +16,16 @@ export default async function KlijentPage({
   if (!instructor) redirect('/login?reason=no_instructor');
 
   const admin = createAdminClient();
-  const { data: link } = await admin
+  const { data: clientRow, error } = await admin.from('clients').select('*').eq('id', id).single();
+  if (error || !clientRow) notFound();
+
+  const { data: myLink } = await admin
     .from('instructor_clients')
-    .select('placeno_casova, client:clients(*)')
+    .select('placeno_casova')
     .eq('instructor_id', instructor.id)
     .eq('client_id', id)
-    .single();
-
-  if (!link?.client) notFound();
-  const client = { ...(link.client as unknown as Client), placeno_casova: link.placeno_casova };
+    .maybeSingle();
+  const client = { ...(clientRow as Client), placeno_casova: myLink?.placeno_casova ?? 0 };
 
   const { data: allLinks } = await admin
     .from('instructor_clients')
