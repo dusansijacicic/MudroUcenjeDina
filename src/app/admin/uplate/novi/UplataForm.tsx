@@ -43,7 +43,10 @@ export default function UplataForm({
       return;
     }
     const popustNum = popustPercent.trim() ? parseFloat(popustPercent.replace(',', '.')) : null;
-    if (popustPercent.trim() && (popustNum === undefined || !Number.isFinite(popustNum) || popustNum < 0 || popustNum > 100)) {
+    const popustInvalid = popustPercent.trim() && (
+      popustNum == null || !Number.isFinite(popustNum) || (Number(popustNum) < 0 || Number(popustNum) > 100)
+    );
+    if (popustInvalid) {
       setError('Popust mora biti broj 0–100.');
       setLoading(false);
       return;
