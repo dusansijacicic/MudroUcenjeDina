@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
@@ -8,6 +8,7 @@ import { createUplata } from '@/app/admin/actions';
 
 type Option = { id: string; ime?: string; prezime?: string; naziv?: string };
 type ClientOption = Option & { popust_percent?: number };
+type TermTypeOption = Option & { cena_po_casu?: number | null };
 
 export default function UplataForm({
   instructors,
@@ -18,7 +19,7 @@ export default function UplataForm({
 }: {
   instructors: Option[];
   clients: ClientOption[];
-  termTypes: Option[];
+  termTypes: TermTypeOption[];
   /** Kad je setovan (npr. za predavača), predavač je fiksiran i ne prikazuje se izbor. */
   fixedInstructorId?: string;
   /** Link za „Nazad” i redirect posle unosa (default admin uplate). */
@@ -37,6 +38,23 @@ export default function UplataForm({
   const [napomena, setNapomena] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  const selectedTermType = termTypes.find((t) => t.id === termTypeId);
+  const cenaPoCasu = selectedTermType?.cena_po_casu != null && Number.isFinite(selectedTermType.cena_po_casu) ? Number(selectedTermType.cena_po_casu) : null;
+  const popustZaUplatu = popustPercent.trim() ? parseFloat(popustPercent.replace(',', '.')) : null;
+  const effectivePopust = (popustZaUplatu != null && Number.isFinite(popustZaUplatu) && popustZaUplatu >= 0 && popustZaUplatu <= 100)
+    ? popustZaUplatu
+    : (Number(clientPopust) >= 0 && Number(clientPopust) <= 100 ? Number(clientPopust) : 0);
+  const iznosCalculated =
+    cenaPoCasu != null && brojCasova >= 0
+      ? Math.round(cenaPoCasu * brojCasova * (1 - effectivePopust / 100))
+      : null;
+
+  useEffect(() => {
+    if (iznosCalculated != null && iznosCalculated >= 0) {
+      setIznos(String(iznosCalculated));
+    }
+  }, [iznosCalculated]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -119,16 +137,6 @@ export default function UplataForm({
         )}
       </div>
       <div>
-        <label className="block text-sm font-medium text-stone-700 mb-1">Iznos (RSD)</label>
-        <input
-          type="text"
-          value={iznos}
-          onChange={(e) => setIznos(e.target.value)}
-          placeholder="npr. 5000"
-          className="w-full rounded-lg border border-stone-300 px-3 py-2 text-stone-800"
-        />
-      </div>
-      <div>
         <label className="block text-sm font-medium text-stone-700 mb-1">Vrsta časa</label>
         <select
           value={termTypeId}
@@ -137,7 +145,12 @@ export default function UplataForm({
         >
           <option value="">—</option>
           {termTypes.map((t) => (
-            <option key={t.id} value={t.id}>{t.naziv}</option>
+            <option key={t.id} value={t.id}>
+              {t.naziv}
+              {t.cena_po_casu != null && Number(t.cena_po_casu) >= 0
+                ? ` — ${Number(t.cena_po_casu).toLocaleString('sr-Latn-RS')} RSD/čas`
+                : ''}
+            </option>
           ))}
         </select>
       </div>
@@ -147,7 +160,7 @@ export default function UplataForm({
           type="number"
           min={0}
           value={brojCasova}
-          onChange={(e) => setBrojCasova(parseInt(e.target.value, 10) || 0)}
+          onChange={(e) => setBrojCasova(Math.max(0, parseInt(e.target.value, 10) || 0))}
           className="w-full rounded-lg border border-stone-300 px-3 py-2 text-stone-800 max-w-[120px]"
         />
       </div>
@@ -157,10 +170,39 @@ export default function UplataForm({
           type="text"
           value={popustPercent}
           onChange={(e) => setPopustPercent(e.target.value)}
-          placeholder="npr. 10"
+          placeholder={`npr. ${clientPopust > 0 ? clientPopust : '10'}`}
           className="w-full rounded-lg border border-stone-300 px-3 py-2 text-stone-800 max-w-[100px]"
         />
-        <p className="mt-1 text-xs text-stone-500">0–100. Opciono za ovu jednu uplatu (može biti drugačije od popusta na nivou klijenta).</p>
+        <p className="mt-1 text-xs text-stone-500">0–100. Ako prazno, koristi se popust klijenta ({clientPopust}%).</p>
+      </div>
+      {iznosCalculated != null && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50/80 px-4 py-3">
+          <p className="text-xs font-medium text-amber-800 mb-0.5">Izračunata cena</p>
+          <p className="text-lg font-semibold text-amber-900">
+            {iznosCalculated.toLocaleString('sr-Latn-RS')} RSD
+          </p>
+          <p className="text-xs text-stone-600 mt-1">
+            {cenaPoCasu != null && (
+              <>
+                {cenaPoCasu.toLocaleString('sr-Latn-RS')} × {brojCasova} časova
+                {effectivePopust > 0 && (
+                  <> − {effectivePopust}% popust</>
+                )}
+              </>
+            )}
+          </p>
+        </div>
+      )}
+      <div>
+        <label className="block text-sm font-medium text-stone-700 mb-1">Iznos (RSD)</label>
+        <input
+          type="text"
+          value={iznos}
+          onChange={(e) => setIznos(e.target.value)}
+          placeholder={iznosCalculated != null ? String(iznosCalculated) : 'npr. 5000'}
+          className="w-full rounded-lg border border-stone-300 px-3 py-2 text-stone-800"
+        />
+        <p className="mt-1 text-xs text-stone-500">Automatski popunjeno iz vrste časa, broja časova i popusta. Možete ručno izmeniti.</p>
       </div>
       <div>
         <label className="block text-sm font-medium text-stone-700 mb-1">Napomena</label>

@@ -33,7 +33,7 @@ export default async function AdminUplateNoviPage() {
       <UplataForm
         instructors={(instructors ?? []).map((i) => ({ id: i.id, ime: i.ime ?? '', prezime: i.prezime ?? '' }))}
         clients={(clients ?? []).map((c) => ({ id: c.id, ime: c.ime ?? '', prezime: c.prezime ?? '', popust_percent: (c as { popust_percent?: number | null }).popust_percent ?? 0 }))}
-        termTypes={termTypes.map((t) => ({ id: t.id, naziv: t.naziv }))}
+        termTypes={termTypes.map((t) => ({ id: t.id, naziv: t.naziv, cena_po_casu: t.cena_po_casu ?? null }))}
       />
       <p className="mt-4">
         <Link href="/admin/uplate" className="text-sm text-amber-700 hover:underline">← Nazad na evidenciju</Link>

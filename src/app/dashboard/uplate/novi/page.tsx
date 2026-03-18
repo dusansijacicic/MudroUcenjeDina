@@ -38,7 +38,7 @@ export default async function DashboardUplateNoviPage() {
           prezime: c.prezime ?? '',
           popust_percent: c.popust_percent ?? 0,
         }))}
-        termTypes={termTypes.map((t) => ({ id: t.id, naziv: t.naziv }))}
+        termTypes={termTypes.map((t) => ({ id: t.id, naziv: t.naziv, cena_po_casu: t.cena_po_casu ?? null }))}
         fixedInstructorId={instructor.id}
         backHref="/dashboard/uplate"
       />
