@@ -34,7 +34,10 @@ export default function AdminClientForm({
     setError('');
     setLoading(true);
     const popustNum = popust_percent.trim() ? parseFloat(popust_percent.replace(',', '.')) : null;
-    if (popust_percent.trim() && (popustNum === undefined || !Number.isFinite(popustNum) || popustNum < 0 || popustNum > 100)) {
+    const popustInvalid = popust_percent.trim() && (
+      popustNum == null || !Number.isFinite(popustNum) || (Number(popustNum) < 0 || Number(popustNum) > 100)
+    );
+    if (popustInvalid) {
       setError('Popust mora biti broj 0–100.');
       setLoading(false);
       return;
