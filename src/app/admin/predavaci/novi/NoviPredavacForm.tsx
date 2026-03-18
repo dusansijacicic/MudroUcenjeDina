@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import toast from 'react-hot-toast';
 import { createInstructorAsAdmin } from '../../actions';
 
 export default function NoviPredavacForm() {
@@ -16,13 +17,27 @@ export default function NoviPredavacForm() {
     const form = e.currentTarget;
     const formData = new FormData(form);
     try {
+      console.log('[NoviPredavacForm] submitting');
       const result = await createInstructorAsAdmin(formData);
+      console.log('[NoviPredavacForm] result', result);
       if (result?.error) {
         setError(result.error);
+        toast.error(result.error);
+        return;
+      }
+      if (result?.success) {
+        toast.success('Predavač je dodat.');
+        router.push('/admin');
+        router.refresh();
+        return;
       }
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Greška pri kreiranju.';
-      if (!msg.includes('NEXT_REDIRECT')) setError(msg);
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error('[NoviPredavacForm] catch', err);
+      if (!msg.includes('NEXT_REDIRECT')) {
+        setError(msg);
+        toast.error(msg);
+      }
     } finally {
       setLoading(false);
     }

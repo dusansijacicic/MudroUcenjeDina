@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import Link from 'next/link';
+import toast from 'react-hot-toast';
 import { createClient } from '@/lib/supabase/client';
 import type { Client } from '@/types/database';
 
@@ -62,36 +63,56 @@ export default function ClientForm({
       const placeno = Math.max(0, placeno_casova);
 
       if (client) {
+        console.log('[ClientForm] update client', client.id);
         const { error: updateError } = await supabase
           .from('clients')
           .update(clientPayload)
           .eq('id', client.id);
-        if (updateError) throw updateError;
+        if (updateError) {
+          console.error('[ClientForm] clients update failed', updateError);
+          throw updateError;
+        }
         const { error: linkError } = await supabase
           .from('instructor_clients')
           .update({ placeno_casova: placeno })
           .eq('instructor_id', instructorId)
           .eq('client_id', client.id);
-        if (linkError) throw linkError;
+        if (linkError) {
+          console.error('[ClientForm] instructor_clients update failed', linkError);
+          throw linkError;
+        }
+        toast.success('Klijent sačuvan.');
       } else {
+        console.log('[ClientForm] insert client', clientPayload.ime, clientPayload.prezime);
         const { data: newClient, error: insertError } = await supabase
           .from('clients')
           .insert(clientPayload)
           .select('id')
           .single();
-        if (insertError) throw insertError;
+        if (insertError) {
+          console.error('[ClientForm] clients insert failed', insertError.message, insertError.code);
+          throw insertError;
+        }
         if (!newClient) throw new Error('Klijent nije kreiran.');
+        console.log('[ClientForm] client created', newClient.id, 'linking to instructor', instructorId);
         const { error: linkError } = await supabase.from('instructor_clients').insert({
           instructor_id: instructorId,
           client_id: newClient.id,
           placeno_casova: placeno,
         });
-        if (linkError) throw linkError;
+        if (linkError) {
+          console.error('[ClientForm] instructor_clients insert failed', linkError.message, linkError.code);
+          throw linkError;
+        }
+        toast.success('Klijent je dodat.');
       }
       router.push(redirectAfterSave ?? '/dashboard/klijenti');
       router.refresh();
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Greška pri čuvanju.');
+      const msg = err instanceof Error ? err.message : 'Greška pri čuvanju.';
+      console.error('[ClientForm] error', err);
+      setError(msg);
+      toast.error(msg);
     } finally {
       setLoading(false);
     }

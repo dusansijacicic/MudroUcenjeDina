@@ -47,13 +47,20 @@ export default function LoginPage() {
       }
       const { data: { user: u } } = await supabase.auth.getUser();
       if (u) {
-        const { data: adm } = await supabase.from('admin_users').select('user_id').eq('user_id', u.id).single();
+        const { data: adm } = await supabase.from('admin_users').select('user_id').eq('user_id', u.id).maybeSingle();
         if (adm) {
           toast.success('Prijava uspešna (admin). Preusmeravanje...');
           router.push('/admin');
         } else {
-          const { data: inst } = await supabase.from('instructors').select('id').eq('user_id', u.id).single();
-          const { data: cl } = await supabase.from('clients').select('id').eq('user_id', u.id).single();
+          const { data: inst } = await supabase.from('instructors').select('id').eq('user_id', u.id).maybeSingle();
+          let cl: { id: string } | null = null;
+          try {
+            const res = await supabase.from('clients').select('id').eq('user_id', u.id).maybeSingle();
+            cl = res.data;
+            if (res.error) console.warn('[login] clients query error', res.error.message, res.error.code);
+          } catch (e) {
+            console.warn('[login] clients query failed (e.g. 500)', e);
+          }
           if (inst) {
             toast.success('Prijava uspešna. Preusmeravanje na kalendar...');
             router.push('/dashboard');
