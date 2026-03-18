@@ -3,7 +3,13 @@
 -- =============================================================================
 -- Uputstvo: Nalepi ceo fajl u Supabase SQL Editor i pokreni RUN.
 -- Briše i sve auth korisnike (Authentication → Users će biti prazan).
--- Zatim u Authentication ručno kreiraj 3 korisnika, pa pokreni seed_mock_data.sql.
+-- Zatim: Authentication → Users → Add user (dusan, dina, nekodete, lozinka 123456).
+-- Zatim pokreni seed_mock_data.sql u SQL Editoru.
+--
+-- Šema uključuje: tabele (instructors, clients, instructor_clients, terms,
+-- predavanja, admin_users, app_settings, zahtevi_za_cas, availability), RLS
+-- (samo admin kreira predavače i klijente; predavači vide/ažuriraju svoje),
+-- funkcije (link_client_to_user, get_occupied_slots, get_instructor_available_slots).
 -- =============================================================================
 
 -- ----- 1. RUŠENJE PUBLIC TABELA I FUNKCIJA -----

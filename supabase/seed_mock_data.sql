@@ -2,13 +2,12 @@
 -- SEED: Mock podaci za testiranje
 -- ============================================================
 -- PREREKVIZIT:
---   1. Pokreni FULL_RESET_AND_MIGRATE.sql.
---   2. OBAVEZNO pre ovog fajla: u Supabase Authentication → Users → Add user
---      dodaj bar ova 3 korisnika (lozinka 123456):
+--   1. Pokreni FULL_RESET_AND_MIGRATE.sql u SQL Editoru.
+--   2. OBAVEZNO: Authentication → Users → Add user (lozinka 123456):
 --        dusan.sijacic2@gmail.com   (admin)
---        dina.mateja@yahoo.com      (predavač – BEZ OVOG NEMA NI JEDNOG PREDAVAČA)
+--        dina.mateja@yahoo.com      (predavač – BEZ OVOG seed neće proći)
 --        nekodete@gmail.com         (učenik)
---   3. Zatim pokreni ceo ovaj fajl.
+--   3. Pokreni ceo ovaj fajl u SQL Editoru (isti kontekst zaobilazi RLS).
 -- ============================================================
 
 CREATE EXTENSION IF NOT EXISTS pgcrypto;

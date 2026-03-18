@@ -38,7 +38,13 @@ export default function LoginPage() {
         email,
         password,
       });
-      if (signInError) throw signInError;
+      if (signInError) {
+        const msg = signInError.message || 'Pogrešan email ili lozinka.';
+        setError(msg);
+        toast.error(msg);
+        setLoading(false);
+        return;
+      }
       const { data: { user: u } } = await supabase.auth.getUser();
       if (u) {
         const { data: adm } = await supabase.from('admin_users').select('user_id').eq('user_id', u.id).single();
@@ -65,7 +71,9 @@ export default function LoginPage() {
       }
       router.refresh();
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Greška pri prijavi.';
+      const msg =
+        (err as { message?: string })?.message ||
+        (err instanceof Error ? err.message : 'Greška pri prijavi. Proverite internet i Supabase Auth → URL Configuration (Site URL).');
       setError(msg);
       toast.error(msg);
     } finally {
@@ -124,6 +132,9 @@ export default function LoginPage() {
             {loading ? 'Sačekajte...' : 'Prijava'}
           </button>
         </form>
+        <p className="mt-4 text-center text-xs text-[var(--kid-text-muted)]">
+          Lozinka za test naloge: 123456. Ako ne radi, u Supabase: Authentication → URL Configuration → Site URL mora biti ovaj sajt; Providers → Email → isključi „Confirm email”.
+        </p>
       </div>
     </div>
   );
