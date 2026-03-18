@@ -68,13 +68,24 @@ export default async function AdminViewKlijentiPage({
           </thead>
           <tbody>
             {rows.map((c) => (
-              <tr key={c.id} className="border-b border-stone-100">
-                <td className="p-3 font-medium text-stone-800">{c.ime} {c.prezime}</td>
+              <tr key={c.id} className="border-b border-stone-100 hover:bg-stone-50">
+                <td className="p-3 font-medium text-stone-800">
+                  <Link href={`/admin/view/${id}/klijenti/${c.id}`} className="hover:text-amber-600">
+                    {c.ime} {c.prezime}
+                  </Link>
+                </td>
                 <td className="p-3 text-stone-600">{c.godiste ?? '—'}</td>
                 <td className="p-3 text-stone-600">{c.razred ?? '—'}</td>
                 <td className="p-3 text-stone-600">{c.skola ?? '—'}</td>
                 <td className="p-3 text-stone-600">{c.kontakt_telefon ?? '—'}</td>
-                <td className="p-3 text-right">{c.placeno_casova}</td>
+                <td className="p-3 text-right">
+                  <Link
+                    href={`/admin/view/${id}/klijenti/${c.id}`}
+                    className="text-amber-600 hover:text-amber-700 text-sm font-medium"
+                  >
+                    Izmeni
+                  </Link>
+                </td>
               </tr>
             ))}
           </tbody>

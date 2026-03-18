@@ -1,26 +1,30 @@
 -- ============================================================
 -- SEED: Mock podaci za testiranje
 -- ============================================================
--- PREREKVIZIT: Pokreni prvo FULL_RESET_AND_MIGRATE.sql. Zatim u Authentication
--- ručno dodaj 3 korisnika (lozinka min 6 znakova):
---   1. dusan.sijacic2@gmail.com   (super admin)
---   2. dina.mateja@yahoo.com      (predavač)
---   3. nekodete@gmail.com         (učenik)
--- Zatim pokreni ovaj ceo fajl u SQL Editoru.
--- ============================================================
--- Šta seed unosi: 20 predavača (predavac1@test.com … predavac20@test.com),
--- klijenti (Dina 6, ostali po 5–8), instructor_clients, termini (Pon–Pet naredne nedelje),
--- predavanja (zauzeti slotovi za test „zauzeto”), instructor_weekly_availability (Pon–Pet slot 1–10),
--- instructor_availability_periods (Dina – override za narednu nedelju, slotovi 2–5 Pon/uto/sre),
--- zahtevi_za_cas (1 pending + 1 potvrđen za NekoDete – da vidiš baner „Novo”).
+-- PREREKVIZIT:
+--   1. Pokreni FULL_RESET_AND_MIGRATE.sql.
+--   2. OBAVEZNO pre ovog fajla: u Supabase Authentication → Users → Add user
+--      dodaj bar ova 3 korisnika (lozinka 123456):
+--        dusan.sijacic2@gmail.com   (admin)
+--        dina.mateja@yahoo.com      (predavač – BEZ OVOG NEMA NI JEDNOG PREDAVAČA)
+--        nekodete@gmail.com         (učenik)
+--   3. Zatim pokreni ceo ovaj fajl.
 -- ============================================================
 
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
--- 0) Očisti sve podatke iz aplikativnih tabela (redosled zbog stranih ključeva)
+-- 0) Provera: mora postojati bar Dina u auth, inače seed ne može da napravi nijednog predavača
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM auth.users WHERE email = 'dina.mateja@yahoo.com') THEN
+    RAISE EXCEPTION 'NEMA PREDAVAČA U AUTH. Pre pokretanja seeda u Supabase idi na Authentication → Users → Add user i dodaj korisnika: dina.mateja@yahoo.com, lozinka 123456. Sačuvaj, pa ponovo pokreni seed_mock_data.sql.';
+  END IF;
+END $$;
+
+-- 0a) Očisti sve podatke iz aplikativnih tabela
 TRUNCATE predavanja, zahtevi_za_cas, terms, instructor_clients, clients, instructor_availability_periods, instructor_weekly_availability, instructors, admin_users RESTART IDENTITY CASCADE;
 
--- 1) Kreiraj 20 auth korisnika (predavači) + auth.identities, pa 20 redova u instructors
+-- 1) 20 predavača: kreiraj auth users (predavac1@test.com … predavac20@test.com) pa red u instructors
 DO $$
 DECLARE
   i INT;
@@ -37,38 +41,31 @@ BEGIN
 
     SELECT id INTO u_id FROM auth.users WHERE email = eml LIMIT 1;
     IF u_id IS NULL THEN
-      u_id := gen_random_uuid();
-      enc_pw := crypt('123456', gen_salt('bf'));
-      INSERT INTO auth.users (
-        id, instance_id, aud, role, email, encrypted_password, email_confirmed_at,
-        raw_app_meta_data, raw_user_meta_data, created_at, updated_at
-      ) VALUES (
-        u_id, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated',
-        eml, enc_pw, NOW(), '{"provider":"email","providers":["email"]}', '{}', NOW(), NOW()
-      );
-      INSERT INTO auth.identities (
-        id, user_id, provider_id, identity_data, provider, created_at, updated_at, last_sign_in_at
-      ) VALUES (
-        u_id, u_id, u_id::TEXT, jsonb_build_object('sub', u_id::TEXT, 'email', eml),
-        'email', NOW(), NOW(), NOW()
-      );
+      BEGIN
+        u_id := gen_random_uuid();
+        enc_pw := crypt('123456', gen_salt('bf'));
+        INSERT INTO auth.users (id, instance_id, aud, role, email, encrypted_password, email_confirmed_at, raw_app_meta_data, raw_user_meta_data, created_at, updated_at)
+        VALUES (u_id, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', eml, enc_pw, NOW(), '{"provider":"email","providers":["email"]}', '{}', NOW(), NOW());
+        INSERT INTO auth.identities (id, user_id, provider_id, identity_data, provider, created_at, updated_at, last_sign_in_at)
+        VALUES (u_id, u_id, u_id::TEXT, jsonb_build_object('sub', u_id::TEXT, 'email', eml), 'email', NOW(), NOW(), NOW());
+      EXCEPTION WHEN OTHERS THEN
+        u_id := NULL;
+      END;
     END IF;
-
-    INSERT INTO instructors (user_id, ime, prezime, email, color)
-    VALUES (
-      u_id, ime, prez, eml,
-      (ARRAY['#EC4899','#3B82F6','#10B981','#F59E0B','#8B5CF6','#EF4444','#06B6D4','#84CC16','#F97316','#6366F1','#14B8A6','#A855F7','#EAB308','#22C55E','#EC4899','#0EA5E9','#F43F5E','#78716C','#0D9488','#C026D3'])[i]
-    )
-    ON CONFLICT (user_id) DO NOTHING;
+    IF u_id IS NOT NULL THEN
+      INSERT INTO instructors (user_id, ime, prezime, email, color)
+      VALUES (u_id, ime, prez, eml, (ARRAY['#EC4899','#3B82F6','#10B981','#F59E0B','#8B5CF6','#EF4444','#06B6D4','#84CC16','#F97316','#6366F1','#14B8A6','#A855F7','#EAB308','#22C55E','#EC4899','#0EA5E9','#F43F5E','#78716C','#0D9488','#C026D3'])[i])
+      ON CONFLICT (user_id) DO NOTHING;
+    END IF;
   END LOOP;
 END $$;
 
--- 2) Dusan = super admin (mora postojati u auth.users)
+-- 2) Dusan = super admin
 INSERT INTO admin_users (user_id)
 SELECT id FROM auth.users WHERE email = 'dusan.sijacic2@gmail.com'
 ON CONFLICT (user_id) DO NOTHING;
 
--- 3) Dina = predavač (mora postojati u auth.users)
+-- 3) Dina = predavač
 INSERT INTO instructors (user_id, ime, prezime, email, color)
 SELECT id, 'Dina', 'Mateja', 'dina.mateja@yahoo.com', '#EC4899'
 FROM auth.users WHERE email = 'dina.mateja@yahoo.com'

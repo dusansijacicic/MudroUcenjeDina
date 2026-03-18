@@ -133,7 +133,9 @@
     U folderu projekta (Dina kalendar) napravi fajl <span class="file">.env.local</span>. U njemu stavi (zameni vrednosti onim iz Supabase koraka 3):
   </div>
   <div class="block">NEXT_PUBLIC_SUPABASE_URL=https://tvoj-projekat.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=tvoj_anon_key_ovde</div>
+NEXT_PUBLIC_SUPABASE_ANON_KEY=tvoj_anon_key_ovde
+SUPABASE_SERVICE_ROLE_KEY=tvoj_service_role_key_ovde</div>
+  <p class="note"><strong>SUPABASE_SERVICE_ROLE_KEY</strong> je potreban da admin mogao da dodaje predavače (Authentication → API → <code>service_role</code>, taj ključ nikad ne diraj u kodu na klijentu). U Supabase: Project Settings → API → service_role secret.</p>
   <div class="step">
     <span class="step-num">2</span>
     U terminalu (u tom istom folderu) pokreni:
@@ -142,7 +144,7 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=tvoj_anon_key_ovde</div>
 npm run dev</div>
   <div class="step">
     <span class="step-num">3</span>
-    Otvori u browseru <a href="http://localhost:3000" target="_blank" rel="noopener">http://localhost:3000</a>. Klikni „Registrujte se” i napravi prvog predavača.
+    Otvori u browseru <a href="http://localhost:3000" target="_blank" rel="noopener">http://localhost:3000</a>. Prijavi se nalogom koji si dodao u Authentication (npr. admin ili predavač).
   </div>
 
   <hr>
@@ -158,10 +160,11 @@ npm run dev</div>
   </div>
   <div class="step">
     <span class="step-num">3</span>
-    Pre nego što klikneš Deploy, otvori <strong>Environment Variables</strong>. Dodaj dve promenljive (iste vrednosti kao u <span class="file">.env.local</span>):
+    Pre nego što klikneš Deploy, otvori <strong>Environment Variables</strong>. Dodaj tri promenljive (iste vrednosti kao u <span class="file">.env.local</span>):
     <ul>
       <li>Name: <span class="code">NEXT_PUBLIC_SUPABASE_URL</span> &nbsp; Value: tvoj Supabase Project URL</li>
       <li>Name: <span class="code">NEXT_PUBLIC_SUPABASE_ANON_KEY</span> &nbsp; Value: tvoj Supabase anon key</li>
+      <li>Name: <span class="code">SUPABASE_SERVICE_ROLE_KEY</span> &nbsp; Value: tvoj Supabase service_role key (da admin može da dodaje predavače)</li>
     </ul>
   </div>
   <div class="step">
@@ -185,26 +188,26 @@ npm run dev</div>
   </div>
 
   <h2>6. Mock podaci i test korisnici</h2>
-  <p>Da bi imao gotove naloge i podatke za testiranje:</p>
+  <p>Da bi imao gotove naloge i <strong>bar jednog predavača</strong> (Dina):</p>
   <div class="step">
     <span class="step-num">1</span>
-    U Supabase: <strong>Authentication</strong> → <strong>Users</strong> → <strong>Add user</strong>. Dodaj tri korisnika (email + lozinka):
+    U <strong>SQL Editor</strong> pokreni <span class="file">supabase/FULL_RESET_AND_MIGRATE.sql</span> (briše sve, uključujući auth korisnike).
   </div>
-  <p class="note"><strong>Važno:</strong> Supabase prihvata samo lozinke od <strong>najmanje 6 znakova</strong>. Koristi npr. <strong>123456</strong> umesto 1234.</p>
-  <ul>
-    <li><strong>dusan.sijacic2@gmail.com</strong> / 123456 → super admin (menja sve)</li>
-    <li><strong>dina.mateja@yahoo.com</strong> / 123456 → predavač</li>
-    <li><strong>nekodete@gmail.com</strong> / 123456 → učenik</li>
-  </ul>
   <div class="step">
     <span class="step-num">2</span>
-    U <strong>SQL Editor</strong> pokreni prvo migraciju <span class="file">supabase/migrations/004_admin_users.sql</span> (tabela admin_users i RLS).
+    <strong>Obavezno:</strong> u Supabase <strong>Authentication</strong> → <strong>Users</strong> → <strong>Add user</strong> dodaj <em>tri</em> korisnika (email + lozinka <strong>123456</strong>):
   </div>
+  <ul>
+    <li><strong>dusan.sijacic2@gmail.com</strong> → super admin</li>
+    <li><strong>dina.mateja@yahoo.com</strong> → predavač (bez ovog neće biti nijednog predavača)</li>
+    <li><strong>nekodete@gmail.com</strong> → učenik</li>
+  </ul>
+  <p class="note">Bez bar <strong>dina.mateja@yahoo.com</strong> u Authentication seed ne može da napravi nijednog predavača i prikazaće grešku.</p>
   <div class="step">
     <span class="step-num">3</span>
-    Zatim pokreni ceo fajl <span class="file">supabase/seed_mock_data.sql</span>. On povezuje te korisnike sa ulogama, kreira predavača Dinu, klijente (Marko, Jovana, Neko Dete, Teodora, Luka, Mila), termine i predavanja. Neko Dete je povezan kao učenik (nekodete@gmail.com).
+    U <strong>SQL Editor</strong> pokreni ceo fajl <span class="file">supabase/seed_mock_data.sql</span>. On poveže te korisnike sa ulogama, kreira predavača Dinu, klijente, termine i predavanja.
   </div>
-  <p class="note">Nakon toga možeš da se uloguješ kao Dusan (admin), Dina (predavač) ili NekoDete (učenik) i da vidiš kako aplikacija radi.</p>
+  <p class="note">Nakon toga možeš da se uloguješ kao Dusan (admin), Dina (predavač) ili NekoDete (učenik).</p>
 
   <hr>
   <p class="done">Gotovo. Aplikacija je na besplatnom domenu (Vercel), baza i prijava na Supabase-u.</p>

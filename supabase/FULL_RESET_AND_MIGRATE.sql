@@ -2,10 +2,11 @@
 -- DINA KALENDAR – POTPUNI RESET I KREIRANJE ŠEME (sve migracije u jednom)
 -- =============================================================================
 -- Uputstvo: Nalepi ceo fajl u Supabase SQL Editor i pokreni RUN.
--- Zatim u Authentication ručno kreiraj korisnike ako treba, pa pokreni seed_mock_data.sql.
+-- Briše i sve auth korisnike (Authentication → Users će biti prazan).
+-- Zatim u Authentication ručno kreiraj 3 korisnika, pa pokreni seed_mock_data.sql.
 -- =============================================================================
 
--- ----- 1. RUŠENJE (obrnut redosled zavisnosti) -----
+-- ----- 1. RUŠENJE PUBLIC TABELA I FUNKCIJA -----
 DROP FUNCTION IF EXISTS public.get_instructor_available_slots(uuid, date);
 DROP FUNCTION IF EXISTS public.get_occupied_slots(date);
 DROP FUNCTION IF EXISTS public.link_client_to_user();
@@ -20,6 +21,13 @@ DROP TABLE IF EXISTS instructor_clients CASCADE;
 DROP TABLE IF EXISTS admin_users CASCADE;
 DROP TABLE IF EXISTS clients CASCADE;
 DROP TABLE IF EXISTS instructors CASCADE;
+
+-- ----- 1b. BRIŠI SVE AUTH KORISNIKE (Supabase Authentication) -----
+-- Mora posle DROP public tabela jer su instructors/clients imali FK na auth.users
+DELETE FROM auth.sessions;
+DELETE FROM auth.refresh_tokens;
+DELETE FROM auth.identities;
+DELETE FROM auth.users;
 
 -- ----- 2. TABELE -----
 
@@ -176,17 +184,14 @@ CREATE POLICY "Instructors see linked clients" ON clients FOR SELECT USING (
 CREATE POLICY "Instructors update linked clients" ON clients FOR UPDATE USING (
   id IN (SELECT client_id FROM instructor_clients WHERE instructor_id IN (SELECT id FROM instructors WHERE user_id = auth.uid()))
 );
-CREATE POLICY "Instructors or admin insert clients" ON clients FOR INSERT WITH CHECK (
-  auth.uid() IN (SELECT user_id FROM instructors) OR auth.uid() IN (SELECT user_id FROM admin_users)
+CREATE POLICY "Admins insert clients" ON clients FOR INSERT WITH CHECK (
+  auth.uid() IN (SELECT user_id FROM admin_users)
 );
 CREATE POLICY "Clients read own row" ON clients FOR SELECT USING (user_id = auth.uid());
 CREATE POLICY "Admins full access clients" ON clients FOR ALL USING (auth.uid() IN (SELECT user_id FROM admin_users));
 
 -- instructor_clients
-CREATE POLICY "Instructors own instructor_clients" ON instructor_clients FOR ALL USING (
-  instructor_id IN (SELECT id FROM instructors WHERE user_id = auth.uid())
-);
-CREATE POLICY "Instructors insert instructor_clients" ON instructor_clients FOR INSERT WITH CHECK (
+CREATE POLICY "Instructors own instructor_clients" ON instructor_clients FOR SELECT USING (
   instructor_id IN (SELECT id FROM instructors WHERE user_id = auth.uid())
 );
 CREATE POLICY "Instructors update instructor_clients" ON instructor_clients FOR UPDATE USING (

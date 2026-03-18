@@ -20,8 +20,9 @@ export default function NoviPredavacForm() {
       if (result?.error) {
         setError(result.error);
       }
-    } catch {
-      setError('Greška pri kreiranju.');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Greška pri kreiranju.';
+      if (!msg.includes('NEXT_REDIRECT')) setError(msg);
     } finally {
       setLoading(false);
     }

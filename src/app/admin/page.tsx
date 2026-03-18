@@ -45,6 +45,12 @@ export default async function AdminPage({
           + Novi predavač
         </Link>
         <Link
+          href="/admin/klijenti"
+          className="inline-flex items-center rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700"
+        >
+          Svi klijenti
+        </Link>
+        <Link
           href="/admin/termin/novi"
           className="inline-flex items-center rounded-lg bg-stone-700 px-4 py-2 text-sm font-medium text-white hover:bg-stone-800"
         >
@@ -52,9 +58,8 @@ export default async function AdminPage({
         </Link>
       </div>
 
-      <h2 className="text-sm font-medium text-stone-600 mb-2">Dodaj klijenta/djaka za predavača</h2>
-      <p className="text-stone-500 text-xs mb-3">
-        Izaberite predavača ispod pa „Klijenti” → „Novi polaznik”, ili kliknite na predavača da uđete u njegov pregled.
+      <p className="text-stone-500 text-sm mb-6">
+        Možete da dodate predavača, da vidite i menjate sve klijente („Svi klijenti”), da zakažete termin za bilo kog predavača, ili da kliknete na predavača da vidite njegov kalendar i klijente.
       </p>
 
       <h2 className="text-sm font-medium text-stone-600 mb-2">Predavači (klik za kalendar i klijente)</h2>

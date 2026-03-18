@@ -1,15 +1,13 @@
 import { redirect } from 'next/navigation';
-import { getDashboardInstructor } from '@/lib/dashboard';
-import ClientForm from '../ClientForm';
+import { createClient } from '@/lib/supabase/server';
 
+/** Samo super admin može da dodaje klijente; koristi Admin → Svi klijenti → Novi klijent. */
 export default async function NoviKlijentPage() {
-  const { instructor } = await getDashboardInstructor();
-  if (!instructor) redirect('/login?reason=no_instructor');
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect('/login');
 
-  return (
-    <div className="max-w-lg">
-      <h1 className="text-xl font-semibold text-stone-800 mb-4">Novi klijent</h1>
-      <ClientForm instructorId={instructor.id} />
-    </div>
-  );
+  const { data: admin } = await supabase.from('admin_users').select('user_id').eq('user_id', user.id).single();
+  if (admin) redirect('/admin/klijenti/novi');
+  redirect('/dashboard/klijenti?reason=only_admin_adds_clients');
 }

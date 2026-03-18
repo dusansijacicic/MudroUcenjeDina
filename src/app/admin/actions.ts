@@ -29,7 +29,14 @@ export async function createInstructorAsAdmin(formData: FormData) {
     return { error: 'Lozinka mora imati najmanje 6 znakova.' };
   }
 
-  const adminSupabase = createAdminClient();
+  let adminSupabase;
+  try {
+    adminSupabase = createAdminClient();
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : 'Server nije podešen za kreiranje korisnika.';
+    return { error: msg };
+  }
+
   const { data: newUser, error: authError } = await adminSupabase.auth.admin.createUser({
     email,
     password,
@@ -47,6 +54,7 @@ export async function createInstructorAsAdmin(formData: FormData) {
     ime,
     prezime,
     email,
+    color: '#0d9488',
   });
   if (insertError) {
     return { error: insertError.message };
