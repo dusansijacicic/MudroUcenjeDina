@@ -46,14 +46,15 @@ export default async function AdminSviKlijentiPage() {
     (a, b) => (a.client.prezime ?? '').localeCompare(b.client.prezime ?? '') || (a.client.ime ?? '').localeCompare(b.client.ime ?? '')
   );
 
-  const clientWarnings = await Promise.all(
+  const clientStanjeList = await Promise.all(
     list.map(async ({ client }) => {
       const stanje = await getStanjePoVrstamaZaKlijenta(client.id);
       const problemTypes = stanje.filter((s) => s.uplaceno < s.odrzano).map((s) => s.term_type_naziv);
-      return { clientId: client.id, problemTypes };
+      return { clientId: client.id, problemTypes, stanje };
     })
   );
-  const warningByClientId = new Map(clientWarnings.map((w) => [w.clientId, w.problemTypes]));
+  const warningByClientId = new Map(clientStanjeList.map((w) => [w.clientId, w.problemTypes]));
+  const stanjeByClientId = new Map(clientStanjeList.map((w) => [w.clientId, w.stanje]));
 
   return (
     <div className="animate-in">
@@ -79,6 +80,7 @@ export default async function AdminSviKlijentiPage() {
               <th className="text-left p-3 font-medium text-stone-600">Ime i prezime</th>
               <th className="text-left p-3 font-medium text-stone-600">Email za prijavu</th>
               <th className="text-left p-3 font-medium text-stone-600">Godište / Razred</th>
+              <th className="text-left p-3 font-medium text-stone-600">Kupljeno / Održano / Preostalo po vrsti</th>
               <th className="text-left p-3 font-medium text-stone-600">Predavači</th>
               <th className="text-right p-3 font-medium text-stone-600">Akcija</th>
             </tr>
@@ -87,6 +89,7 @@ export default async function AdminSviKlijentiPage() {
             {list.map(({ client, instructors: instrs }) => {
               const problemTypes = warningByClientId.get(client.id) ?? [];
               const hasWarning = problemTypes.length > 0;
+              const stanje = stanjeByClientId.get(client.id) ?? [];
               return (
               <tr key={client.id} className="border-b border-stone-100 hover:bg-amber-50/50 ui-transition">
                 <td className="p-3 font-medium text-stone-800">
@@ -100,6 +103,24 @@ export default async function AdminSviKlijentiPage() {
                 <td className="p-3 text-stone-600">{client.login_email ?? '—'}</td>
                 <td className="p-3 text-stone-600">
                   {client.godiste ?? '—'} {client.razred ? ` / ${client.razred}` : ''}
+                </td>
+                <td className="p-3 text-stone-600">
+                  {stanje.length === 0 ? (
+                    <span className="text-stone-400">—</span>
+                  ) : (
+                    <div className="flex flex-wrap gap-x-3 gap-y-1">
+                      {stanje.map((s) => (
+                        <span key={s.term_type_id ?? 'bez'} className="whitespace-nowrap">
+                          <span className="font-medium text-stone-700">{s.term_type_naziv}:</span>{' '}
+                          <span className="text-stone-600">{s.uplaceno} kupljeno</span>
+                          <span className="text-stone-400 mx-0.5">/</span>
+                          <span className="text-stone-600">{s.odrzano} održano</span>
+                          <span className="text-stone-400 mx-0.5">/</span>
+                          <span className="text-amber-700 font-medium">{s.ostalo} preostalo</span>
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </td>
                 <td className="p-3 text-stone-600">
                   {instrs.map((i) => (
