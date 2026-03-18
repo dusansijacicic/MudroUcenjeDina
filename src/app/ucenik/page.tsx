@@ -56,13 +56,7 @@ export default async function UcenikPage() {
   const odrzanoIPlacenoCount = list.filter((p) => p.odrzano && p.placeno).length;
   const placenoCasovaUkupno = (links ?? []).reduce((s, l) => s + (l.placeno_casova ?? 0), 0);
 
-  let preostaloUkupno = 0;
-  for (const link of links ?? []) {
-    const odrzanoZaInst = list.filter(
-      (p) => (p.term as TermWithInstructor)?.instructor_id === link.instructor_id && p.odrzano
-    ).length;
-    preostaloUkupno += Math.max(0, (link.placeno_casova ?? 0) - odrzanoZaInst);
-  }
+  const preostaloUkupno = placenoCasovaUkupno - odrzanoCount;
 
   return (
     <div className="space-y-8">

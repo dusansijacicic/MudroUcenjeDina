@@ -130,7 +130,7 @@ function CellContent({
   emptySlot: number;
 }) {
   const bgLight = hexWithAlpha(instructorColor, 0.15);
-  if (!term && otherTermsInSlot.length === 0) {
+  if (!term) {
     return (
       <Link
         href={`/dashboard/termin/novi?date=${emptyDate}&slot=${emptySlot}`}

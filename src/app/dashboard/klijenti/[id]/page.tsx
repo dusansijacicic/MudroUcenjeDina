@@ -26,6 +26,11 @@ export default async function KlijentPage({
   if (!link?.client) notFound();
   const client = { ...(link.client as unknown as Client), placeno_casova: link.placeno_casova };
 
+  const { data: allLinks } = await admin
+    .from('instructor_clients')
+    .select('instructor_id, placeno_casova')
+    .eq('client_id', id);
+
   const { data: predavanja } = await admin
     .from('predavanja')
     .select('*, term:terms(date, slot_index, instructor_id)')
@@ -33,12 +38,21 @@ export default async function KlijentPage({
     .order('created_at', { ascending: false })
     .limit(50);
 
-  const predavanjaForThisInstructor = (predavanja ?? []).filter(
+  const allLessons = predavanja ?? [];
+  const predavanjaForThisInstructor = allLessons.filter(
     (p) => (p.term as { instructor_id?: string })?.instructor_id === instructor.id
   );
-  const odrzanoCount = predavanjaForThisInstructor.filter((p) => p.odrzano).length;
-  const placenoPaket = client.placeno_casova ?? 0;
-  const ostalo = Math.max(0, placenoPaket - odrzanoCount);
+
+  const odrzanoUkupno = allLessons.filter((p) => p.odrzano).length;
+  const odrzanoKodMene = predavanjaForThisInstructor.filter((p) => p.odrzano).length;
+  const placenoKodMene = predavanjaForThisInstructor.filter((p) => p.placeno).length;
+
+  const placenoUkupno = (allLinks ?? []).reduce(
+    (sum, row) => sum + (row.placeno_casova ?? 0),
+    0
+  );
+  const preostaloUkupno = placenoUkupno - odrzanoUkupno;
+  const duguje = preostaloUkupno < 0 ? Math.abs(preostaloUkupno) : 0;
 
   return (
     <div className="space-y-8">
@@ -55,21 +69,30 @@ export default async function KlijentPage({
       </div>
 
       <div className="rounded-lg bg-amber-50 border border-amber-100 p-4 text-sm">
-        <p className="font-medium text-stone-800 mb-1">Kako rade „plaćeno” i „održano”</p>
+        <p className="font-medium text-stone-800 mb-1">Statistika časova za ovog klijenta</p>
         <p className="text-stone-600 mb-2">
-          <strong>Plaćeno (paket)</strong> = broj časova koje je klijent platio kod vas (unosite vi u formi ispod).{' '}
-          <strong>Održano</strong> = broj časova koje ste održali (označavate „Održano” na svakom predavanju).{' '}
-          <strong>Ostalo</strong> = koliko još časova iz paketa preostaje.
+          <strong>Plaćeno (škola)</strong> = ukupan broj časova koji je klijent platio u školi (sabira se preko svih predavača).{' '}
+          <strong>Održano ukupno</strong> = broj časova koje je klijent imao kod svih predavača.{' '}
+          <strong>Održano kod vas</strong> = broj časova koje ste vi držali ovom klijentu.
         </p>
         <p className="text-stone-700">
-          Kod vas: plaćeno <strong>{placenoPaket}</strong> · održano <strong>{odrzanoCount}</strong> → ostalo <strong>{ostalo}</strong>
+          Plaćeno (škola): <strong>{placenoUkupno}</strong> · održano ukupno{' '}
+          <strong>{odrzanoUkupno}</strong> · održano kod vas{' '}
+          <strong>{odrzanoKodMene}</strong> · plaćeno kod vas (označeno „Plaćeno”){' '}
+          <strong>{placenoKodMene}</strong> · preostalo (škola){' '}
+          <strong>{preostaloUkupno}</strong>
         </p>
+        {duguje > 0 && (
+          <p className="mt-1 text-sm text-red-700">
+            Duguje novac za <strong>{duguje}</strong> termina (više održanih nego plaćenih).
+          </p>
+        )}
       </div>
 
       <ClientForm instructorId={instructor.id} client={client} />
 
       <p className="text-stone-500 text-sm">
-        „Plaćeno časova” je za vašu vezu sa ovim klijentom. Isti klijent može imati druge predavače.
+        „Plaćeno časova (škola)” dobija se sabiranjem plaćenih paketa kod svih predavača. U formi ispod i dalje menjate paket za vašu vezu sa klijentom.
       </p>
 
       <section>

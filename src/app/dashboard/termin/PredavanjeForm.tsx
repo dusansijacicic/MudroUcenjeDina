@@ -73,7 +73,14 @@ export default function PredavanjeForm({
         }
         toast.success('Predavanje dodato.');
       }
-      router.push(`/dashboard/termin/${termId}`);
+      const getMonday = (d: Date) => {
+        const x = new Date(d);
+        const dow = x.getDay();
+        x.setDate(x.getDate() - (dow === 0 ? 6 : dow - 1));
+        return x.toISOString().slice(0, 10);
+      };
+      const weekStart = getMonday(new Date(termDate + 'T12:00:00'));
+      router.push(`/dashboard?week=${weekStart}`);
       router.refresh();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Greška pri čuvanju.';
