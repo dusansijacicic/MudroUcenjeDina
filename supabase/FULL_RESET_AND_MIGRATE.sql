@@ -2,9 +2,8 @@
 -- DINA KALENDAR – POTPUNI RESET I KREIRANJE ŠEME (sve migracije u jednom)
 -- =============================================================================
 -- Uputstvo: Nalepi ceo fajl u Supabase SQL Editor i pokreni RUN.
--- Briše i sve auth korisnike (Authentication → Users će biti prazan).
--- Zatim: Authentication → Users → Add user (dusan, dina, nekodete, lozinka 123456).
--- Zatim pokreni seed_mock_data.sql u SQL Editoru.
+-- Auth korisnici se NE brišu – ostaju Dusan, Dina i NekoDete (jednom ih dodaj u Auth).
+-- Zatim pokreni seed_mock_data.sql (on po emailu povezuje postojeće naloge).
 --
 -- Šema: tabele, RLS (admin + predavač mogu dodavati klijente; predavač vidi/menja svoje),
 -- funkcije (link_client_to_user, get_occupied_slots, get_instructor_available_slots).
@@ -26,12 +25,9 @@ DROP TABLE IF EXISTS admin_users CASCADE;
 DROP TABLE IF EXISTS clients CASCADE;
 DROP TABLE IF EXISTS instructors CASCADE;
 
--- ----- 1b. BRIŠI SVE AUTH KORISNIKE (Supabase Authentication) -----
--- Mora posle DROP public tabela jer su instructors/clients imali FK na auth.users
-DELETE FROM auth.sessions;
-DELETE FROM auth.refresh_tokens;
-DELETE FROM auth.identities;
-DELETE FROM auth.users;
+-- Auth korisnici se NE brišu – ostaju Dusan, Dina i NekoDete (dusan.sijacic2@gmail.com, dina.mateja@yahoo.com, nekodete@gmail.com).
+-- Ako ikad želiš da obrišeš i njih: ručno u SQL Editoru pokreni:
+--   DELETE FROM auth.sessions; DELETE FROM auth.refresh_tokens; DELETE FROM auth.identities; DELETE FROM auth.users;
 
 -- ----- 2. TABELE -----
 
@@ -152,7 +148,35 @@ CREATE INDEX idx_instructor_weekly_availability_instructor ON instructor_weekly_
 CREATE INDEX idx_instructor_availability_periods_instructor ON instructor_availability_periods(instructor_id);
 CREATE INDEX idx_instructor_availability_periods_dates ON instructor_availability_periods(instructor_id, date_from, date_to);
 
--- ----- 4. RLS I POLITIKE -----
+-- ----- 4. POMOĆNE FUNKCIJE (prekid RLS rekurzije) -----
+CREATE OR REPLACE FUNCTION public.current_user_instructor_id()
+RETURNS uuid LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public
+AS $$ SELECT id FROM instructors WHERE user_id = auth.uid() LIMIT 1; $$;
+CREATE OR REPLACE FUNCTION public.current_user_client_id()
+RETURNS uuid LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public
+AS $$ SELECT id FROM clients WHERE user_id = auth.uid() LIMIT 1; $$;
+CREATE OR REPLACE FUNCTION public.linked_client_ids_for_current_instructor()
+RETURNS SETOF uuid LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public
+AS $$ SELECT client_id FROM instructor_clients WHERE instructor_id = (SELECT id FROM instructors WHERE user_id = auth.uid() LIMIT 1); $$;
+CREATE OR REPLACE FUNCTION public.linked_instructor_ids_for_current_client()
+RETURNS SETOF uuid LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public
+AS $$ SELECT instructor_id FROM instructor_clients WHERE client_id = (SELECT id FROM clients WHERE user_id = auth.uid() LIMIT 1); $$;
+-- Da bi SECURITY DEFINER zaobisao RLS, vlasnik funkcije mora imati BYPASSRLS (npr. postgres).
+DO $$
+BEGIN
+  ALTER FUNCTION public.current_user_instructor_id() OWNER TO postgres;
+  ALTER FUNCTION public.current_user_client_id() OWNER TO postgres;
+  ALTER FUNCTION public.linked_client_ids_for_current_instructor() OWNER TO postgres;
+  ALTER FUNCTION public.linked_instructor_ids_for_current_client() OWNER TO postgres;
+EXCEPTION WHEN OTHERS THEN
+  RAISE NOTICE 'ALTER OWNER nije uspeo (možda nisi postgres). RLS rekurzija može ostati. Greška: %', SQLERRM;
+END $$;
+GRANT EXECUTE ON FUNCTION public.current_user_instructor_id() TO authenticated;
+GRANT EXECUTE ON FUNCTION public.current_user_client_id() TO authenticated;
+GRANT EXECUTE ON FUNCTION public.linked_client_ids_for_current_instructor() TO authenticated;
+GRANT EXECUTE ON FUNCTION public.linked_instructor_ids_for_current_client() TO authenticated;
+
+-- ----- 5. RLS I POLITIKE -----
 
 ALTER TABLE instructors ENABLE ROW LEVEL SECURITY;
 ALTER TABLE clients ENABLE ROW LEVEL SECURITY;
@@ -169,24 +193,24 @@ ALTER TABLE instructor_availability_periods ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Instructors own row" ON instructors FOR ALL USING (auth.uid() = user_id);
 CREATE POLICY "Users can insert own instructor row" ON instructors FOR INSERT WITH CHECK (auth.uid() = user_id);
 CREATE POLICY "Admins full access instructors" ON instructors FOR ALL USING (auth.uid() IN (SELECT user_id FROM admin_users));
-CREATE POLICY "Instructors can read all terms" ON terms FOR SELECT USING (auth.uid() IN (SELECT user_id FROM instructors));
-CREATE POLICY "Instructors can read all predavanja" ON predavanja FOR SELECT USING (auth.uid() IN (SELECT user_id FROM instructors));
+CREATE POLICY "Instructors can read all terms" ON terms FOR SELECT USING ((SELECT current_user_instructor_id()) IS NOT NULL);
+CREATE POLICY "Instructors can read all predavanja" ON predavanja FOR SELECT USING ((SELECT current_user_instructor_id()) IS NOT NULL);
 CREATE POLICY "Clients read terms for own predavanja" ON terms FOR SELECT USING (
-  id IN (SELECT term_id FROM predavanja WHERE client_id IN (SELECT id FROM clients WHERE user_id = auth.uid()))
+  id IN (SELECT term_id FROM predavanja WHERE client_id = (SELECT current_user_client_id()))
 );
 CREATE POLICY "Clients read instructors for own predavanja" ON instructors FOR SELECT USING (
-  id IN (SELECT instructor_id FROM terms WHERE id IN (SELECT term_id FROM predavanja WHERE client_id IN (SELECT id FROM clients WHERE user_id = auth.uid())))
+  id IN (SELECT instructor_id FROM terms WHERE id IN (SELECT term_id FROM predavanja WHERE client_id = (SELECT current_user_client_id())))
 );
 CREATE POLICY "Clients read linked instructors" ON instructors FOR SELECT USING (
-  id IN (SELECT instructor_id FROM instructor_clients WHERE client_id IN (SELECT id FROM clients WHERE user_id = auth.uid()))
+  id IN (SELECT linked_instructor_ids_for_current_client())
 );
 
 -- Clients
 CREATE POLICY "Instructors see linked clients" ON clients FOR SELECT USING (
-  id IN (SELECT client_id FROM instructor_clients WHERE instructor_id IN (SELECT id FROM instructors WHERE user_id = auth.uid()))
+  id IN (SELECT linked_client_ids_for_current_instructor())
 );
 CREATE POLICY "Instructors update linked clients" ON clients FOR UPDATE USING (
-  id IN (SELECT client_id FROM instructor_clients WHERE instructor_id IN (SELECT id FROM instructors WHERE user_id = auth.uid()))
+  id IN (SELECT linked_client_ids_for_current_instructor())
 );
 CREATE POLICY "Instructors or admin insert clients" ON clients FOR INSERT WITH CHECK (
   auth.uid() IN (SELECT user_id FROM instructors) OR auth.uid() IN (SELECT user_id FROM admin_users)
@@ -194,18 +218,18 @@ CREATE POLICY "Instructors or admin insert clients" ON clients FOR INSERT WITH C
 CREATE POLICY "Clients read own row" ON clients FOR SELECT USING (user_id = auth.uid());
 CREATE POLICY "Admins full access clients" ON clients FOR ALL USING (auth.uid() IN (SELECT user_id FROM admin_users));
 
--- instructor_clients (predavač može da dodaje i menja svoje veze)
+-- instructor_clients
 CREATE POLICY "Instructors own instructor_clients" ON instructor_clients FOR ALL USING (
-  instructor_id IN (SELECT id FROM instructors WHERE user_id = auth.uid())
+  instructor_id = (SELECT current_user_instructor_id())
 );
 CREATE POLICY "Instructors insert instructor_clients" ON instructor_clients FOR INSERT WITH CHECK (
-  instructor_id IN (SELECT id FROM instructors WHERE user_id = auth.uid())
+  instructor_id = (SELECT current_user_instructor_id())
 );
 CREATE POLICY "Instructors update instructor_clients" ON instructor_clients FOR UPDATE USING (
-  instructor_id IN (SELECT id FROM instructors WHERE user_id = auth.uid())
+  instructor_id = (SELECT current_user_instructor_id())
 );
 CREATE POLICY "Clients read own instructor_clients" ON instructor_clients FOR SELECT USING (
-  client_id IN (SELECT id FROM clients WHERE user_id = auth.uid())
+  client_id = (SELECT current_user_client_id())
 );
 CREATE POLICY "Admins full access instructor_clients" ON instructor_clients FOR ALL USING (
   auth.uid() IN (SELECT user_id FROM admin_users)
@@ -213,16 +237,16 @@ CREATE POLICY "Admins full access instructor_clients" ON instructor_clients FOR 
 
 -- terms
 CREATE POLICY "Instructors own terms" ON terms FOR ALL USING (
-  instructor_id IN (SELECT id FROM instructors WHERE user_id = auth.uid())
+  instructor_id = (SELECT current_user_instructor_id())
 );
 CREATE POLICY "Admins full access terms" ON terms FOR ALL USING (auth.uid() IN (SELECT user_id FROM admin_users));
 
 -- predavanja
 CREATE POLICY "Instructors own predavanja" ON predavanja FOR ALL USING (
-  term_id IN (SELECT id FROM terms WHERE instructor_id IN (SELECT id FROM instructors WHERE user_id = auth.uid()))
+  term_id IN (SELECT id FROM terms WHERE instructor_id = (SELECT current_user_instructor_id()))
 );
 CREATE POLICY "Clients read own predavanja" ON predavanja FOR SELECT USING (
-  client_id IN (SELECT id FROM clients WHERE user_id = auth.uid())
+  client_id = (SELECT current_user_client_id())
 );
 CREATE POLICY "Admins full access predavanja" ON predavanja FOR ALL USING (auth.uid() IN (SELECT user_id FROM admin_users));
 
@@ -237,50 +261,38 @@ CREATE POLICY "Admin update app_settings" ON app_settings FOR ALL TO authenticat
 
 -- zahtevi_za_cas
 CREATE POLICY "Clients read own zahtevi" ON zahtevi_za_cas FOR SELECT USING (
-  client_id IN (SELECT id FROM clients WHERE user_id = auth.uid())
+  client_id = (SELECT current_user_client_id())
 );
 CREATE POLICY "Clients insert own zahtevi" ON zahtevi_za_cas FOR INSERT WITH CHECK (
-  client_id IN (SELECT id FROM clients WHERE user_id = auth.uid())
+  client_id = (SELECT current_user_client_id())
 );
 CREATE POLICY "Instructors read zahtevi" ON zahtevi_za_cas FOR SELECT USING (
-  instructor_id = (SELECT id FROM instructors WHERE user_id = auth.uid() LIMIT 1)
-  OR (instructor_id IS NULL AND client_id IN (
-    SELECT client_id FROM instructor_clients WHERE instructor_id = (SELECT id FROM instructors WHERE user_id = auth.uid() LIMIT 1)
-  ))
+  instructor_id = (SELECT current_user_instructor_id())
+  OR (instructor_id IS NULL AND client_id IN (SELECT client_id FROM instructor_clients WHERE instructor_id = (SELECT current_user_instructor_id())))
 );
 CREATE POLICY "Instructors update zahtevi" ON zahtevi_za_cas FOR UPDATE USING (
-  instructor_id = (SELECT id FROM instructors WHERE user_id = auth.uid() LIMIT 1)
-  OR (instructor_id IS NULL AND client_id IN (
-    SELECT client_id FROM instructor_clients WHERE instructor_id = (SELECT id FROM instructors WHERE user_id = auth.uid() LIMIT 1)
-  ))
+  instructor_id = (SELECT current_user_instructor_id())
+  OR (instructor_id IS NULL AND client_id IN (SELECT client_id FROM instructor_clients WHERE instructor_id = (SELECT current_user_instructor_id())))
 );
 CREATE POLICY "Admins full access zahtevi" ON zahtevi_za_cas FOR ALL USING (auth.uid() IN (SELECT user_id FROM admin_users));
 
 -- instructor_weekly_availability
 CREATE POLICY "Instructors manage own weekly availability" ON instructor_weekly_availability FOR ALL USING (
-  instructor_id IN (SELECT id FROM instructors WHERE user_id = auth.uid())
+  instructor_id = (SELECT current_user_instructor_id())
 );
 CREATE POLICY "Clients can read instructor availability" ON instructor_weekly_availability FOR SELECT USING (
-  instructor_id IN (
-    SELECT ic.instructor_id FROM instructor_clients ic
-    JOIN clients c ON c.id = ic.client_id
-    WHERE c.user_id = auth.uid()
-  )
+  instructor_id IN (SELECT linked_instructor_ids_for_current_client())
 );
 
 -- instructor_availability_periods
 CREATE POLICY "Instructors manage own availability periods" ON instructor_availability_periods FOR ALL USING (
-  instructor_id IN (SELECT id FROM instructors WHERE user_id = auth.uid())
+  instructor_id = (SELECT current_user_instructor_id())
 );
 CREATE POLICY "Clients can read instructor availability periods" ON instructor_availability_periods FOR SELECT USING (
-  instructor_id IN (
-    SELECT ic.instructor_id FROM instructor_clients ic
-    JOIN clients c ON c.id = ic.client_id
-    WHERE c.user_id = auth.uid()
-  )
+  instructor_id IN (SELECT linked_instructor_ids_for_current_client())
 );
 
--- ----- 5. FUNKCIJE -----
+-- ----- 6. FUNKCIJE -----
 
 -- Povezivanje učenika (login_email -> user_id)
 CREATE OR REPLACE FUNCTION public.link_client_to_user()

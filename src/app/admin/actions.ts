@@ -3,6 +3,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { redirect } from 'next/navigation';
+import { revalidatePath } from 'next/cache';
 
 export async function createInstructorAsAdmin(formData: FormData): Promise<{ error?: string; success?: boolean }> {
   const supabase = await createClient();
@@ -70,6 +71,7 @@ export async function createInstructorAsAdmin(formData: FormData): Promise<{ err
   }
 
   console.log('[admin] createInstructor: success', email);
+  revalidatePath('/admin');
   return { success: true };
 }
 

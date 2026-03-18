@@ -9,6 +9,7 @@ const REASON_MESSAGES: Record<string, string> = {
   no_session: 'Sesija nije pronađena ili je istekla. Ulogujte se ponovo.',
   not_authorized: 'Niste ovlašćeni za tu stranicu.',
   no_instructor: 'Za ovaj nalog nije pronađen predavač. Dodajte se u admin_users ili kao predavač.',
+  error_rls: 'Greška pri proveri uloge (RLS). U Supabase SQL Editoru pokrenite FULL_RESET_AND_MIGRATE.sql ili migraciju 015_rls_break_recursion.sql.',
 };
 
 export default function LoginPage() {
@@ -52,15 +53,19 @@ export default function LoginPage() {
           toast.success('Prijava uspešna (admin). Preusmeravanje...');
           router.push('/admin');
         } else {
-          const { data: inst } = await supabase.from('instructors').select('id').eq('user_id', u.id).maybeSingle();
-          let cl: { id: string } | null = null;
-          try {
-            const res = await supabase.from('clients').select('id').eq('user_id', u.id).maybeSingle();
-            cl = res.data;
-            if (res.error) console.warn('[login] clients query error', res.error.message, res.error.code);
-          } catch (e) {
-            console.warn('[login] clients query failed (e.g. 500)', e);
+          const instRes = await supabase.from('instructors').select('id').eq('user_id', u.id).maybeSingle();
+          const clRes = await supabase.from('clients').select('id').eq('user_id', u.id).maybeSingle();
+          const isRlsError = (r: { error?: { message?: string; code?: string } | null }) =>
+            r.error && (r.error.code === '42P17' || /recursion|infinite/i.test(r.error.message ?? ''));
+          if (isRlsError(instRes) || isRlsError(clRes)) {
+            toast.error(REASON_MESSAGES.error_rls);
+            router.push('/login?reason=error_rls');
+            router.refresh();
+            setLoading(false);
+            return;
           }
+          const inst = instRes.data;
+          const cl = clRes.data;
           if (inst) {
             toast.success('Prijava uspešna. Preusmeravanje na kalendar...');
             router.push('/dashboard');
