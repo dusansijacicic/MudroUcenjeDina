@@ -38,8 +38,9 @@ export default function PodesavanjaForm({
         updateAppSetting('max_termina_po_slotu', String(termina)),
       ]);
       if (r1.error || r2.error) {
-        setError(r1.error ?? r2.error ?? 'Greška pri čuvanju.');
-        toast.error(r1.error ?? r2.error);
+        const errMsg = r1.error ?? r2.error ?? 'Greška pri čuvanju.';
+        setError(errMsg);
+        toast.error(errMsg);
         return;
       }
       toast.success('Podešavanja sačuvana.');
