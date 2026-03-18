@@ -92,26 +92,32 @@ export default async function AdminViewPage({
 
       <section className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="rounded-xl border border-stone-200 bg-white p-4">
-          <p className="text-xs uppercase tracking-wide text-stone-400 mb-1">
-            Ukupno termina
+          <p className="text-xs font-medium uppercase tracking-wide text-stone-500 mb-1">
+            Slotova u kalendaru
           </p>
           <p className="text-2xl font-semibold text-stone-800">{ukupnoTermina}</p>
+          <p className="text-xs text-stone-500 mt-1">
+            Broj termina (datum + vreme) koje predavač ima u kalendaru
+          </p>
         </div>
         <div className="rounded-xl border border-stone-200 bg-white p-4">
-          <p className="text-xs uppercase tracking-wide text-stone-400 mb-1">
-            Ukupno časova
+          <p className="text-xs font-medium uppercase tracking-wide text-stone-500 mb-1">
+            Predavanja (časovi)
           </p>
           <p className="text-2xl font-semibold text-stone-800">{ukupnoCasova}</p>
           <p className="text-xs text-stone-500 mt-1">
-            Održanih: {odrzanihCasova}
+            <strong>{odrzanihCasova}</strong> održano · {ukupnoCasova - odrzanihCasova} još nije označeno kao održano
           </p>
         </div>
         <div className="rounded-xl border border-stone-200 bg-white p-4">
-          <p className="text-xs uppercase tracking-wide text-stone-400 mb-1">
-            Zakazani budući časovi
+          <p className="text-xs font-medium uppercase tracking-wide text-stone-500 mb-1">
+            Zakazani u budućnosti
           </p>
           <p className="text-2xl font-semibold text-stone-800">
             {zakazanihUBuducnosti}
+          </p>
+          <p className="text-xs text-stone-500 mt-1">
+            Budući termini gde čas nije označen kao održan
           </p>
         </div>
       </section>
