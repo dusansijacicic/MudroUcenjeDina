@@ -46,42 +46,9 @@ export default function LoginPage() {
         setLoading(false);
         return;
       }
-      const { data: { user: u } } = await supabase.auth.getUser();
-      if (u) {
-        const { data: adm } = await supabase.from('admin_users').select('user_id').eq('user_id', u.id).maybeSingle();
-        if (adm) {
-          toast.success('Prijava uspešna (admin). Preusmeravanje...');
-          router.push('/admin');
-        } else {
-          const instRes = await supabase.from('instructors').select('id').eq('user_id', u.id).maybeSingle();
-          const clRes = await supabase.from('clients').select('id').eq('user_id', u.id).maybeSingle();
-          const isRlsError = (r: { error?: { message?: string; code?: string } | null }) =>
-            r.error && (r.error.code === '42P17' || /recursion|infinite/i.test(r.error.message ?? ''));
-          if (isRlsError(instRes) || isRlsError(clRes)) {
-            toast.error(REASON_MESSAGES.error_rls);
-            router.push('/login?reason=error_rls');
-            router.refresh();
-            setLoading(false);
-            return;
-          }
-          const inst = instRes.data;
-          const cl = clRes.data;
-          if (inst) {
-            toast.success('Prijava uspešna. Preusmeravanje na kalendar...');
-            router.push('/dashboard');
-          } else if (cl) {
-            toast.success('Prijava uspešna. Preusmeravanje na Moj pregled...');
-            router.push('/ucenik');
-          } else {
-            toast('Nalog nije povezan ni sa predavačem ni sa učenikom.', { icon: '⚠️' });
-            router.push('/dashboard');
-          }
-        }
-      } else {
-        toast.success('Prijava uspešna. Preusmeravanje...');
-        router.push('/dashboard');
-      }
+      toast.success('Prijava uspešna. Preusmeravanje...');
       router.refresh();
+      window.location.href = '/api/auth/resolve-role';
     } catch (err: unknown) {
       const msg =
         (err as { message?: string })?.message ||

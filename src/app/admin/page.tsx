@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import AdminFromDashboardToast from '@/components/AdminFromDashboardToast';
@@ -22,10 +23,21 @@ export default async function AdminPage({
     .single();
   if (!admin) redirect('/login');
 
-  const { data: instructors } = await supabase
-    .from('instructors')
-    .select('id, ime, prezime, email')
-    .order('prezime');
+  let instructors: { id: string; ime: string; prezime: string; email: string }[] | null = null;
+  try {
+    const adminSupabase = createAdminClient();
+    const { data } = await adminSupabase
+      .from('instructors')
+      .select('id, ime, prezime, email')
+      .order('prezime');
+    instructors = data;
+  } catch {
+    const { data } = await supabase
+      .from('instructors')
+      .select('id, ime, prezime, email')
+      .order('prezime');
+    instructors = data;
+  }
 
   return (
     <div>
