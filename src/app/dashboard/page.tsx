@@ -7,6 +7,7 @@ import CalendarView from './CalendarView';
 import AddTermButton from './AddTermButton';
 import CalendarFilters from './CalendarFilters';
 import DashboardErrorToast from './DashboardErrorToast';
+import DashboardDebugLog from './DashboardDebugLog';
 import { DEFAULT_INSTRUCTOR_COLOR } from '@/lib/constants';
 import type { RawTerm, OtherTerm } from './CalendarView';
 
@@ -111,27 +112,21 @@ export default async function DashboardPage({
   }
 
   const allTerms = (allTermsRaw ?? []) as TermRow[];
-  // DEBUG: log svi učitani termini (pa pejstuj šta vidiš u konzoli)
   const normOne = (t: TermRow) => ({
     instructor: Array.isArray(t.instructor) ? t.instructor[0] : t.instructor,
     classroom: Array.isArray(t.classroom) ? t.classroom[0] : t.classroom,
   });
-  console.log('[dashboard] serviceRoleUsed:', serviceRoleUsed);
-  console.log('[dashboard] allTerms.length:', allTerms.length);
-  console.log(
-    '[dashboard] allTerms (id, instructor_id, date, slot, instructor name, predavanja count):',
-    allTerms.map((t) => {
-      const { instructor: inst } = normOne(t);
-      return {
-        id: t.id,
-        instructor_id: t.instructor_id,
-        date: t.date,
-        slot_index: t.slot_index,
-        instructor_name: inst ? `${(inst as { ime?: string }).ime} ${(inst as { prezime?: string }).prezime}` : null,
-        predavanja_count: (t.predavanja ?? []).length,
-      };
-    })
-  );
+  const termsSummary = allTerms.map((t) => {
+    const { instructor: inst } = normOne(t);
+    return {
+      id: t.id,
+      instructor_id: t.instructor_id,
+      date: t.date,
+      slot_index: t.slot_index,
+      instructor_name: inst ? `${(inst as { ime?: string }).ime} ${(inst as { prezime?: string }).prezime}` : null,
+      predavanja_count: (t.predavanja ?? []).length,
+    };
+  });
   const norm = (t: TermRow) => ({
     instructor: Array.isArray(t.instructor) ? t.instructor[0] : t.instructor,
     classroom: Array.isArray(t.classroom) ? t.classroom[0] : t.classroom,
@@ -151,7 +146,6 @@ export default async function DashboardPage({
         classroom: room ? { id: room.id, naziv: room.naziv, color: room.color ?? undefined } : null,
       };
     });
-  console.log('[dashboard] myTerms.length:', myTerms.length, '| otherTerms.length:', otherTerms.length, '| current instructorId:', instructorId);
 
   let terms: RawTerm[] = myTerms.map((t) => {
     const { instructor: inst, classroom: room } = norm(t);
@@ -214,6 +208,16 @@ export default async function DashboardPage({
 
   return (
     <div className="animate-in">
+      <DashboardDebugLog
+        payload={{
+          serviceRoleUsed,
+          allTermsLength: allTerms.length,
+          myTermsLength: myTerms.length,
+          otherTermsLength: otherTerms.length,
+          instructorId,
+          termsSummary,
+        }}
+      />
       <DashboardErrorToast />
       {!serviceRoleUsed && (
         <div className="mb-4 rounded-xl border-2 border-amber-300 bg-amber-50 p-4 text-amber-900 text-sm" role="alert">
