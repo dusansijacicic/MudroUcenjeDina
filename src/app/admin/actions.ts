@@ -81,6 +81,26 @@ export async function createInstructorAsAdmin(formData: FormData): Promise<{ err
   return { success: true };
 }
 
+/** Vraća ID-eve predavača i učionica koji su već zauzeti u datom slotu (date + slot_index). */
+export async function getTakenForSlot(
+  date: string,
+  slotIndex: number
+): Promise<{ takenInstructorIds: string[]; takenClassroomIds: string[] }> {
+  const slot = Math.min(12, Math.max(0, slotIndex));
+  const dateStr = date.slice(0, 10);
+  const admin = createAdminClient();
+  const { data: terms } = await admin
+    .from('terms')
+    .select('instructor_id, classroom_id')
+    .eq('date', dateStr)
+    .eq('slot_index', slot);
+  const takenInstructorIds = [...new Set((terms ?? []).map((t) => t.instructor_id).filter(Boolean))] as string[];
+  const takenClassroomIds = [
+    ...new Set((terms ?? []).map((t) => t.classroom_id).filter((id): id is string => id != null)),
+  ];
+  return { takenInstructorIds, takenClassroomIds };
+}
+
 export async function createTermAsAdmin(
   instructorId: string,
   date: string,
@@ -104,23 +124,29 @@ export async function createTermAsAdmin(
   const dateStr = date.slice(0, 10);
   const adminSupabase = createAdminClient();
 
-  const { data: existing } = await adminSupabase
+  const { data: existingSameInstructor } = await adminSupabase
     .from('terms')
-    .select('id, classroom_id')
+    .select('id')
     .eq('instructor_id', instructorId)
     .eq('date', dateStr)
     .eq('slot_index', slot)
-    .single();
+    .maybeSingle();
 
-  if (existing) {
-    // Ako termin već postoji i nema učionicu, a sada smo izabrali neku – upiši je.
-    if (!existing.classroom_id && classroomId) {
-      await adminSupabase
-        .from('terms')
-        .update({ classroom_id: classroomId })
-        .eq('id', existing.id);
+  if (existingSameInstructor) {
+    return { error: 'Ovaj predavač već ima termin u ovom slotu. Izaberite drugog predavača.' };
+  }
+
+  if (classroomId) {
+    const { data: existingSameClassroom } = await adminSupabase
+      .from('terms')
+      .select('id')
+      .eq('date', dateStr)
+      .eq('slot_index', slot)
+      .eq('classroom_id', classroomId)
+      .maybeSingle();
+    if (existingSameClassroom) {
+      return { error: 'Ova učionica je već zauzeta u ovom terminu. Izaberite drugu učionicu.' };
     }
-    return { termId: existing.id, instructorId };
   }
 
   const { data: inserted, error } = await adminSupabase
