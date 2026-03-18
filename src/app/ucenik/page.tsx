@@ -72,16 +72,29 @@ export default async function UcenikPage() {
   const preostaloUkupno = placenoCasovaUkupno - odrzanoCount;
 
   // Stanje po vrstama: iz uplata (uplaćeno) i iz održanih predavanja (iskorišćeno)
-  const uplateList = (uplateRaw ?? []).map((u: Record<string, unknown>) => {
+  type UplataListItem = {
+    id: string;
+    created_at: string | null;
+    iznos: number | null;
+    broj_casova: number | null;
+    popust_percent: number | null;
+    napomena: string | null;
+    instructor: { ime?: string; prezime?: string } | null;
+    term_type: { id?: string; naziv?: string } | null;
+  };
+  const uplateList: UplataListItem[] = (uplateRaw ?? []).map((u: Record<string, unknown>) => {
     const instr = Array.isArray(u.instructor) ? u.instructor[0] : u.instructor;
     const tt = Array.isArray(u.term_type) ? u.term_type[0] : u.term_type;
+    const broj = typeof u.broj_casova === 'number' ? u.broj_casova : null;
+    const iznos = typeof u.iznos === 'number' ? u.iznos : null;
+    const popust = typeof u.popust_percent === 'number' ? u.popust_percent : null;
     return {
-      id: u.id,
-      created_at: u.created_at,
-      iznos: u.iznos,
-      broj_casova: u.broj_casova,
-      popust_percent: u.popust_percent,
-      napomena: u.napomena,
+      id: (u.id as string) ?? '',
+      created_at: (u.created_at as string | null) ?? null,
+      iznos,
+      broj_casova: broj,
+      popust_percent: popust,
+      napomena: (u.napomena as string | null) ?? null,
       instructor: instr as { ime?: string; prezime?: string } | null,
       term_type: tt as { id?: string; naziv?: string } | null,
     };
