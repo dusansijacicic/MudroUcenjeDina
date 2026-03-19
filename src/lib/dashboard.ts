@@ -1,3 +1,4 @@
+import { cache } from 'react';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { cookies } from 'next/headers';
@@ -27,8 +28,9 @@ async function fetchInstructorByUserId(supabase: Awaited<ReturnType<typeof creat
  * - Ako je ulogovan admin i postoji view_as_instructor cookie → predavač koga admin gleda
  * - Inače → predavač po user_id (samo svoje)
  * Ako RLS padne (500), koristi service role da nađe predavača po user_id.
+ * cache() deduplicira pozive u istom requestu (npr. layout + page).
  */
-export async function getDashboardInstructor(): Promise<{
+export const getDashboardInstructor = cache(async function getDashboardInstructor(): Promise<{
   instructor: Instructor | null;
   isAdminView: boolean;
 }> {
@@ -68,4 +70,4 @@ export async function getDashboardInstructor(): Promise<{
   }
   const instructor = await fetchInstructorByUserId(supabase, adminSupabase, user.id);
   return { instructor, isAdminView: false };
-}
+});

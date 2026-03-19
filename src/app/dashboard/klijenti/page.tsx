@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getDashboardInstructor } from '@/lib/dashboard';
-import { getStanjePoVrstamaZaKlijenta } from '@/app/admin/actions';
+import { getStanjePoVrstamaZaKlijenteBatch } from '@/app/admin/actions';
 import ClientRow from './ClientRow';
 import type { Client } from '@/types/database';
 
@@ -22,19 +22,19 @@ export default async function KlijentiPage() {
       admin.from('instructor_clients').select('client_id, placeno_casova').eq('instructor_id', instructor.id),
     ]);
     const placenoMap = new Map((icRows ?? []).map((r) => [r.client_id, r.placeno_casova ?? 0]));
-    const stanjeByClient = await Promise.all(
-      (clients ?? []).map(async (c) => {
-        const stanje = await getStanjePoVrstamaZaKlijenta(c.id);
-        const samoPlaceni = stanje.filter((s) => s.uplaceno >= 1).map((s) => ({
+    const clientIds = (clients ?? []).map((c) => c.id);
+    const batchStanje = await getStanjePoVrstamaZaKlijenteBatch(clientIds);
+    const stanjeMap = new Map(
+      (clients ?? []).map((c) => [
+        c.id,
+        (batchStanje.get(c.id) ?? []).filter((s) => s.uplaceno >= 1).map((s) => ({
           term_type_naziv: s.term_type_naziv,
           uplaceno: s.uplaceno,
           odrzano: s.odrzano,
           ostalo: s.ostalo,
-        }));
-        return { clientId: c.id, stanjePoVrstama: samoPlaceni };
-      })
+        })),
+      ])
     );
-    const stanjeMap = new Map(stanjeByClient.map((s) => [s.clientId, s.stanjePoVrstama]));
     rows = (clients ?? []).map((c) => ({
       client: { ...c, placeno_casova: placenoMap.get(c.id) ?? 0 } as Client & { placeno_casova?: number },
       placeno_casova: placenoMap.get(c.id) ?? 0,

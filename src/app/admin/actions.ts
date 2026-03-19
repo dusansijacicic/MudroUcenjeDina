@@ -440,11 +440,95 @@ export async function updateClientAsAdmin(
   return {};
 }
 
-/** Stanje po vrstama časova za klijenta: uplaćeno (iz uplata), održano (iz predavanja), ostalo. Ako je instructorId dat, samo za tog predavača. */
+export type StanjeVrstaRow = { term_type_id: string | null; term_type_naziv: string; uplaceno: number; odrzano: number; ostalo: number };
+
+function buildStanjeFromMaps(
+  uplateByType: Map<string, number>,
+  odrzanoByType: Map<string, number>,
+  termTypes: { id: string; naziv: string | null }[]
+): StanjeVrstaRow[] {
+  const result: StanjeVrstaRow[] = [];
+  for (const tt of termTypes) {
+    const uplaceno = uplateByType.get(tt.id) ?? 0;
+    const odrzano = odrzanoByType.get(tt.id) ?? 0;
+    if (uplaceno === 0 && odrzano === 0) continue;
+    result.push({
+      term_type_id: tt.id,
+      term_type_naziv: tt.naziv ?? '',
+      uplaceno,
+      odrzano,
+      ostalo: Math.max(0, uplaceno - odrzano),
+    });
+  }
+  const bezVrsteUpl = uplateByType.get('__bez_vrste__') ?? 0;
+  const bezVrsteOdrz = odrzanoByType.get('__bez_vrste__') ?? 0;
+  if (bezVrsteUpl > 0 || bezVrsteOdrz > 0) {
+    result.push({
+      term_type_id: null,
+      term_type_naziv: 'Bez vrste',
+      uplaceno: bezVrsteUpl,
+      odrzano: bezVrsteOdrz,
+      ostalo: Math.max(0, bezVrsteUpl - bezVrsteOdrz),
+    });
+  }
+  return result;
+}
+
+/** Stanje po vrstama za više klijenata odjednom (1 round-trip umesto N). Vraća Map<clientId, stanje[]>. */
+export async function getStanjePoVrstamaZaKlijenteBatch(
+  clientIds: string[]
+): Promise<Map<string, StanjeVrstaRow[]>> {
+  const out = new Map<string, StanjeVrstaRow[]>();
+  if (clientIds.length === 0) return out;
+
+  const admin = createAdminClient();
+  const ids = [...new Set(clientIds)];
+
+  const [uplateRes, predavanjaRes, termTypesRes] = await Promise.all([
+    admin.from('uplate').select('client_id, term_type_id, broj_casova').in('client_id', ids),
+    admin.from('predavanja').select('client_id, term_type_id, odrzano').in('client_id', ids).eq('odrzano', true),
+    admin.from('term_types').select('id, naziv').order('naziv'),
+  ]);
+
+  const termTypes = termTypesRes.data ?? [];
+
+  const uplateByClient = new Map<string, Map<string, number>>();
+  const odrzanoByClient = new Map<string, Map<string, number>>();
+
+  for (const cid of ids) {
+    uplateByClient.set(cid, new Map());
+    odrzanoByClient.set(cid, new Map());
+  }
+
+  for (const u of uplateRes.data ?? []) {
+    const cid = u.client_id;
+    const map = uplateByClient.get(cid);
+    if (!map) continue;
+    const tid = u.term_type_id ?? '__bez_vrste__';
+    map.set(tid, (map.get(tid) ?? 0) + (u.broj_casova ?? 0));
+  }
+
+  for (const p of predavanjaRes.data ?? []) {
+    const cid = p.client_id;
+    const map = odrzanoByClient.get(cid);
+    if (!map) continue;
+    const tid = p.term_type_id ?? '__bez_vrste__';
+    map.set(tid, (map.get(tid) ?? 0) + 1);
+  }
+
+  for (const cid of ids) {
+    const uplateByType = uplateByClient.get(cid)!;
+    const odrzanoByType = odrzanoByClient.get(cid)!;
+    out.set(cid, buildStanjeFromMaps(uplateByType, odrzanoByType, termTypes));
+  }
+  return out;
+}
+
+/** Stanje po vrstama časova za jednog klijenta. Ako je instructorId dat, samo za tog predavača. */
 export async function getStanjePoVrstamaZaKlijenta(
   clientId: string,
   instructorId?: string
-): Promise<{ term_type_id: string | null; term_type_naziv: string; uplaceno: number; odrzano: number; ostalo: number }[]> {
+): Promise<StanjeVrstaRow[]> {
   const admin = createAdminClient();
   let uplateRows: { term_type_id: string | null; broj_casova: number }[];
   if (instructorId) {
@@ -472,31 +556,7 @@ export async function getStanjePoVrstamaZaKlijenta(
     odrzanoByType.set(tid, (odrzanoByType.get(tid) ?? 0) + 1);
   }
   const { data: termTypes } = await admin.from('term_types').select('id, naziv').order('naziv');
-  const result: { term_type_id: string | null; term_type_naziv: string; uplaceno: number; odrzano: number; ostalo: number }[] = [];
-  for (const tt of termTypes ?? []) {
-    const uplaceno = uplateByType.get(tt.id) ?? 0;
-    const odrzano = odrzanoByType.get(tt.id) ?? 0;
-    if (uplaceno === 0 && odrzano === 0) continue;
-    result.push({
-      term_type_id: tt.id,
-      term_type_naziv: tt.naziv ?? '',
-      uplaceno,
-      odrzano,
-      ostalo: Math.max(0, uplaceno - odrzano),
-    });
-  }
-  const bezVrsteUpl = uplateByType.get('__bez_vrste__') ?? 0;
-  const bezVrsteOdrz = odrzanoByType.get('__bez_vrste__') ?? 0;
-  if (bezVrsteUpl > 0 || bezVrsteOdrz > 0) {
-    result.push({
-      term_type_id: null,
-      term_type_naziv: 'Bez vrste',
-      uplaceno: bezVrsteUpl,
-      odrzano: bezVrsteOdrz,
-      ostalo: Math.max(0, bezVrsteUpl - bezVrsteOdrz),
-    });
-  }
-  return result;
+  return buildStanjeFromMaps(uplateByType, odrzanoByType, termTypes ?? []);
 }
 
 /** Označi predavanja klijenta kao održana ako je vreme termina (datum + kraj slota) već prošlo. */

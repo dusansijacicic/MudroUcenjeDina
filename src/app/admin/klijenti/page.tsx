@@ -2,7 +2,7 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
-import { getStanjePoVrstamaZaKlijenta } from '@/app/admin/actions';
+import { getStanjePoVrstamaZaKlijenteBatch } from '@/app/admin/actions';
 
 export default async function AdminSviKlijentiPage() {
   const supabase = await createClient();
@@ -46,16 +46,15 @@ export default async function AdminSviKlijentiPage() {
     (a, b) => (a.client.prezime ?? '').localeCompare(b.client.prezime ?? '') || (a.client.ime ?? '').localeCompare(b.client.ime ?? '')
   );
 
-  const clientStanjeList = await Promise.all(
-    list.map(async ({ client }) => {
-      const stanje = await getStanjePoVrstamaZaKlijenta(client.id);
-      const problemTypes = stanje.filter((s) => s.uplaceno < s.odrzano).map((s) => s.term_type_naziv);
-      const samoPlaceni = stanje.filter((s) => s.uplaceno >= 1);
-      return { clientId: client.id, problemTypes, stanje: samoPlaceni };
-    })
-  );
-  const warningByClientId = new Map(clientStanjeList.map((w) => [w.clientId, w.problemTypes]));
-  const stanjeByClientId = new Map(clientStanjeList.map((w) => [w.clientId, w.stanje]));
+  const clientIds = list.map(({ client }) => client.id);
+  const stanjeMap = await getStanjePoVrstamaZaKlijenteBatch(clientIds);
+  const warningByClientId = new Map<string, string[]>();
+  const stanjeByClientId = new Map<string, { term_type_id: string | null; term_type_naziv: string; uplaceno: number; odrzano: number; ostalo: number }[]>();
+  for (const { client } of list) {
+    const stanje = stanjeMap.get(client.id) ?? [];
+    warningByClientId.set(client.id, stanje.filter((s) => s.uplaceno < s.odrzano).map((s) => s.term_type_naziv));
+    stanjeByClientId.set(client.id, stanje.filter((s) => s.uplaceno >= 1));
+  }
 
   return (
     <div className="animate-in">
