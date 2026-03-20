@@ -30,7 +30,7 @@ export default async function UcenikPage() {
       .from('predavanja')
       .select('*, term:terms(date, slot_index, instructor_id, instructor:instructors(ime, prezime))')
       .eq('client_id', client.id),
-    admin.from('term_types').select('id, naziv').order('naziv'),
+    admin.from('term_types').select('id, naziv, cena_po_casu').order('naziv'),
   ]);
 
   type TermWithInstructor = { date: string; slot_index: number; instructor_id?: string; instructor?: { ime: string; prezime: string } | null };
@@ -87,7 +87,7 @@ export default async function UcenikPage() {
       term_type: tt as { id?: string; naziv?: string } | null,
     };
   });
-  const termTypes = (termTypesRaw ?? []) as { id: string; naziv: string }[];
+  const termTypes = (termTypesRaw ?? []) as { id: string; naziv: string; cena_po_casu: number | null }[];
   type PredavanjeWithType = Predavanje & { term?: TermWithInstructor | null; term_type_id?: string | null };
   const odrzanoByType = new Map<string, number>();
   for (const p of list.filter((p) => p.odrzano) as PredavanjeWithType[]) {
@@ -102,17 +102,27 @@ export default async function UcenikPage() {
   const stanjePoTipuSve = termTypes.map((tt) => {
     const uplaceno = uplacenoByType.get(tt.id) ?? 0;
     const odrzano = odrzanoByType.get(tt.id) ?? 0;
-    return { id: tt.id, naziv: tt.naziv, uplaceno, odrzano, ostalo: Math.max(0, uplaceno - odrzano) };
+    return {
+      id: tt.id,
+      naziv: tt.naziv,
+      cena_po_casu: tt.cena_po_casu,
+      uplaceno,
+      odrzano,
+      ostalo: Math.max(0, uplaceno - odrzano),
+    };
   });
   if (uplacenoByType.has('__bez_vrste__') || odrzanoByType.has('__bez_vrste__')) {
     stanjePoTipuSve.push({
       id: '__bez_vrste__',
       naziv: 'Bez vrste',
+      cena_po_casu: null,
       uplaceno: uplacenoByType.get('__bez_vrste__') ?? 0,
       odrzano: odrzanoByType.get('__bez_vrste__') ?? 0,
       ostalo: Math.max(0, (uplacenoByType.get('__bez_vrste__') ?? 0) - (odrzanoByType.get('__bez_vrste__') ?? 0)),
     });
   }
+
+  const ukupnoUplacenoRsd = uplateList.reduce((sum, u) => sum + (u.iznos != null ? Number(u.iznos) : 0), 0);
   // Samo vrste gde ima makar jedan kupljen
   const stanjePoTipu = stanjePoTipuSve.filter((s) => s.uplaceno >= 1);
 
@@ -149,7 +159,17 @@ export default async function UcenikPage() {
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {stanjePoTipu.map((s) => (
               <div key={s.id} className="rounded-2xl border-2 border-[var(--kid-sky)]/50 bg-white p-5 shadow-md transition-smooth hover:shadow-lg hover:border-[var(--kid-teal)]/50">
-                <p className="font-semibold text-[var(--kid-text)] mb-3">{s.naziv}</p>
+                <div className="mb-3">
+                  <p className="font-semibold text-[var(--kid-text)]">{s.naziv}</p>
+                  {s.cena_po_casu != null && s.cena_po_casu > 0 ? (
+                    <p className="text-sm text-[var(--kid-text-muted)] mt-1">
+                      Cena po času:{' '}
+                      <span className="font-medium text-[var(--kid-text)]">
+                        {Number(s.cena_po_casu).toLocaleString('sr-Latn-RS')} RSD
+                      </span>
+                    </p>
+                  ) : null}
+                </div>
                 <div className="grid grid-cols-3 gap-2 text-center">
                   <div className="rounded-xl bg-[var(--kid-butter)]/50 p-2 border border-[var(--kid-butter-dark)]/40">
                     <p className="text-xs text-[var(--kid-text-muted)]">Uplaćeno</p>
@@ -186,6 +206,14 @@ export default async function UcenikPage() {
         <p className="text-sm text-[var(--kid-text-muted)] mb-4">
           Istorija uplata: ko je primio, kada, iznos, vrsta časa i broj časova.
         </p>
+        {uplateList.length > 0 && (
+          <div className="mb-4 rounded-2xl border-2 border-[var(--kid-teal)]/40 bg-[var(--kid-mint)]/40 px-4 py-3">
+            <p className="text-sm text-[var(--kid-text-muted)]">Ukupno uplaćeno (sve uplate)</p>
+            <p className="text-xl font-bold text-[var(--kid-text)]">
+              {ukupnoUplacenoRsd.toLocaleString('sr-Latn-RS')} RSD
+            </p>
+          </div>
+        )}
         {uplateList.length === 0 ? (
           <p className="text-sm text-[var(--kid-text-muted)]">Nema zabeleženih uplata.</p>
         ) : (
