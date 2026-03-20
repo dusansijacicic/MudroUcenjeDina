@@ -10,13 +10,12 @@ export async function middleware(request: NextRequest) {
   });
 
   const pathname = request.nextUrl.pathname;
+  /** UUID iz /admin/view/[id] – postavi kolačić na kraju (posle Supabase refresha). */
+  let viewAsInstructorId: string | null = null;
   if (pathname.startsWith(ADMIN_VIEW_PREFIX)) {
     const segment = pathname.slice(ADMIN_VIEW_PREFIX.length).split('/')[0];
     if (segment && UUID_REGEX.test(segment)) {
-      supabaseResponse.cookies.set('view_as_instructor', segment, {
-        path: '/',
-        maxAge: 60 * 60 * 24,
-      });
+      viewAsInstructorId = segment;
     }
   }
 
@@ -30,9 +29,19 @@ export async function middleware(request: NextRequest) {
         getAll() {
           return request.cookies.getAll();
         },
+        /**
+         * Zvanični Supabase SSR obrazac: prvo ažuriraj request kolačiće, pa NOVI
+         * NextResponse.next({ request }). Safari/Firefox često ne primene sesiju ako
+         * se odgovor ne napravi ponovo nakon setovanja (Chrome je ponekad „popustljiviji”).
+         */
         setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) => {
+          cookiesToSet.forEach(({ name, value }) => {
             request.cookies.set(name, value);
+          });
+          supabaseResponse = NextResponse.next({
+            request,
+          });
+          cookiesToSet.forEach(({ name, value, options }) => {
             supabaseResponse.cookies.set(name, value, options);
           });
         },
@@ -41,6 +50,14 @@ export async function middleware(request: NextRequest) {
   );
 
   await supabase.auth.getUser();
+
+  if (viewAsInstructorId) {
+    supabaseResponse.cookies.set('view_as_instructor', viewAsInstructorId, {
+      path: '/',
+      maxAge: 60 * 60 * 24,
+      sameSite: 'lax',
+    });
+  }
 
   return supabaseResponse;
 }
