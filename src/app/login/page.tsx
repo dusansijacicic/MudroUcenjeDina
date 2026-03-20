@@ -1,7 +1,6 @@
 'use client';
 
-import { createClient } from '@/lib/supabase/client';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
 
@@ -13,14 +12,11 @@ const REASON_MESSAGES: Record<string, string> = {
 };
 
 export default function LoginPage() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-
-  const supabase = createClient();
 
   useEffect(() => {
     const reason = searchParams.get('reason');
@@ -35,20 +31,26 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const { error: signInError } = await supabase.auth.signInWithPassword({
-        email,
-        password,
+      // Server-side login: Set-Cookie u odgovoru (Firefox/Safari pouzdano; klijentski document.cookie + odmah redirect često gube sesiju).
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+        credentials: 'same-origin',
       });
-      if (signInError) {
-        const msg = signInError.message || 'Pogrešan email ili lozinka.';
+      const data = (await res.json().catch(() => ({}))) as { error?: string; ok?: boolean; next?: string };
+
+      if (!res.ok) {
+        const msg = data.error || 'Pogrešan email ili lozinka.';
         setError(msg);
         toast.error(msg);
         setLoading(false);
         return;
       }
+
       toast.success('Prijava uspešna. Preusmeravanje...');
-      router.refresh();
-      window.location.href = '/api/auth/resolve-role';
+      const next = typeof data.next === 'string' ? data.next : '/api/auth/resolve-role';
+      window.location.assign(next);
     } catch (err: unknown) {
       const msg =
         (err as { message?: string })?.message ||
