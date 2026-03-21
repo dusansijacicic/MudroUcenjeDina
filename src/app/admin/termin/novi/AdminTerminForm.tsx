@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { createTermAsAdmin, createPredavanjeAsAdmin, getTakenForSlot } from '../../actions';
+import GrupniKlijentiPicker from '@/components/GrupniKlijentiPicker';
 
 type Instructor = { id: string; ime: string; prezime: string };
 type Client = { id: string; ime: string; prezime: string };
@@ -66,10 +67,6 @@ export default function AdminTerminForm({
     () => classrooms.filter((c) => !initialTakenClassroomIds.includes(c.id))[0]?.id ?? ''
   );
   const [termTypeId, setTermTypeId] = useState(termTypes[0]?.id ?? '');
-
-  const toggleGrupni = (id: string) => {
-    setGrupniIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
-  };
 
   useEffect(() => {
     if (availableInstructors.length && !availableInstructors.some((i) => i.id === instructorId)) {
@@ -296,21 +293,16 @@ export default function AdminTerminForm({
         {allowsMultipleClients ? (
           <div className="sm:col-span-2">
             <label className="block text-sm font-medium text-stone-700 mb-2">Deca u grupnom terminu</label>
-            <div className="max-h-40 overflow-y-auto rounded-lg border border-stone-200 divide-y divide-stone-100">
-              {clients.map((c) => (
-                <label key={c.id} className="flex items-center gap-3 px-3 py-2 hover:bg-stone-50 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={grupniIds.includes(c.id)}
-                    onChange={() => toggleGrupni(c.id)}
-                    className="rounded border-stone-300 text-amber-600"
-                  />
-                  <span className="text-sm">
-                    {c.ime} {c.prezime}
-                  </span>
-                </label>
-              ))}
-            </div>
+            <p className="text-xs text-stone-500 mb-3">
+              Pretraga i checkbox – označite jedno ili više dece.
+            </p>
+            <GrupniKlijentiPicker
+              clients={clients}
+              selectedIds={grupniIds}
+              onSelectionChange={setGrupniIds}
+              disabled={loading}
+              inputId="admin-termin-grupni-search"
+            />
           </div>
         ) : (
           <div>

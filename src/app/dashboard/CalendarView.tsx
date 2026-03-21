@@ -203,9 +203,16 @@ function CellContent({
               )}
               <span className="font-medium">{iname}</span>
               {preds.length > 0 && (
-                <span className="ml-1 opacity-90">
-                  {preds.map((p) => (p.client ? `${p.client.ime} ${p.client.prezime}` : '—')).join(', ')}
-                </span>
+                <ul className="mt-1 space-y-0.5 pl-0 list-none">
+                  {preds.map((p) => (
+                    <li
+                      key={p.id}
+                      className="text-[13px] leading-snug text-stone-900 font-medium break-words antialiased"
+                    >
+                      {p.client ? `${p.client.ime} ${p.client.prezime}`.trim() || '—' : '—'}
+                    </li>
+                  ))}
+                </ul>
               )}
             </div>
           );
@@ -230,19 +237,22 @@ function CellContent({
           {(term.predavanja ?? []).length === 0 ? (
             <span className="text-sm" style={{ color: textColor }}>+ Dodaj radionicu</span>
           ) : (
-            <>
+            <div className="space-y-1.5">
               {(term.predavanja ?? []).map((p) => (
-                <div key={p.id} className="text-sm" style={{ color: textColor }}>
-                  <span className="font-medium">
-                    {p.client ? `${p.client.ime} ${p.client.prezime}` : '—'}
+                <div key={p.id} className="rounded-md bg-white/40 px-1 py-0.5">
+                  <span
+                    className="block text-[13px] sm:text-sm font-semibold leading-snug text-stone-900 break-words antialiased"
+                    style={{ borderLeft: `3px solid ${textColor}`, paddingLeft: '6px' }}
+                  >
+                    {p.client ? `${p.client.ime} ${p.client.prezime}`.trim() || '—' : '—'}
                   </span>
-                  <div className="flex gap-1 mt-0.5 flex-wrap">
+                  <div className="flex gap-1 mt-0.5 flex-wrap pl-2">
                     {p.odrzano && <span className="text-xs bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded font-medium">Održano</span>}
                     {p.placeno && <span className="text-xs bg-sky-100 text-sky-800 px-1.5 py-0.5 rounded font-medium">Plaćeno</span>}
                   </div>
                 </div>
               ))}
-            </>
+            </div>
           )}
         </Link>
       )}
@@ -263,9 +273,16 @@ function CellContent({
             )}
             <span className="font-medium">{iname}</span>
             {preds.length > 0 && (
-              <span className="ml-1 opacity-90">
-                {preds.map((p) => (p.client ? `${p.client.ime} ${p.client.prezime}` : '—')).join(', ')}
-              </span>
+              <ul className="mt-1 space-y-0.5 pl-0 list-none">
+                {preds.map((p) => (
+                  <li
+                    key={p.id}
+                    className="text-[13px] leading-snug text-stone-900 font-medium break-words antialiased"
+                  >
+                    {p.client ? `${p.client.ime} ${p.client.prezime}`.trim() || '—' : '—'}
+                  </li>
+                ))}
+              </ul>
             )}
           </div>
         );

@@ -170,9 +170,18 @@ export default async function TerminDetailPage({
                   {ot.instructor ? `${ot.instructor.ime} ${ot.instructor.prezime}` : '—'}
                 </span>
                 {ot.predavanja.length > 0 ? (
-                  <span className="text-stone-600">
-                    {' '}: {ot.predavanja.map((p) => p.client ? `${p.client.ime} ${p.client.prezime}` : '—').join(', ')}
-                  </span>
+                  <ul className="mt-1 ml-0 pl-4 list-disc text-stone-800 space-y-0.5">
+                    {ot.predavanja.map((p) => (
+                      <li
+                        key={p.id}
+                        className="text-sm leading-snug break-words antialiased marker:text-amber-600"
+                      >
+                        {p.client
+                          ? `${p.client.ime ?? ''} ${p.client.prezime ?? ''}`.trim() || '—'
+                          : '—'}
+                      </li>
+                    ))}
+                  </ul>
                 ) : (
                   <span className="text-stone-500"> (nema radionica)</span>
                 )}
@@ -193,12 +202,14 @@ function PredavanjeRow({
   };
 }) {
   const clientName = predavanje.client
-    ? `${predavanje.client.ime} ${predavanje.client.prezime}`
+    ? `${predavanje.client.ime ?? ''} ${predavanje.client.prezime ?? ''}`.trim() || '—'
     : '—';
   return (
     <div className="p-4 flex items-start justify-between gap-4">
-      <div>
-        <p className="font-medium text-stone-800">{clientName}</p>
+      <div className="min-w-0 flex-1">
+        <p className="text-base font-semibold text-stone-900 leading-snug break-words antialiased">
+          {clientName}
+        </p>
         <div className="flex gap-2 mt-1">
           {predavanje.odrzano && (
             <span className="text-xs bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded font-medium">

@@ -173,11 +173,18 @@ function AdminCellContent({
               ({classroomName})
             </span>
             {predavanja.length > 0 && (
-              <div className="mt-0.5 text-stone-600">
-                {predavanja.map((p) =>
-                  p.client ? `${p.client.ime} ${p.client.prezime}` : '—'
-                ).join(', ')}
-              </div>
+              <ul className="mt-1.5 space-y-1 pl-0 list-none border-t border-stone-200/80 pt-1.5">
+                {predavanja.map((p) => (
+                  <li
+                    key={p.id}
+                    className="text-[13px] sm:text-sm leading-snug font-semibold text-stone-900 break-words antialiased"
+                  >
+                    {p.client
+                      ? `${p.client.ime ?? ''} ${p.client.prezime ?? ''}`.trim() || '—'
+                      : '—'}
+                  </li>
+                ))}
+              </ul>
             )}
             {predavanja.length === 0 && (
               <span className="text-stone-500 text-xs">+ radionica</span>

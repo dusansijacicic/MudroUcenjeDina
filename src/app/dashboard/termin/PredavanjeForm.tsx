@@ -14,6 +14,7 @@ import {
 } from '@/app/dashboard/termin/actions';
 import type { Predavanje } from '@/types/database';
 import type { TermCategoryRow } from '@/lib/term-categories';
+import GrupniKlijentiPicker from '@/components/GrupniKlijentiPicker';
 
 type ClientOption = { id: string; ime: string; prezime: string };
 type TermTypeOption = { id: string; naziv: string; opis: string | null };
@@ -86,10 +87,6 @@ export default function PredavanjeForm({
   const isNew = !predavanje;
   const effectiveMax = allowsMultipleClients ? maxCasova : 1;
   const atLimit = isNew && currentCount >= effectiveMax;
-
-  const toggleGrupni = (id: string) => {
-    setGrupniSelected((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -274,22 +271,16 @@ export default function PredavanjeForm({
       {isNew && allowsMultipleClients ? (
         <div>
           <label className="block text-sm font-medium text-stone-700 mb-2">Deca u grupnom terminu</label>
-          <p className="text-xs text-stone-500 mb-2">Označite jedno ili više dece (isti tip časa i cena = vrsta termina ispod).</p>
-          <div className="max-h-48 overflow-y-auto rounded-lg border border-stone-200 divide-y divide-stone-100">
-            {clients.map((c) => (
-              <label key={c.id} className="flex items-center gap-3 px-3 py-2 hover:bg-stone-50 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={grupniSelected.includes(c.id)}
-                  onChange={() => toggleGrupni(c.id)}
-                  className="rounded border-stone-300 text-amber-600"
-                />
-                <span className="text-sm text-stone-800">
-                  {c.ime} {c.prezime}
-                </span>
-              </label>
-            ))}
-          </div>
+          <p className="text-xs text-stone-500 mb-3">
+            Pretražite listu i označite checkboxom (isti tip časa i cena = vrsta termina ispod).
+          </p>
+          <GrupniKlijentiPicker
+            clients={clients}
+            selectedIds={grupniSelected}
+            onSelectionChange={setGrupniSelected}
+            disabled={loading}
+            inputId="dashboard-predavanje-grupni-search"
+          />
         </div>
       ) : (
         <div>
