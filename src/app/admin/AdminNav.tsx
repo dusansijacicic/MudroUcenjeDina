@@ -14,6 +14,7 @@ const navLinks = [
   { href: '/admin/ucionice', label: 'Učionice' },
   { href: '/admin/kalendar', label: 'Kalendar' },
   { href: '/admin/podesavanja', label: 'Podešavanja' },
+  { href: '/admin/uputstvo', label: 'Uputstvo (uloge)' },
 ];
 
 export default function AdminNav() {
