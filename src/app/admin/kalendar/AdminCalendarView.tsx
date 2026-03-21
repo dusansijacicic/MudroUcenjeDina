@@ -192,12 +192,6 @@ function AdminCellContent({
           </Link>
         );
       })}
-      <Link
-        href={newTermHref}
-        className="block rounded-lg border border-dashed border-stone-200 p-1.5 text-stone-400 hover:border-amber-400 hover:bg-amber-50/50 text-xs"
-      >
-        + još instruktor u ovom slotu
-      </Link>
     </div>
   );
 }

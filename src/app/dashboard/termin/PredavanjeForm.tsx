@@ -221,8 +221,33 @@ export default function PredavanjeForm({
         )}
       </div>
 
+      <div>
+        <label className="block text-sm font-medium text-stone-700 mb-1">
+          1. Vrsta termina (tip časa, cena) <span className="text-red-600">*</span>
+        </label>
+        <select
+          value={termTypeId}
+          onChange={(e) => setTermTypeId(e.target.value)}
+          required
+          className="w-full rounded-lg border border-stone-300 px-3 py-2 text-stone-800"
+        >
+          <option value="">Izaberite vrstu termina</option>
+          {termTypes.map((tt) => (
+            <option key={tt.id} value={tt.id}>
+              {tt.naziv}
+            </option>
+          ))}
+        </select>
+        {termTypes.length === 0 && (
+          <p className="text-xs text-amber-600 mt-0.5">Admin mora dodati bar jednu vrstu u Admin → Vrste termina.</p>
+        )}
+        <p className="text-xs text-stone-500 mt-1.5">
+          Prvo vrsta časa; ista vrsta za sva deca u grupnom terminu. Zatim kategoriju (grupni / individualni).
+        </p>
+      </div>
+
       <div className="rounded-lg border border-stone-200 bg-stone-50/80 p-4 space-y-3">
-        <h3 className="text-sm font-semibold text-stone-800">Kategorija termina</h3>
+        <h3 className="text-sm font-semibold text-stone-800">2. Kategorija termina</h3>
         <p className="text-xs text-stone-600">{limitHint}</p>
         <div>
           <label className="block text-xs font-medium text-stone-700 mb-1">Kategorija</label>
@@ -270,7 +295,7 @@ export default function PredavanjeForm({
 
       {isNew && allowsMultipleClients ? (
         <div>
-          <label className="block text-sm font-medium text-stone-700 mb-2">Deca u grupnom terminu</label>
+          <label className="block text-sm font-medium text-stone-700 mb-2">3. Deca u grupnom terminu</label>
           <p className="text-xs text-stone-500 mb-3">
             Pretražite listu i označite checkboxom (isti tip časa i cena = vrsta termina ispod).
           </p>
@@ -284,7 +309,9 @@ export default function PredavanjeForm({
         </div>
       ) : (
         <div>
-          <label className="block text-sm font-medium text-stone-700 mb-1">Klijent</label>
+          <label className="block text-sm font-medium text-stone-700 mb-1">
+            {isNew ? '3. Klijent' : 'Klijent'}
+          </label>
           <select
             value={clientId}
             onChange={(e) => setClientId(e.target.value)}
@@ -311,30 +338,6 @@ export default function PredavanjeForm({
         </div>
       )}
 
-      <div>
-        <label className="block text-sm font-medium text-stone-700 mb-1">
-          Vrsta termina (tip časa, cena) <span className="text-red-600">*</span>
-        </label>
-        <select
-          value={termTypeId}
-          onChange={(e) => setTermTypeId(e.target.value)}
-          required
-          className="w-full rounded-lg border border-stone-300 px-3 py-2 text-stone-800"
-        >
-          <option value="">Izaberite vrstu termina</option>
-          {termTypes.map((tt) => (
-            <option key={tt.id} value={tt.id}>
-              {tt.naziv}
-            </option>
-          ))}
-        </select>
-        {termTypes.length === 0 && (
-          <p className="text-xs text-amber-600 mt-0.5">Admin mora dodati bar jednu vrstu u Admin → Vrste termina.</p>
-        )}
-        <p className="text-xs text-stone-500 mt-1.5">
-          Vrsta termina određuje tip časa i cenu. <strong>Kategorija</strong> iznad određuje da li je u terminu jedno dete ili više.
-        </p>
-      </div>
       {classrooms.length > 0 && (
         <div>
           <label className="block text-sm font-medium text-stone-700 mb-1">Učionica</label>

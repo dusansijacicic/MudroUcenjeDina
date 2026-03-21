@@ -240,125 +240,6 @@ export default function AdminTerminForm({
       )}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
-          <label className="block text-sm font-medium text-stone-700 mb-1">Instruktor</label>
-          <select
-            value={instructorId}
-            onChange={(e) => setInstructorId(e.target.value)}
-            required
-            disabled={noInstructorsAvailable || slotFull}
-            className="w-full rounded-lg border border-stone-300 px-3 py-2 text-stone-800 disabled:bg-stone-100 disabled:cursor-not-allowed"
-          >
-            <option value="">Izaberite instruktora</option>
-            {availableInstructors.map((i) => (
-              <option key={i.id} value={i.id}>
-                {i.ime} {i.prezime}
-              </option>
-            ))}
-          </select>
-          {takenInstructorIds.length > 0 && availableInstructors.length > 0 && (
-            <p className="text-xs text-stone-500 mt-0.5">{takenInstructorIds.length} instruktor(a) već ima termin u ovom slotu.</p>
-          )}
-        </div>
-        <div className="sm:col-span-2 space-y-3 rounded-lg border border-stone-200 bg-stone-50/80 p-3">
-          <p className="text-sm font-medium text-stone-800">Kategorija termina</p>
-          {termCategories.length === 0 ? (
-            <p className="text-sm text-amber-700">Dodajte kategorije u Admin → Kategorije termina.</p>
-          ) : (
-            <div>
-              <label className="block text-xs font-medium text-stone-700 mb-1">Kategorija</label>
-              <select
-                value={termCategoryId}
-                onChange={(e) => setTermCategoryId(e.target.value)}
-                className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm text-stone-800 bg-white"
-              >
-                {termCategories.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.naziv}
-                    {c.jedan_klijent_po_terminu ? ' (jedno dete)' : ' (grupa)'}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-          <div>
-            <label className="block text-xs font-medium text-stone-700 mb-1">Napomena za termin (opciono)</label>
-            <textarea
-              value={termNapomena}
-              onChange={(e) => setTermNapomena(e.target.value)}
-              rows={2}
-              className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm text-stone-800"
-            />
-          </div>
-        </div>
-        {allowsMultipleClients ? (
-          <div className="sm:col-span-2">
-            <label className="block text-sm font-medium text-stone-700 mb-2">Deca u grupnom terminu</label>
-            <p className="text-xs text-stone-500 mb-3">
-              Pretraga i checkbox – označite jedno ili više dece.
-            </p>
-            <GrupniKlijentiPicker
-              clients={clients}
-              selectedIds={grupniIds}
-              onSelectionChange={setGrupniIds}
-              disabled={loading}
-              inputId="admin-termin-grupni-search"
-            />
-          </div>
-        ) : (
-          <div>
-            <label className="block text-sm font-medium text-stone-700 mb-1">Klijent</label>
-            <select
-              value={clientId}
-              onChange={(e) => setClientId(e.target.value)}
-              required
-              className="w-full rounded-lg border border-stone-300 px-3 py-2 text-stone-800"
-            >
-              {clients.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.ime} {c.prezime}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
-      </div>
-      <div>
-        <label className="block text-sm font-medium text-stone-700 mb-1">Učionica</label>
-        <select
-          value={classroomId}
-          onChange={(e) => setClassroomId(e.target.value)}
-          required
-          disabled={noClassroomsAvailable || slotFull}
-          className="w-full rounded-lg border border-stone-300 px-3 py-2 text-stone-800 disabled:bg-stone-100 disabled:cursor-not-allowed"
-        >
-          <option value="">Izaberite učionicu</option>
-          {availableClassrooms.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.naziv}
-            </option>
-          ))}
-        </select>
-        {takenClassroomIds.length > 0 && availableClassrooms.length > 0 && (
-          <p className="text-xs text-stone-500 mt-0.5">{takenClassroomIds.length} učionica je zauzeta u ovom slotu.</p>
-        )}
-      </div>
-      <div>
-        <label className="block text-sm font-medium text-stone-700 mb-1">Vrsta termina (tip časa, cena)</label>
-        <select
-          value={termTypeId}
-          onChange={(e) => setTermTypeId(e.target.value)}
-          required
-          className="w-full rounded-lg border border-stone-300 px-3 py-2 text-stone-800"
-        >
-          <option value="">Izaberite vrstu termina</option>
-          {termTypes.map((tt) => (
-            <option key={tt.id} value={tt.id}>{tt.naziv}</option>
-          ))}
-        </select>
-        <p className="text-xs text-stone-500 mt-1">Kategorija = jedno dete ili grupa; vrsta = koja obuka i cena.</p>
-      </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div>
           <label className="block text-sm font-medium text-stone-700 mb-1">Datum</label>
           <input
             type="date"
@@ -382,6 +263,134 @@ export default function AdminTerminForm({
             ))}
           </select>
         </div>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-stone-700 mb-1">Instruktor</label>
+          <select
+            value={instructorId}
+            onChange={(e) => setInstructorId(e.target.value)}
+            required
+            disabled={noInstructorsAvailable || slotFull}
+            className="w-full rounded-lg border border-stone-300 px-3 py-2 text-stone-800 disabled:bg-stone-100 disabled:cursor-not-allowed"
+          >
+            <option value="">Izaberite instruktora</option>
+            {availableInstructors.map((i) => (
+              <option key={i.id} value={i.id}>
+                {i.ime} {i.prezime}
+              </option>
+            ))}
+          </select>
+          {takenInstructorIds.length > 0 && availableInstructors.length > 0 && (
+            <p className="text-xs text-stone-500 mt-0.5">{takenInstructorIds.length} instruktor(a) već ima termin u ovom slotu.</p>
+          )}
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-stone-700 mb-1">Učionica</label>
+          <select
+            value={classroomId}
+            onChange={(e) => setClassroomId(e.target.value)}
+            required
+            disabled={noClassroomsAvailable || slotFull}
+            className="w-full rounded-lg border border-stone-300 px-3 py-2 text-stone-800 disabled:bg-stone-100 disabled:cursor-not-allowed"
+          >
+            <option value="">Izaberite učionicu</option>
+            {availableClassrooms.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.naziv}
+              </option>
+            ))}
+          </select>
+          {takenClassroomIds.length > 0 && availableClassrooms.length > 0 && (
+            <p className="text-xs text-stone-500 mt-0.5">{takenClassroomIds.length} učionica je zauzeta u ovom slotu.</p>
+          )}
+        </div>
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-stone-700 mb-1">
+          1. Vrsta termina <span className="text-stone-500 font-normal">(tip časa, cena)</span>
+        </label>
+        <select
+          value={termTypeId}
+          onChange={(e) => setTermTypeId(e.target.value)}
+          required
+          className="w-full rounded-lg border border-stone-300 px-3 py-2 text-stone-800"
+        >
+          <option value="">Izaberite vrstu termina</option>
+          {termTypes.map((tt) => (
+            <option key={tt.id} value={tt.id}>
+              {tt.naziv}
+            </option>
+          ))}
+        </select>
+        <p className="text-xs text-stone-500 mt-1">Prvo izaberite vrstu časa; ista vrsta važi za sva deca u grupnom terminu.</p>
+      </div>
+      <div className="space-y-3 rounded-lg border border-stone-200 bg-stone-50/80 p-3">
+        <p className="text-sm font-medium text-stone-800">
+          2. Kategorija termina <span className="text-stone-500 font-normal">(individualni ili grupni)</span>
+        </p>
+        <p className="text-xs text-stone-600">
+          Grupni: više dece u istom terminu, jedan predavač, jedna učionica. Individualni: jedno dete u terminu.
+        </p>
+        {termCategories.length === 0 ? (
+          <p className="text-sm text-amber-700">Dodajte kategorije u Admin → Kategorije termina.</p>
+        ) : (
+          <div>
+            <label className="block text-xs font-medium text-stone-700 mb-1">Kategorija</label>
+            <select
+              value={termCategoryId}
+              onChange={(e) => setTermCategoryId(e.target.value)}
+              className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm text-stone-800 bg-white"
+            >
+              {termCategories.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.naziv}
+                  {c.jedan_klijent_po_terminu ? ' (jedno dete)' : ' (grupa)'}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+        <div>
+          <label className="block text-xs font-medium text-stone-700 mb-1">Napomena za termin (opciono)</label>
+          <textarea
+            value={termNapomena}
+            onChange={(e) => setTermNapomena(e.target.value)}
+            rows={2}
+            className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm text-stone-800"
+          />
+        </div>
+      </div>
+      <div>
+        <p className="text-sm font-medium text-stone-800 mb-1">3. Deca / klijent</p>
+        {allowsMultipleClients ? (
+          <div>
+            <p className="text-xs text-stone-500 mb-3">Pretraga i checkbox — označite jedno ili više dece.</p>
+            <GrupniKlijentiPicker
+              clients={clients}
+              selectedIds={grupniIds}
+              onSelectionChange={setGrupniIds}
+              disabled={loading}
+              inputId="admin-termin-grupni-search"
+            />
+          </div>
+        ) : (
+          <div>
+            <label className="block text-xs font-medium text-stone-700 mb-1">Klijent</label>
+            <select
+              value={clientId}
+              onChange={(e) => setClientId(e.target.value)}
+              required
+              className="w-full rounded-lg border border-stone-300 px-3 py-2 text-stone-800"
+            >
+              {clients.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.ime} {c.prezime}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
       {error && (
         <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>

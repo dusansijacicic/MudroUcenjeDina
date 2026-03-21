@@ -63,8 +63,9 @@ export default async function AdminTerminNoviPage({
           <li>Max broj termina u slotu = podešavanje (Admin → Podešavanja).</li>
           <li><strong>A)</strong> Jedan predavač može imati samo <strong>jedan</strong> termin u tom slotu.</li>
           <li><strong>B)</strong> Jedna učionica može biti korišćena samo u <strong>jednom</strong> terminu u tom slotu.</li>
+          <li>U formi redosled: <strong>vrsta časa</strong> → <strong>kategorija</strong> (individualni / grupni) → <strong>deca</strong>. Grupni = više dece, jedan predavač, jedna učionica.</li>
         </ul>
-        <p className="mt-2 text-stone-600">U izboru su samo slobodni instruktori i učionice.</p>
+        <p className="mt-2 text-stone-600">U izboru su samo slobodni instruktori i učionice. Iz kalendara se otvara slot sa datumom i vremenom.</p>
       </div>
       <AdminTerminForm
         instructors={(instructors ?? []) as { id: string; ime: string; prezime: string }[]}

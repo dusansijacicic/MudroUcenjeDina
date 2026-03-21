@@ -25,6 +25,25 @@ export function jedanKlijentIzJoina(
   return tc.jedan_klijent_po_terminu !== false;
 }
 
+type JoinShape = { jedan_klijent_po_terminu?: boolean } | { jedan_klijent_po_terminu?: boolean }[] | null | undefined;
+
+/**
+ * Kada join iz baze nedostaje ili nema polja, vraća null (mora eksplicitan upit na term_categories).
+ * Kada je polje boolean, vraća ga tačno (false = grupni, više dece).
+ */
+export function jedanKlijentIzJoinaPouzdano(tc: JoinShape): boolean | null {
+  if (tc == null) return null;
+  if (Array.isArray(tc)) {
+    const row = tc[0];
+    if (row == null) return null;
+    if (typeof row.jedan_klijent_po_terminu !== 'boolean') return null;
+    return row.jedan_klijent_po_terminu;
+  }
+  if (typeof tc !== 'object') return null;
+  if (!('jedan_klijent_po_terminu' in tc)) return null;
+  return Boolean(tc.jedan_klijent_po_terminu);
+}
+
 export function nazivKategorijeIzJoina(
   tc: { naziv?: string } | { naziv?: string }[] | null | undefined
 ): string {

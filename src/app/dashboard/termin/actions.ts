@@ -3,7 +3,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getDashboardInstructor } from '@/lib/dashboard';
-import { termMozeNovoPredavanje, getMaxTerminaPoSlotu } from '@/lib/settings';
+import { termMozeNovoPredavanje, getMaxTerminaPoSlotu, jedanDeteMaksimalnoPoTerminu } from '@/lib/settings';
 import { revalidatePath } from 'next/cache';
 
 export async function createPredavanje(
@@ -108,13 +108,12 @@ export async function createPredavanjaBatch(
   }
   const { data: term, error: termErr } = await admin
     .from('terms')
-    .select('id, instructor_id, term_categories(jedan_klijent_po_terminu)')
+    .select('id, instructor_id, term_category_id, term_categories(jedan_klijent_po_terminu)')
     .eq('id', termId)
     .single();
   if (termErr || !term) return { error: 'Termin nije pronađen.' };
   if (term.instructor_id !== instructor.id) return { error: 'Niste ovlašćeni za ovaj termin.' };
-  const tc = term.term_categories as { jedan_klijent_po_terminu?: boolean } | { jedan_klijent_po_terminu?: boolean }[] | null;
-  const jedanOnly = Array.isArray(tc) ? tc[0]?.jedan_klijent_po_terminu !== false : tc?.jedan_klijent_po_terminu !== false;
+  const jedanOnly = await jedanDeteMaksimalnoPoTerminu(admin, term);
   if (jedanOnly && unique.length > 1) {
     return { error: 'Ova kategorija termina dozvoljava samo jedno dete. Izaberite drugu kategoriju ili jedno dete.' };
   }
