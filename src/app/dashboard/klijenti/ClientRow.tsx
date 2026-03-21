@@ -21,6 +21,11 @@ export default function ClientRow({
           {client.ime} {client.prezime}
         </Link>
       </td>
+      <td className="p-3 text-stone-600 whitespace-nowrap">
+        {client.datum_testiranja
+          ? new Date(client.datum_testiranja + 'T12:00:00').toLocaleDateString('sr-Latn-RS')
+          : '—'}
+      </td>
       <td className="p-3 text-stone-600">{client.godiste ?? '—'}</td>
       <td className="p-3 text-stone-600">{client.razred ?? '—'}</td>
       <td className="p-3 text-stone-600">{client.skola ?? '—'}</td>

@@ -57,7 +57,7 @@ export default function PodesavanjaForm({
     <form onSubmit={handleSubmit} className="space-y-4">
       <div>
         <label className="block text-sm font-medium text-stone-700 mb-1">
-          Maksimalan broj časova (predavanja) u jednom terminu
+          Maksimalan broj časova (radionica) u jednom terminu
         </label>
         <input
           type="number"
@@ -81,7 +81,7 @@ export default function PodesavanjaForm({
           onChange={(e) => setMaxTermina(e.target.value)}
           className="w-full rounded-lg border border-stone-300 px-3 py-2 text-stone-800"
         />
-        <p className="text-xs text-stone-500 mt-0.5">Npr. u 10:00 može biti najviše toliko termina (različitih predavača u različitim učionicama).</p>
+        <p className="text-xs text-stone-500 mt-0.5">Npr. u 10:00 može biti najviše toliko termina (različitih instruktora u različitim učionicama).</p>
       </div>
       {error && (
         <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>

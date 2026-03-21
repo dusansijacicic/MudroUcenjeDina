@@ -137,7 +137,7 @@ export default function AdminTerminForm({
   if (instructors.length === 0) {
     return (
       <p className="text-stone-500 text-sm">
-        Nema predavača. Prvo dodajte predavača preko „Novi predavač”.
+        Nema instruktora. Prvo dodajte instruktora preko „Novi instruktor”.
       </p>
     );
   }
@@ -183,8 +183,8 @@ export default function AdminTerminForm({
         <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-800">
           {noInstructorsAvailable && (
             <>
-              <p className="font-medium">Nema slobodnih predavača u ovom terminu.</p>
-              <p className="mt-0.5 text-amber-700">Svi predavači već imaju termin u izabranom datumu i vremenu. Promenite datum ili vreme (slot) da biste videli slobodne predavače.</p>
+              <p className="font-medium">Nema slobodnih instruktora u ovom terminu.</p>
+              <p className="mt-0.5 text-amber-700">Svi instruktori već imaju termin u izabranom datumu i vremenu. Promenite datum ili vreme (slot) da biste videli slobodne instruktore.</p>
             </>
           )}
           {noClassroomsAvailable && (
@@ -197,7 +197,7 @@ export default function AdminTerminForm({
       )}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
-          <label className="block text-sm font-medium text-stone-700 mb-1">Predavač</label>
+          <label className="block text-sm font-medium text-stone-700 mb-1">Instruktor</label>
           <select
             value={instructorId}
             onChange={(e) => setInstructorId(e.target.value)}
@@ -205,7 +205,7 @@ export default function AdminTerminForm({
             disabled={noInstructorsAvailable || slotFull}
             className="w-full rounded-lg border border-stone-300 px-3 py-2 text-stone-800 disabled:bg-stone-100 disabled:cursor-not-allowed"
           >
-            <option value="">Izaberite predavača</option>
+            <option value="">Izaberite instruktora</option>
             {availableInstructors.map((i) => (
               <option key={i.id} value={i.id}>
                 {i.ime} {i.prezime}
@@ -213,7 +213,7 @@ export default function AdminTerminForm({
             ))}
           </select>
           {takenInstructorIds.length > 0 && availableInstructors.length > 0 && (
-            <p className="text-xs text-stone-500 mt-0.5">{takenInstructorIds.length} predavač(a) već ima termin u ovom slotu.</p>
+            <p className="text-xs text-stone-500 mt-0.5">{takenInstructorIds.length} instruktor(a) već ima termin u ovom slotu.</p>
           )}
         </div>
         <div>
@@ -300,7 +300,7 @@ export default function AdminTerminForm({
         disabled={loading || cannotSubmit}
         className="rounded-lg bg-amber-600 px-4 py-2 text-white font-medium hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed"
       >
-        {loading ? 'Kreiranje...' : slotFull ? `Slot pun (max ${maxTerminaPoSlotu})` : cannotSubmit ? 'Nema slobodnih predavača ili učionica' : 'Zakaži termin i predavanje'}
+        {loading ? 'Kreiranje...' : slotFull ? `Slot pun (max ${maxTerminaPoSlotu})` : cannotSubmit ? 'Nema slobodnih instruktora ili učionica' : 'Zakaži termin i radionicu'}
       </button>
     </form>
   );

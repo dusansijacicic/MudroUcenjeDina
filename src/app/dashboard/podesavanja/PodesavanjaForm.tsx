@@ -123,7 +123,7 @@ export default function PodesavanjaForm({
           Boja u kalendaru
         </label>
         <p className="text-xs text-stone-500 mb-2">
-          Tvoji termini će se u kalendaru prikazivati ovom bojom. Svaki predavač treba da ima drugu boju.
+          Tvoji termini će se u kalendaru prikazivati ovom bojom. Svaki instruktor treba da ima drugu boju.
         </p>
         <div className="flex flex-wrap items-center gap-3">
           <input

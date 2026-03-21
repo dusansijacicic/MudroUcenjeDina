@@ -26,7 +26,7 @@ export type RawTerm = {
   }>;
 };
 
-/** Tuđi termin (samo prikaz, bez linka) – boja predavača i učionice za color coding */
+/** Tuđi termin (samo prikaz, bez linka) – boja instruktora i učionice za color coding */
 export type OtherTerm = RawTerm & {
   instructor?: { ime: string; prezime: string; color?: string } | null;
   classroom?: { id: string; naziv: string; color?: string } | null;
@@ -82,7 +82,7 @@ export default function CalendarView({
   singleDay?: string;
   monthStart?: string;
   clientFilterId?: string | null;
-  /** Tuđi termini (drugi predavači) – samo prikaz, bez linka */
+  /** Tuđi termini (drugi instruktori) – samo prikaz, bez linka */
   otherTerms?: OtherTerm[];
 }) {
   const router = useRouter();
@@ -228,7 +228,7 @@ function CellContent({
             <span className="text-xs block mb-0.5 text-stone-500">{term.classroom.naziv}</span>
           )}
           {(term.predavanja ?? []).length === 0 ? (
-            <span className="text-sm" style={{ color: textColor }}>+ Dodaj predavanje</span>
+            <span className="text-sm" style={{ color: textColor }}>+ Dodaj radionicu</span>
           ) : (
             <>
               {(term.predavanja ?? []).map((p) => (

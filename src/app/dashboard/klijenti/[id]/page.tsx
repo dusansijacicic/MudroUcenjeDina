@@ -93,7 +93,7 @@ export default async function KlijentPage({
         <div className="border-b border-stone-100 bg-stone-50/80 px-5 py-3">
           <h2 className="text-base font-semibold text-stone-800">Statistika časova za ovog klijenta</h2>
           <p className="text-xs text-stone-500 mt-0.5">
-            Plaćeno (škola) = ukupno plaćeno preko svih predavača. Održano = kod svih predavača. Preostalo = plaćeno − održano.
+            Plaćeno (škola) = ukupno plaćeno preko svih instruktora. Održano = kod svih instruktora. Preostalo = plaćeno − održano.
           </p>
         </div>
         <div className="p-5">
@@ -161,7 +161,7 @@ export default async function KlijentPage({
       <ClientForm instructorId={instructor.id} client={client} />
 
       <p className="text-stone-500 text-sm">
-        „Plaćeno časova (škola)” dobija se sabiranjem plaćenih paketa kod svih predavača. U formi ispod i dalje menjate paket za vašu vezu sa klijentom.
+        „Plaćeno časova (škola)” dobija se sabiranjem plaćenih paketa kod svih instruktora. U formi ispod i dalje menjate paket za vašu vezu sa klijentom.
       </p>
 
       <section className="rounded-2xl border border-stone-200 bg-white overflow-hidden">
@@ -252,7 +252,7 @@ function PredavanjeHistoryRow({
         href={`/dashboard/predavanje/${predavanje.id}`}
         className="mt-2 inline-block text-sm text-amber-600 hover:text-amber-700"
       >
-        Izmeni predavanje →
+        Izmeni radionicu →
       </Link>
     </div>
   );

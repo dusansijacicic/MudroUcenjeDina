@@ -67,7 +67,7 @@ export default async function NoviTerminPage({
   ]);
   const currentCount = predRes.count ?? 0;
   if (currentCount >= maxCasova) {
-    redirect(`/dashboard?error=max_predavanja&message=${encodeURIComponent(`Ovaj termin već ima maksimalan broj časova (${maxCasova}). Ne možete dodati novo predavanje.`)}`);
+    redirect(`/dashboard?error=max_predavanja&message=${encodeURIComponent(`Ovaj termin već ima maksimalan broj časova (${maxCasova}). Ne možete dodati novu radionicu.`)}`);
   }
   const termsInSlot = termsInSlotRes.data ?? [];
   const takenClassroomIds = termsInSlot.map((t: { classroom_id: string | null }) => t.classroom_id).filter((id: string | null): id is string => id != null);
@@ -91,7 +91,7 @@ export default async function NoviTerminPage({
   return (
     <div className="max-w-lg">
       <h1 className="text-xl font-semibold text-stone-800 mb-4">
-        Novo predavanje – {date} {slotLabel}
+        Nova radionica – {date} {slotLabel}
       </h1>
       {clients.length === 0 && (
         <p className="mb-4 text-amber-700 bg-amber-50 rounded-lg px-3 py-2 text-sm">

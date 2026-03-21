@@ -38,6 +38,7 @@ Aplikacija ima **3 osnovne uloge**. Dozvole su definisane ispod.
 |--------|-------------|----------|---------|
 | Dodaj predavača | ✅ | ❌ | ❌ |
 | Dodaj klijenta | ✅ | ✅ | ❌ |
+| Obriši klijenta iz sistema (trajno) | ✅ | ❌ | ❌ |
 | Zakaži termin za bilo kog predavača | ✅ | ❌ | ❌ |
 | Zakaži termin za sebe (samo svoj) | ✅ | ✅ | ❌ |
 | Menja/briše bilo koji termin | ✅ | ❌ | ❌ |

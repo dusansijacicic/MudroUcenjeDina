@@ -25,7 +25,7 @@ interface PredavanjeFormProps {
   initialClassroomId?: string | null;
   /** ID-evi učionica koje su već zauzete u ovom slotu (drugi termini) – ne prikazivati u izboru */
   takenClassroomIds?: string[];
-  /** Stanje po vrstama za svakog klijenta (kod ovog predavača), da se prikaže ostalo pri izboru klijenta */
+  /** Stanje po vrstama za svakog klijenta (kod ovog instruktora), da se prikaže ostalo pri izboru klijenta */
   clientStanjeList?: { clientId: string; stanje: StanjeItem[] }[];
 }
 
@@ -101,14 +101,14 @@ export default function PredavanjeForm({
           console.error('[PredavanjeForm] update error', result.error);
           throw new Error(result.error);
         }
-        toast.success('Predavanje sačuvano.');
+        toast.success('Radionica sačuvana.');
       } else {
         const result = await createPredavanje(termId, clientId, odrzano, placeno, komentar.trim() || null, termTypeId || null);
         if (result.error) {
           console.error('[PredavanjeForm] createPredavanje error', result.error);
           throw new Error(result.error);
         }
-        toast.success('Predavanje dodato.');
+        toast.success('Radionica dodata.');
       }
       const getMonday = (d: Date) => {
         const x = new Date(d);
@@ -130,7 +130,7 @@ export default function PredavanjeForm({
   };
 
   const handleDelete = async () => {
-    if (!predavanje || !confirm('Obrisati ovo predavanje?')) return;
+    if (!predavanje || !confirm('Obrisati ovu radionicu?')) return;
     setLoading(true);
     try {
       const result = await deletePredavanje(predavanje.id, termId);
@@ -139,7 +139,7 @@ export default function PredavanjeForm({
         toast.error(result.error);
         return;
       }
-      toast.success('Predavanje obrisano.');
+      toast.success('Radionica obrisana.');
       router.push(`/dashboard/termin/${termId}`);
       router.refresh();
     } catch (err) {
@@ -157,7 +157,7 @@ export default function PredavanjeForm({
         {termDate} • {slotLabel}
         {isNew && (
           <span className="ml-2 text-stone-400">
-            ({currentCount} / {maxCasova} časova u terminu)
+            ({currentCount} / {maxCasova} radionica u terminu)
           </span>
         )}
       </div>
@@ -210,6 +210,9 @@ export default function PredavanjeForm({
         {termTypes.length === 0 && (
           <p className="text-xs text-amber-600 mt-0.5">Admin mora dodati bar jednu vrstu u Admin → Vrste termina.</p>
         )}
+        <p className="text-xs text-stone-500 mt-1.5">
+          Vrsta termina (npr. individualni ili grupni) zamenjuje posebne „kategorije”. Za <strong>grupni</strong> čas u istom terminu dodajte više radionica – po jednu po detetu – do maksimuma iz podešavanja.
+        </p>
       </div>
       {classrooms.length > 0 && (
         <div>
@@ -277,7 +280,7 @@ export default function PredavanjeForm({
           disabled={loading || atLimit}
           className="rounded-lg bg-amber-600 px-4 py-2 text-white font-medium hover:bg-amber-700 disabled:opacity-50"
         >
-          {loading ? 'Čuvanje...' : predavanje ? 'Sačuvaj' : 'Dodaj predavanje'}
+          {loading ? 'Čuvanje...' : predavanje ? 'Sačuvaj' : 'Dodaj radionicu'}
         </button>
         <Link
           href={`/dashboard/termin/${termId}`}

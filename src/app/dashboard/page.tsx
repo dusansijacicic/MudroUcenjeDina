@@ -11,7 +11,7 @@ import DashboardDebugLog from './DashboardDebugLog';
 import { DEFAULT_INSTRUCTOR_COLOR } from '@/lib/constants';
 import type { RawTerm, OtherTerm } from './CalendarView';
 
-// Uvek sveži podaci po korisniku – predavač mora da vidi i tuđe termine (samo pregled).
+// Uvek sveži podaci po korisniku – instruktor mora da vidi i tuđe termine (samo pregled).
 export const dynamic = 'force-dynamic';
 
 export default async function DashboardPage({
@@ -251,7 +251,7 @@ export default async function DashboardPage({
             ))
           )}
           <span className="w-px h-4 bg-stone-200 shrink-0" aria-hidden />
-          <span className="text-stone-500">Predavači (zauzeli termin):</span>
+          <span className="text-stone-500">Instruktori (zauzeli termin):</span>
           {legendInstructors.map((inst) => (
             <span key={inst.id} className="flex items-center gap-1.5">
               <span className="inline-block h-3.5 w-3.5 rounded border border-stone-300 shrink-0" style={{ backgroundColor: inst.color }} />

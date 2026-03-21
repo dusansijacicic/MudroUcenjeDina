@@ -7,7 +7,7 @@ import toast from 'react-hot-toast';
 const REASON_MESSAGES: Record<string, string> = {
   no_session: 'Sesija nije pronađena ili je istekla. Ulogujte se ponovo.',
   not_authorized: 'Niste ovlašćeni za tu stranicu.',
-  no_instructor: 'Za ovaj nalog nije pronađen predavač. Dodajte se u admin_users ili kao predavač.',
+  no_instructor: 'Za ovaj nalog nije pronađen instruktor. Dodajte se u admin_users ili kao instruktor.',
   error_rls: 'Greška pri proveri uloge (RLS). U Supabase SQL Editoru pokrenite FULL_RESET_AND_MIGRATE.sql ili migraciju 015_rls_break_recursion.sql.',
 };
 
@@ -69,7 +69,7 @@ export default function LoginPage() {
           Dina Kalendar
         </h1>
         <p className="text-[var(--kid-text-muted)] text-center text-sm mb-6">
-          Prijava (predavač ili učenik)
+          Prijava (instruktor ili učenik)
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-4">

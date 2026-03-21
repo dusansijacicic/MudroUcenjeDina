@@ -72,14 +72,14 @@ export default async function AdminUplatePage() {
         </Link>
       </div>
       <p className="text-stone-500 text-sm mb-4">
-        Ko je primio novac (predavač), kada, za kog klijenta, iznos i koliko koje vrste časova.
+        Ko je primio novac (instruktor), kada, za kog klijenta, iznos i koliko koje vrste časova.
       </p>
       <div className="rounded-xl border border-stone-200 bg-white overflow-hidden">
         <table className="w-full text-sm">
           <thead className="bg-stone-50 border-b border-stone-200">
             <tr>
               <th className="text-left p-3 font-medium text-stone-600">Datum i vreme</th>
-              <th className="text-left p-3 font-medium text-stone-600">Primio (predavač)</th>
+              <th className="text-left p-3 font-medium text-stone-600">Primio (instruktor)</th>
               <th className="text-left p-3 font-medium text-stone-600">Klijent</th>
               <th className="text-right p-3 font-medium text-stone-600">Iznos</th>
               <th className="text-right p-3 font-medium text-stone-600">Popust %</th>

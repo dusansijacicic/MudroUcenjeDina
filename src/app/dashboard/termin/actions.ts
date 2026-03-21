@@ -18,7 +18,7 @@ export async function createPredavanje(
   const { instructor } = await getDashboardInstructor();
   if (!instructor) {
     console.error('[termin] createPredavanje: no instructor');
-    return { error: 'Niste predavač.' };
+    return { error: 'Niste instruktor.' };
   }
 
   let admin;
@@ -45,7 +45,7 @@ export async function createPredavanje(
   const check = await termMozeNovoPredavanje(termId);
   if (!check.ok) {
     return {
-      error: `Maksimalan broj časova u ovom terminu je ${check.max}. Trenutno ima ${check.count}. Podešavanja može da menja superadmin.`,
+      error: `Maksimalan broj radionica u ovom terminu je ${check.max}. Trenutno ima ${check.count}. Podešavanja može da menja superadmin.`,
     };
   }
 
@@ -85,7 +85,7 @@ export async function updatePredavanje(
   termTypeId: string | null = null
 ): Promise<{ error?: string }> {
   const { instructor } = await getDashboardInstructor();
-  if (!instructor) return { error: 'Niste predavač.' };
+  if (!instructor) return { error: 'Niste instruktor.' };
   let admin;
   try {
     admin = createAdminClient();
@@ -115,7 +115,7 @@ export async function updatePredavanje(
 
 export async function deletePredavanje(predavanjeId: string, termId: string): Promise<{ error?: string }> {
   const { instructor } = await getDashboardInstructor();
-  if (!instructor) return { error: 'Niste predavač.' };
+  if (!instructor) return { error: 'Niste instruktor.' };
   let admin;
   try {
     admin = createAdminClient();
@@ -123,7 +123,7 @@ export async function deletePredavanje(predavanjeId: string, termId: string): Pr
     return { error: 'Server greška.' };
   }
   const { data: pred } = await admin.from('predavanja').select('term_id').eq('id', predavanjeId).single();
-  if (!pred) return { error: 'Predavanje nije pronađeno.' };
+  if (!pred) return { error: 'Radionica nije pronađena.' };
   const { data: term } = await admin.from('terms').select('instructor_id').eq('id', pred.term_id).single();
   if (!term || term.instructor_id !== instructor.id) return { error: 'Niste ovlašćeni.' };
   const { error } = await admin.from('predavanja').delete().eq('id', predavanjeId);
@@ -141,7 +141,7 @@ export async function moveTermAsInstructor(
   newSlotIndex: number
 ): Promise<{ error?: string }> {
   const { instructor } = await getDashboardInstructor();
-  if (!instructor) return { error: 'Niste predavač.' };
+  if (!instructor) return { error: 'Niste instruktor.' };
   let admin;
   try {
     admin = createAdminClient();
@@ -207,7 +207,7 @@ export async function moveTermAsInstructor(
 
 export async function deleteTermAsInstructor(termId: string): Promise<{ error?: string }> {
   const { instructor } = await getDashboardInstructor();
-  if (!instructor) return { error: 'Niste predavač.' };
+  if (!instructor) return { error: 'Niste instruktor.' };
   let admin;
   try {
     admin = createAdminClient();
@@ -234,7 +234,7 @@ export async function updateTermClassroom(
   classroomId: string
 ): Promise<{ error?: string }> {
   const { instructor } = await getDashboardInstructor();
-  if (!instructor) return { error: 'Niste predavač.' };
+  if (!instructor) return { error: 'Niste instruktor.' };
   let admin;
   try {
     admin = createAdminClient();

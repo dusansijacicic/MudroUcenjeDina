@@ -82,7 +82,7 @@ export default function AdminCalendarFilters({
         <Link href={`${base}?${q(`view=mesec&month=${monthParam}`)}`} className={`px-3 py-1.5 rounded-md ${currentView === 'mesec' ? 'bg-amber-100 text-amber-800' : 'text-stone-600 hover:bg-stone-100'}`}>Mesec</Link>
       </div>
       <div className="flex flex-wrap items-center gap-2 text-sm">
-        <label className="text-stone-500">Predavač:</label>
+        <label className="text-stone-500">Instruktor:</label>
         <select value={filterInstructorId ?? ''} onChange={handleInstructorChange} className="rounded-lg border border-stone-200 bg-white px-3 py-1.5 text-stone-800 min-w-[140px]">
           <option value="">Svi</option>
           {instructors.map((i) => (

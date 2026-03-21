@@ -21,30 +21,59 @@ export default async function AdminSviKlijentiPage() {
   const adminSupabase = createAdminClient();
   const { data: links } = await adminSupabase
     .from('instructor_clients')
-    .select('instructor_id, client_id, placeno_casova, client:clients(id, ime, prezime, login_email, godiste, razred, skola, kontakt_telefon), instructor:instructors(id, ime, prezime)')
+    .select('instructor_id, client_id, placeno_casova, client:clients(id, ime, prezime, login_email, godiste, razred, skola, kontakt_telefon, datum_testiranja), instructor:instructors(id, ime, prezime)')
     .order('client_id');
 
   const byClient = new Map<
     string,
-    { client: { id: string; ime: string; prezime: string; login_email?: string | null; godiste?: number; razred?: string; skola?: string; kontakt_telefon?: string }; instructors: { id: string; ime: string; prezime: string; placeno_casova: number }[] }
+    {
+      client: {
+        id: string;
+        ime: string;
+        prezime: string;
+        login_email?: string | null;
+        godiste?: number;
+        razred?: string;
+        skola?: string;
+        kontakt_telefon?: string;
+        datum_testiranja?: string | null;
+      };
+      instructors: { id: string; ime: string; prezime: string; placeno_casova: number }[];
+    }
   >();
   for (const row of links ?? []) {
-    const c = row.client as unknown as { id: string; ime: string; prezime: string; login_email?: string; godiste?: number; razred?: string; skola?: string; kontakt_telefon?: string };
+    const c = row.client as unknown as {
+      id: string;
+      ime: string;
+      prezime: string;
+      login_email?: string;
+      godiste?: number;
+      razred?: string;
+      skola?: string;
+      kontakt_telefon?: string;
+      datum_testiranja?: string | null;
+    };
     const i = row.instructor as unknown as { id: string; ime: string; prezime: string };
     if (!c?.id) continue;
     const existing = byClient.get(c.id);
     if (!existing) {
       byClient.set(c.id, {
-        client: { ...c, login_email: c.login_email ?? null },
+        client: { ...c, login_email: c.login_email ?? null, datum_testiranja: c.datum_testiranja ?? null },
         instructors: [{ id: i.id, ime: i.ime, prezime: i.prezime, placeno_casova: row.placeno_casova }],
       });
     } else {
       existing.instructors.push({ id: i.id, ime: i.ime, prezime: i.prezime, placeno_casova: row.placeno_casova });
     }
   }
-  const list = Array.from(byClient.values()).sort(
-    (a, b) => (a.client.prezime ?? '').localeCompare(b.client.prezime ?? '') || (a.client.ime ?? '').localeCompare(b.client.ime ?? '')
-  );
+  const list = Array.from(byClient.values()).sort((a, b) => {
+    const da = a.client.datum_testiranja ?? '';
+    const db = b.client.datum_testiranja ?? '';
+    if (da !== db) return db.localeCompare(da);
+    return (
+      (a.client.prezime ?? '').localeCompare(b.client.prezime ?? '') ||
+      (a.client.ime ?? '').localeCompare(b.client.ime ?? '')
+    );
+  });
 
   const clientIds = list.map(({ client }) => client.id);
   const stanjeMap = await getStanjePoVrstamaZaKlijenteBatch(clientIds);
@@ -62,7 +91,7 @@ export default async function AdminSviKlijentiPage() {
         <div>
           <h1 className="text-xl font-semibold text-stone-800">Svi klijenti</h1>
           <p className="text-stone-500 text-sm mt-1">
-            Pregled i izmena svih učenika u sistemu. Klik na red vodi na izmenu kod izabranog predavača.
+            Pregled i izmena svih učenika u sistemu. Klik na red vodi na izmenu kod izabranog instruktora.
           </p>
         </div>
         <Link
@@ -78,10 +107,11 @@ export default async function AdminSviKlijentiPage() {
           <thead className="bg-stone-50 border-b border-stone-200">
             <tr>
               <th className="text-left p-3 font-medium text-stone-600">Ime i prezime</th>
+              <th className="text-left p-3 font-medium text-stone-600">Datum testiranja</th>
               <th className="text-left p-3 font-medium text-stone-600">Email za prijavu</th>
               <th className="text-left p-3 font-medium text-stone-600">Godište / Razred</th>
               <th className="text-left p-3 font-medium text-stone-600">Kupljeno / Održano / Preostalo po vrsti</th>
-              <th className="text-left p-3 font-medium text-stone-600">Predavači</th>
+              <th className="text-left p-3 font-medium text-stone-600">Instruktori</th>
               <th className="text-right p-3 font-medium text-stone-600">Akcija</th>
             </tr>
           </thead>
@@ -99,6 +129,11 @@ export default async function AdminSviKlijentiPage() {
                       Nema kupljenih časova ({problemTypes.join(', ')})
                     </span>
                   )}
+                </td>
+                <td className="p-3 text-stone-600 whitespace-nowrap">
+                  {client.datum_testiranja
+                    ? new Date(client.datum_testiranja + 'T12:00:00').toLocaleDateString('sr-Latn-RS')
+                    : '—'}
                 </td>
                 <td className="p-3 text-stone-600">{client.login_email ?? '—'}</td>
                 <td className="p-3 text-stone-600">
@@ -144,7 +179,7 @@ export default async function AdminSviKlijentiPage() {
                       href={`/admin/view/${instrs[0].id}/klijenti/${client.id}`}
                       className="text-stone-500 hover:text-stone-700 text-sm"
                     >
-                      Kod predavača
+                      Kod instruktora
                     </Link>
                   )}
                 </td>
@@ -155,7 +190,7 @@ export default async function AdminSviKlijentiPage() {
         </table>
         {list.length === 0 && (
           <div className="p-8 text-center text-stone-500">
-            Nema klijenata. Dodajte predavača, pa „Novi klijent” ili unesite klijenta kod predavača (Predavači → + Klijent).
+            Nema klijenata. Dodajte instruktora, pa „Novi klijent” ili unesite klijenta kod instruktora (Instruktori → + Klijent).
           </div>
         )}
       </div>

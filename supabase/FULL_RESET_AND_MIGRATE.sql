@@ -59,6 +59,7 @@ CREATE TABLE clients (
   roditelj TEXT,
   kontakt_telefon TEXT,
   popust_percent DECIMAL(5,2) DEFAULT 0 CHECK (popust_percent >= 0 AND popust_percent <= 100),
+  datum_testiranja DATE,
   created_at TIMESTAMPTZ DEFAULT now()
 );
 

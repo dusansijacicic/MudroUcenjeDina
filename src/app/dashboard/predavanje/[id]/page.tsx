@@ -79,7 +79,7 @@ async function movePredavanjeToAnotherTerm(formData: FormData) {
 
   if (updErr) {
     redirect(
-      `/dashboard/predavanje/${predavanjeId}?error=${encodeURIComponent('Greška pri premeštanju predavanja.')}`
+      `/dashboard/predavanje/${predavanjeId}?error=${encodeURIComponent('Greška pri premeštanju radionice.')}`
     );
   }
 
@@ -143,7 +143,7 @@ export default async function EditPredavanjePage({
   return (
     <div className="max-w-lg space-y-6">
       <div>
-        <h1 className="text-xl font-semibold text-stone-800 mb-4">Izmena predavanja</h1>
+        <h1 className="text-xl font-semibold text-stone-800 mb-4">Izmena radionice</h1>
         <PredavanjeForm
           termId={term.id}
           termDate={term.date}

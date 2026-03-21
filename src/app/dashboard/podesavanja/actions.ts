@@ -24,11 +24,11 @@ export async function saveInstructorSettings(
   const { instructor } = await getDashboardInstructor();
   if (!instructor) {
     console.error('[podesavanja] no instructor');
-    return { error: 'Niste ulogovani kao predavač.' };
+    return { error: 'Niste ulogovani kao instruktor.' };
   }
   if (instructor.id !== instructorId) {
     console.error('[podesavanja] instructor id mismatch', instructor.id, instructorId);
-    return { error: 'Niste ovlašćeni da menjate ovog predavača.' };
+    return { error: 'Niste ovlašćeni da menjate ovog instruktora.' };
   }
 
   let adminSupabase;

@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase/client';
 import { useRouter, usePathname } from 'next/navigation';
 
 const navLinks = [
-  { href: '/admin', label: 'Predavači' },
+  { href: '/admin', label: 'Instruktori' },
   { href: '/admin/klijenti', label: 'Klijenti' },
   { href: '/admin/uplate', label: 'Evidencija uplata' },
   { href: '/admin/vrste-termina', label: 'Vrste časova' },

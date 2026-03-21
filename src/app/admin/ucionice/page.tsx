@@ -58,6 +58,12 @@ export default async function AdminUcionicePage() {
                 </div>
               </div>
               <div className="flex items-center gap-2">
+                <Link
+                  href={`/admin/ucionice/${r.id}`}
+                  className="text-xs text-amber-700 hover:text-amber-800 border border-amber-200 rounded-lg px-2 py-1 font-medium"
+                >
+                  Izmeni
+                </Link>
                 <DeleteClassroomButton id={r.id} />
               </div>
             </div>

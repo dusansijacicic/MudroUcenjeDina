@@ -19,7 +19,7 @@ export async function preuzmiZahtev(zahtevId: string): Promise<{ error?: string 
   const { instructor } = await getDashboardInstructor();
   if (!instructor) {
     console.error('[zahtevi] preuzmiZahtev: no instructor');
-    return { error: 'Niste predavač.' };
+    return { error: 'Niste instruktor.' };
   }
   const admin = getAdmin();
   if (!admin) return { error: 'Server greška (admin klijent).' };
@@ -59,7 +59,7 @@ export async function preuzmiZahtev(zahtevId: string): Promise<{ error?: string 
 export async function potvrdiZahtev(zahtevId: string): Promise<{ error?: string }> {
   console.log('[zahtevi] potvrdiZahtev', zahtevId);
   const { instructor } = await getDashboardInstructor();
-  if (!instructor) return { error: 'Niste predavač.' };
+  if (!instructor) return { error: 'Niste instruktor.' };
   const admin = getAdmin();
   if (!admin) return { error: 'Server greška (admin klijent).' };
 
@@ -114,7 +114,7 @@ export async function potvrdiZahtev(zahtevId: string): Promise<{ error?: string 
     .single();
   if (predErr || !predavanje) {
     console.error('[zahtevi] potvrdiZahtev predavanje insert', predErr?.message);
-    return { error: predErr?.message ?? 'Predavanje nije kreirano.' };
+    return { error: predErr?.message ?? 'Radionica nije kreirana.' };
   }
 
   const { error: upErr } = await admin
@@ -144,7 +144,7 @@ export async function promeniTerminZahtev(
 ): Promise<{ error?: string }> {
   console.log('[zahtevi] promeniTerminZahtev', zahtevId, newDate, newSlotIndex);
   const { instructor } = await getDashboardInstructor();
-  if (!instructor) return { error: 'Niste predavač.' };
+  if (!instructor) return { error: 'Niste instruktor.' };
   const admin = getAdmin();
   if (!admin) return { error: 'Server greška (admin klijent).' };
 
@@ -199,7 +199,7 @@ export async function promeniTerminZahtev(
     .single();
   if (predErr || !predavanje) {
     console.error('[zahtevi] promeniTerminZahtev predavanje insert', predErr?.message);
-    return { error: predErr?.message ?? 'Predavanje nije kreirano.' };
+    return { error: predErr?.message ?? 'Radionica nije kreirana.' };
   }
 
   const { error: upErr } = await admin
@@ -225,7 +225,7 @@ export async function promeniTerminZahtev(
 export async function odbijZahtev(zahtevId: string, note?: string): Promise<{ error?: string }> {
   console.log('[zahtevi] odbijZahtev', zahtevId);
   const { instructor } = await getDashboardInstructor();
-  if (!instructor) return { error: 'Niste predavač.' };
+  if (!instructor) return { error: 'Niste instruktor.' };
   const admin = getAdmin();
   if (!admin) return { error: 'Server greška (admin klijent).' };
 

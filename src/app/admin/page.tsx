@@ -44,23 +44,23 @@ export default async function AdminPage({
       <AdminFromDashboardToast from={params?.from} />
       <div className="flex flex-wrap items-center justify-between gap-4 mb-6 animate-in-delay-1">
         <div>
-          <h1 className="text-xl font-semibold text-stone-800">Predavači</h1>
+          <h1 className="text-xl font-semibold text-stone-800">Instruktori</h1>
           <p className="text-stone-500 text-sm mt-0.5">
-            Klik na predavača otvara pregled: kalendar i klijente.
+            Klik na instruktora otvara pregled: kalendar i klijente.
           </p>
         </div>
         <Link
           href="/admin/predavaci/novi"
           className="inline-flex items-center rounded-xl bg-amber-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-amber-500 ui-hover-lift shadow-md focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-offset-2"
         >
-          + Novi predavač
+          + Novi instruktor
         </Link>
       </div>
 
       <div className="rounded-2xl border border-stone-200 bg-white divide-y divide-stone-100 shadow-sm overflow-hidden animate-in-delay-2">
         {(instructors ?? []).length === 0 ? (
           <div className="p-8 text-center text-stone-500">
-            Nema predavača u bazi. Dodaj predavača preko „Novi predavač” ili registracije na /login.
+            Nema instruktora u bazi. Dodaj instruktora preko „Novi instruktor” ili registracije na /login.
           </div>
         ) : (
           <ul className="stagger-children">

@@ -258,7 +258,7 @@ export default async function UcenikPage() {
           Moji časovi – ko je držao termin i šta je rađeno sa detetom
         </h2>
         <p className="text-sm text-[var(--kid-text-muted)] mb-4">
-          Za svaki termin: datum i vreme, <strong>ko je predavač držao čas</strong>, da li je održano/plaćeno i <strong>šta je rađeno sa detetom</strong> (komentar predavača).
+          Za svaki termin: datum i vreme, <strong>ko je instruktor držao čas</strong>, da li je održano/plaćeno i <strong>šta je rađeno sa detetom</strong> (komentar instruktora).
         </p>
         <div className="rounded-2xl border-2 border-[var(--kid-lavender)]/60 bg-white/90 backdrop-blur-sm divide-y divide-[var(--kid-lavender)]/40 shadow-lg overflow-hidden">
           {list.length === 0 ? (

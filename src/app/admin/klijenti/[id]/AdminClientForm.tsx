@@ -26,6 +26,9 @@ export default function AdminClientForm({
   const [popust_percent, setPopustPercent] = useState(
     client.popust_percent != null ? String(client.popust_percent) : ''
   );
+  const [datum_testiranja, setDatumTestiranja] = useState(
+    client.datum_testiranja?.slice(0, 10) ?? ''
+  );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -52,6 +55,7 @@ export default function AdminClientForm({
       kontakt_telefon: kontakt_telefon.trim() || null,
       login_email: login_email.trim() || null,
       popust_percent: popustNum,
+      datum_testiranja: datum_testiranja.trim() || null,
     };
     try {
       const result = await updateClientAsAdmin(client.id, payload);
@@ -105,6 +109,16 @@ export default function AdminClientForm({
       <div>
         <label className="block text-sm font-medium text-stone-700 mb-1">Kontakt telefon</label>
         <input type="tel" value={kontakt_telefon} onChange={(e) => setKontaktTelefon(e.target.value)} className="w-full rounded-lg border border-stone-300 px-3 py-2 text-stone-800" />
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-stone-700 mb-1">Datum testiranja</label>
+        <input
+          type="date"
+          value={datum_testiranja}
+          onChange={(e) => setDatumTestiranja(e.target.value)}
+          className="w-full rounded-lg border border-stone-300 px-3 py-2 text-stone-800 max-w-[220px]"
+        />
+        <p className="mt-1 text-xs text-stone-500">Opciono. Lista klijenata sortira se po ovom datumu (noviji prvi).</p>
       </div>
       <div>
         <label className="block text-sm font-medium text-stone-700 mb-1">Email za prijavu učenika</label>

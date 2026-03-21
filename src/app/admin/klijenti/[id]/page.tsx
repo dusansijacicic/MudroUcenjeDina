@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { redirect, notFound } from 'next/navigation';
 import Link from 'next/link';
 import AdminClientForm from './AdminClientForm';
+import AdminDeleteClientButton from './AdminDeleteClientButton';
 import { getStanjePoVrstamaZaKlijenta, markPastPredavanjaAsOdrzano } from '@/app/admin/actions';
 import { TIME_SLOTS, isTermInPast } from '@/lib/constants';
 import type { Client } from '@/types/database';
@@ -185,8 +186,19 @@ export default async function AdminKlijentEditPage({
       {/* Izmena podataka */}
       <section className="rounded-2xl border border-stone-200 bg-white shadow-sm p-5 animate-in-delay-4">
         <h2 className="text-base font-semibold text-stone-800 mb-1">Izmena podataka klijenta</h2>
-        <p className="text-xs text-stone-500 mb-4">Plaćeno časova po predavaču se vodi kroz Evidenciju uplata.</p>
+        <p className="text-xs text-stone-500 mb-4">Plaćeno časova po instruktoru se vodi kroz Evidenciju uplata.</p>
         <AdminClientForm client={client as Client} redirectAfterSave="/admin/klijenti" />
+      </section>
+
+      {/* Brisanje – samo super admin (ulogovan kao admin_users) */}
+      <section className="rounded-2xl border border-red-100 bg-red-50/40 shadow-sm p-5 animate-in-delay-4">
+        <h2 className="text-base font-semibold text-red-900 mb-1">Opasna zona</h2>
+        <p className="text-xs text-red-800/80 mb-4 max-w-xl">
+          Brisanje klijenta dostupno je samo kada ste ulogovani kao <strong>super admin</strong> (nalog u Admin panelu).
+          Uklanja klijenta, sve njegove radionice, veze sa instruktorima, uplate i zahtev. Nalog učenika u Auth-u (ako postoji)
+          automatski se ne briše – uklonite ga ručno u Supabase Auth ako treba.
+        </p>
+        <AdminDeleteClientButton clientId={client.id} clientLabel={`${client.ime} ${client.prezime}`} />
       </section>
     </div>
   );

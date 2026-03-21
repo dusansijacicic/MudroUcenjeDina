@@ -180,7 +180,7 @@ function AdminCellContent({
               </div>
             )}
             {predavanja.length === 0 && (
-              <span className="text-stone-500 text-xs">+ predavanje</span>
+              <span className="text-stone-500 text-xs">+ radionica</span>
             )}
           </Link>
         );
@@ -189,7 +189,7 @@ function AdminCellContent({
         href={newTermHref}
         className="block rounded-lg border border-dashed border-stone-200 p-1.5 text-stone-400 hover:border-amber-400 hover:bg-amber-50/50 text-xs"
       >
-        + još predavač u ovom slotu
+        + još instruktor u ovom slotu
       </Link>
     </div>
   );

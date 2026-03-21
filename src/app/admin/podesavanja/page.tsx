@@ -24,7 +24,7 @@ export default async function AdminPodesavanjaPage() {
     <div className="max-w-lg">
       <h1 className="text-xl font-semibold text-stone-800 mb-2">Podešavanja aplikacije</h1>
       <p className="text-stone-500 text-sm mb-6">
-        Ova podešavanja važe za celu aplikaciju. Maksimalni broj časova po terminu ograničava koliko predavanja (učenika) može biti u jednom terminu; maksimalan broj termina po slotu ograničava koliko različitih predavača/učionica može biti u istom vremenskom slotu (npr. u 10:00).
+        Ova podešavanja važe za celu aplikaciju. Maksimalni broj radionica po terminu ograničava koliko učenika može biti u jednom terminu; maksimalan broj termina po slotu ograničava koliko različitih instruktora/učionica može biti u istom vremenskom slotu (npr. u 10:00).
       </p>
 
       <PodesavanjaForm

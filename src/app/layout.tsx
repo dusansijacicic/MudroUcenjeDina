@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 const siteName = "Dina Kalendar";
-const siteDescription = "Jednostavno zakazivanje časova za predavače i učenike. Pregled termina, zahtevi za čas i upravljanje klijentima u jednom mestu.";
+const siteDescription = "Jednostavno zakazivanje časova za instruktore i učenike. Pregled termina, zahtevi za čas i upravljanje klijentima u jednom mestu.";
 const siteUrl = process.env.NEXT_PUBLIC_APP_URL || "https://dina-kalendar.vercel.app";
 
 export const metadata: Metadata = {
@@ -24,7 +24,7 @@ export const metadata: Metadata = {
     template: `%s | ${siteName}`,
   },
   description: siteDescription,
-  keywords: ["zakazivanje časova", "predavač", "učenik", "termini", "kalendar", "obrazovanje"],
+  keywords: ["zakazivanje časova", "instruktor", "učenik", "termini", "kalendar", "obrazovanje"],
   authors: [{ name: "Dina Kalendar" }],
   creator: "Dina Kalendar",
   openGraph: {

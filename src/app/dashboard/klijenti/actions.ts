@@ -14,6 +14,8 @@ type ClientPayload = {
   roditelj: string | null;
   kontakt_telefon: string | null;
   login_email: string | null;
+  /** YYYY-MM-DD ili null */
+  datum_testiranja: string | null;
 };
 
 /**
@@ -45,13 +47,13 @@ export async function createClientAsInstructor(
   if (adminRow) {
     const { data: inst, error: instErr } = await admin.from('instructors').select('id').eq('id', linkInstructorId).maybeSingle();
     if (instErr || !inst) {
-      return { error: 'Izabrani predavač nije pronađen.' };
+      return { error: 'Izabrani instruktor nije pronađen.' };
     }
     effectiveInstructorId = linkInstructorId;
   } else {
     const { instructor } = await getDashboardInstructor();
     if (!instructor || instructor.id !== linkInstructorId) {
-      return { error: 'Niste ovlašćeni da dodate klijenta za ovog predavača.' };
+      return { error: 'Niste ovlašćeni da dodate klijenta za ovog instruktora.' };
     }
     effectiveInstructorId = instructor.id;
   }
@@ -107,7 +109,7 @@ export async function updateClientAsInstructor(
 
   if (!adminRow) {
     const { instructor } = await getDashboardInstructor();
-    if (!instructor) return { error: 'Niste predavač.' };
+    if (!instructor) return { error: 'Niste instruktor.' };
     const { data: link } = await admin
       .from('instructor_clients')
       .select('client_id')

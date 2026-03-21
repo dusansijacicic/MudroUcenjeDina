@@ -73,7 +73,7 @@ export async function createInstructorAsAdmin(formData: FormData): Promise<{ err
   });
   if (insertError) {
     console.error('[admin] createInstructor: instructors insert failed', insertError.message, insertError.code);
-    return { error: 'Profil predavača: ' + (insertError.message || insertError.code || 'nepoznata greška.') };
+    return { error: 'Profil instruktora: ' + (insertError.message || insertError.code || 'nepoznata greška.') };
   }
 
   console.log('[admin] createInstructor: success', email);
@@ -119,7 +119,7 @@ export async function createTermAsAdmin(
     .select('user_id')
     .eq('user_id', user.id)
     .single();
-  if (!admin) return { error: 'Samo admin može da zakazuje termine za predavače.' };
+  if (!admin) return { error: 'Samo admin može da zakazuje termine za instruktore.' };
 
   const slot = Math.min(12, Math.max(0, slotIndex));
   const dateStr = date.slice(0, 10);
@@ -145,7 +145,7 @@ export async function createTermAsAdmin(
     .maybeSingle();
 
   if (existingSameInstructor) {
-    return { error: 'Ovaj predavač već ima termin u ovom slotu. Jedan predavač može imati samo jedan termin u istom vremenu.' };
+    return { error: 'Ovaj instruktor već ima termin u ovom slotu. Jedan instruktor može imati samo jedan termin u istom vremenu.' };
   }
 
   // 3) Jedna učionica = jedan termin u slotu (B)
@@ -291,7 +291,7 @@ export async function moveTermAsAdmin(
   }
 
   const { data: existingInstructor } = await admin.from('terms').select('id').eq('instructor_id', term.instructor_id).eq('date', dateStr).eq('slot_index', slot).maybeSingle();
-  if (existingInstructor) return { error: 'Ovaj predavač već ima termin u ciljnom slotu.' };
+  if (existingInstructor) return { error: 'Ovaj instruktor već ima termin u ciljnom slotu.' };
 
   if (term.classroom_id) {
     const { data: existingClassroom } = await admin.from('terms').select('id').eq('classroom_id', term.classroom_id).eq('date', dateStr).eq('slot_index', slot).maybeSingle();
@@ -429,7 +429,18 @@ export async function updateAppSetting(key: string, value: string): Promise<{ er
 /** Izmena klijenta (samo podaci iz tabele clients). Samo admin. */
 export async function updateClientAsAdmin(
   clientId: string,
-  payload: { ime: string; prezime: string; godiste: number | null; razred: string | null; skola: string | null; roditelj: string | null; kontakt_telefon: string | null; login_email: string | null; popust_percent: number | null }
+  payload: {
+    ime: string;
+    prezime: string;
+    godiste: number | null;
+    razred: string | null;
+    skola: string | null;
+    roditelj: string | null;
+    kontakt_telefon: string | null;
+    login_email: string | null;
+    popust_percent: number | null;
+    datum_testiranja: string | null;
+  }
 ): Promise<{ error?: string }> {
   const { admin, error: authErr } = await requireAdmin();
   if (authErr || !admin) return { error: authErr ?? 'Samo admin.' };
@@ -437,6 +448,37 @@ export async function updateClientAsAdmin(
   if (error) return { error: error.message };
   revalidatePath('/admin/klijenti');
   revalidatePath(`/admin/klijenti/${clientId}`);
+  return {};
+}
+
+/**
+ * Trajno briše klijenta iz sistema (sve veze sa instruktorima, radionice, uplate, zahtevi – CASCADE u bazi).
+ * Samo korisnik iz tabele admin_users (super admin u smislu aplikacije).
+ */
+export async function deleteClientAsAdmin(clientId: string): Promise<{ error?: string }> {
+  const { admin, error: authErr } = await requireAdmin();
+  if (authErr || !admin) return { error: authErr ?? 'Samo super admin može da briše klijente.' };
+
+  const trimmedId = clientId?.trim();
+  if (!trimmedId) return { error: 'Nedostaje ID klijenta.' };
+
+  const { data: existing, error: fetchErr } = await admin.from('clients').select('id').eq('id', trimmedId).maybeSingle();
+  if (fetchErr) return { error: fetchErr.message };
+  if (!existing) return { error: 'Klijent nije pronađen.' };
+
+  const { data: links } = await admin.from('instructor_clients').select('instructor_id').eq('client_id', trimmedId);
+
+  const { error: delErr } = await admin.from('clients').delete().eq('id', trimmedId);
+  if (delErr) return { error: delErr.message };
+
+  revalidatePath('/admin/klijenti');
+  revalidatePath('/admin/kalendar');
+  for (const row of links ?? []) {
+    const iid = (row as { instructor_id?: string }).instructor_id;
+    if (iid) revalidatePath(`/admin/view/${iid}/klijenti`);
+  }
+  // Instruktorski dashboardi / kalendar mogu keširati termine sa ovim klijentom
+  revalidatePath('/dashboard', 'layout');
   return {};
 }
 
@@ -628,7 +670,7 @@ export async function createUplata(
   const { data: instructor } = await admin.from('instructors').select('id').eq('user_id', user.id).single();
   const isAdmin = !!adminRow;
   const isOwnInstructor = instructor?.id === instructorId;
-  if (!isAdmin && !isOwnInstructor) return { error: 'Niste ovlašćeni da unesete uplatu za tog predavača.' };
+  if (!isAdmin && !isOwnInstructor) return { error: 'Niste ovlašćeni da unesete uplatu za tog instruktora.' };
   const popust = popustPercent != null && Number.isFinite(popustPercent) && popustPercent >= 0 && popustPercent <= 100 ? popustPercent : null;
   const { error } = await admin.from('uplate').insert({
     instructor_id: instructorId,

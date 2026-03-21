@@ -28,7 +28,7 @@ export default async function AdminUplateNoviPage() {
     <div>
       <h1 className="text-xl font-semibold text-stone-800 mb-2">Unesi uplatu</h1>
       <p className="text-stone-500 text-sm mb-6">
-        Evidencija: ko je primio novac (predavač), za kog klijenta, iznos i koliko koje vrste časova.
+        Evidencija: ko je primio novac (instruktor), za kog klijenta, iznos i koliko koje vrste časova.
       </p>
       <UplataForm
         instructors={(instructors ?? []).map((i) => ({ id: i.id, ime: i.ime ?? '', prezime: i.prezime ?? '' }))}

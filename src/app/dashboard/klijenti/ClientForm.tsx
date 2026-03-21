@@ -37,6 +37,9 @@ export default function ClientForm({
   const [login_email, setLoginEmail] = useState(
     (client as { login_email?: string | null })?.login_email ?? ''
   );
+  const [datum_testiranja, setDatumTestiranja] = useState(
+    (client as { datum_testiranja?: string | null })?.datum_testiranja?.slice(0, 10) ?? ''
+  );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -53,6 +56,7 @@ export default function ClientForm({
       roditelj: roditelj.trim() || null,
       kontakt_telefon: kontakt_telefon.trim() || null,
       login_email: login_email.trim() || null,
+      datum_testiranja: datum_testiranja.trim() || null,
     };
     try {
       if (client) {
@@ -192,7 +196,7 @@ export default function ClientForm({
         </p>
       </div>
       <p className="text-sm text-stone-500">
-        Stanje časova (koliko kojih ima na raspolaganju) vodi se kroz <strong>Evidenciju uplata</strong> (admin ili vi unosite uplatu: predavač, klijent, vrsta časa, broj časova). Na stranici klijenta vidi se ostalo po vrstama.
+        Stanje časova (koliko kojih ima na raspolaganju) vodi se kroz <strong>Evidenciju uplata</strong> (admin ili vi unosite uplatu: instruktor, klijent, vrsta časa, broj časova). Na stranici klijenta vidi se ostalo po vrstama.
       </p>
       {error && (
         <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">

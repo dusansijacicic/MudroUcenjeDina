@@ -110,13 +110,13 @@ export default function ZahtevForm({
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div>
-        <label className="block text-sm font-medium text-[var(--kid-text)] mb-1">Predavač</label>
+        <label className="block text-sm font-medium text-[var(--kid-text)] mb-1">Instruktor</label>
         <select
           value={instructorId}
           onChange={(e) => setInstructorId(e.target.value)}
           className="w-full rounded-xl border-2 border-[var(--kid-sky-dark)]/40 bg-white px-3 py-2.5 text-[var(--kid-text)] focus:ring-2 focus:ring-[var(--kid-teal)] focus:border-[var(--kid-teal)] transition-smooth"
         >
-          <option value="">Bilo koji predavač</option>
+          <option value="">Bilo koji instruktor</option>
           {instructors.map((i) => (
             <option key={i.id} value={i.id}>{i.ime} {i.prezime}</option>
           ))}
@@ -137,7 +137,7 @@ export default function ZahtevForm({
         <label className="block text-sm font-medium text-[var(--kid-text)] mb-1">Vreme</label>
         {instructorId && offerableSlots.length === 0 ? (
           <p className="text-sm text-[#b7950b] bg-[var(--kid-butter)] rounded-xl px-3 py-2 border border-[var(--kid-butter-dark)]/50">
-            Ovaj predavač nema dostupnih termina za izabrani dan (proverite njegovu dostupnost u podešavanjima) ili su svi slobodni slotovi zauzeti. Izaberite drugi datum ili drugog predavača.
+            Ovaj instruktor nema dostupnih termina za izabrani dan (proverite njegovu dostupnost u podešavanjima) ili su svi slobodni slotovi zauzeti. Izaberite drugi datum ili drugog instruktora.
           </p>
         ) : (
           <select
@@ -158,8 +158,8 @@ export default function ZahtevForm({
         )}
         <p className="mt-1 text-xs text-[var(--kid-text-muted)]">
           {instructorId
-            ? 'Prikazani su samo slotovi u kojima je predavač dostupan (spojeni blokovi, bez velikih pauza). Zauzeto = termin je već popunjen.'
-            : 'Izaberite predavača da biste videli samo njegove dostupne termine (spojene blokove). Zauzeto = termin je već popunjen.'}
+            ? 'Prikazani su samo slotovi u kojima je instruktor dostupan (spojeni blokovi, bez velikih pauza). Zauzeto = termin je već popunjen.'
+            : 'Izaberite instruktora da biste videli samo njegove dostupne termine (spojene blokove). Zauzeto = termin je već popunjen.'}
         </p>
       </div>
       {error && <p className="text-sm text-red-600 bg-red-50 rounded-xl px-3 py-2">{error}</p>}
@@ -168,7 +168,7 @@ export default function ZahtevForm({
         disabled={loading || !canSubmit}
         className="w-full rounded-xl bg-[#0d9488] px-4 py-3 text-white font-semibold hover:bg-[#0f766e] disabled:opacity-50 transition-smooth hover-lift active:translate-y-0"
       >
-        {loading ? 'Šaljem...' : !canSubmit ? 'Izaberite drugi datum ili predavača' : 'Pošalji zahtev'}
+        {loading ? 'Šaljem...' : !canSubmit ? 'Izaberite drugi datum ili instruktora' : 'Pošalji zahtev'}
       </button>
     </form>
   );

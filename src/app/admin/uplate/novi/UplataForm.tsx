@@ -20,7 +20,7 @@ export default function UplataForm({
   instructors: Option[];
   clients: ClientOption[];
   termTypes: TermTypeOption[];
-  /** Kad je setovan (npr. za predavača), predavač je fiksiran i ne prikazuje se izbor. */
+  /** Kad je setovan (npr. za instruktora), instruktor je fiksiran i ne prikazuje se izbor. */
   fixedInstructorId?: string;
   /** Link za „Nazad” i redirect posle unosa (default admin uplate). */
   backHref?: string;
@@ -103,7 +103,7 @@ export default function UplataForm({
     <form onSubmit={handleSubmit} className="space-y-4 max-w-md">
       {!fixedInstructorId && (
         <div>
-          <label className="block text-sm font-medium text-stone-700 mb-1">Ko je primio (predavač) *</label>
+          <label className="block text-sm font-medium text-stone-700 mb-1">Ko je primio (instruktor) *</label>
           <select
             value={instructorId}
             onChange={(e) => setInstructorId(e.target.value)}

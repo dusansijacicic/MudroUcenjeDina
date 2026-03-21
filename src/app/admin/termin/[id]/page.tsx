@@ -89,7 +89,7 @@ export default async function AdminTerminDetailPage({
             href={`/admin/termin/${termId}/predavanje/novi`}
             className="inline-flex items-center rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700"
           >
-            + Dodaj predavanje
+            + Dodaj radionicu
           </Link>
         ) : (
           <p className="text-sm text-amber-700 bg-amber-50 rounded-lg px-3 py-2 inline-block">
@@ -101,7 +101,7 @@ export default async function AdminTerminDetailPage({
 
       <div className="rounded-xl border border-stone-200 bg-white divide-y divide-stone-100">
         {(predavanja ?? []).length === 0 ? (
-          <div className="p-6 text-center text-stone-500">Nema predavanja u ovom terminu.</div>
+          <div className="p-6 text-center text-stone-500">Nema radionica u ovom terminu.</div>
         ) : (
           (predavanja ?? []).map((p) => (
             <AdminPredavanjeRow key={p.id} predavanje={p} termId={termId} />

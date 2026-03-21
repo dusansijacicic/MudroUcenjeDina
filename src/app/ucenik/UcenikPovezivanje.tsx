@@ -36,7 +36,7 @@ export default function UcenikPovezivanje() {
             Nema povezanog naloga
           </h1>
           <p className="text-stone-600 text-sm mb-4">
-            Predavač mora da unese vaš email u karticu klijenta („Email za prijavu
+            Instruktor mora da unese vaš email u karticu klijenta („Email za prijavu
             učenika”). Koristite taj isti email na stranici „Registracija učenika”.
           </p>
           <Link

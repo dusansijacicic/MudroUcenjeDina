@@ -38,11 +38,8 @@ export default async function TerminDetailPage({
 
   const maxCasova = await getMaxCasovaPoTerminu();
   const currentCount = (predavanja ?? []).length;
-  // U jednom slotu (npr. 9:00) može biti više termina (max_termina_po_slotu), svaki termin = jedan predavač.
-  // Ovaj termin pripada ulogovanom predavaču; predavanja u njemu su samo njegova.
-  // "Dodaj predavanje" sakriti ako ovaj predavač već ima bar jedno predavanje u ovom (svom) terminu.
-  const ovajPredavacImaPredavanjeUTerminu = currentCount > 0;
-  const canAddMore = currentCount < maxCasova && !ovajPredavacImaPredavanjeUTerminu;
+  // Više radionica u istom terminu (npr. grupni čas – više dece), do limita iz podešavanja.
+  const canAddMore = currentCount < maxCasova;
 
   const { data: otherTerms } = await admin
     .from('terms')
@@ -124,22 +121,20 @@ export default async function TerminDetailPage({
             href={`/dashboard/termin/${termId}/predavanje/novi`}
             className="inline-flex items-center rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700"
           >
-            + Dodaj predavanje
+            + Dodaj radionicu
           </Link>
         ) : (
           <p className="text-sm text-amber-700 bg-amber-50 rounded-lg px-3 py-2 inline-block">
-            {ovajPredavacImaPredavanjeUTerminu
-              ? 'Vi (ulogovani predavač) već imate zakazan čas u ovom terminu. Dodavanje novog predavanja nije dozvoljeno.'
-              : `Maksimalan broj časova u ovom terminu (${maxCasova}) je dostignut.`}
+            {`Maksimalan broj radionica u ovom terminu (${maxCasova}) je dostignut.`}
           </p>
         )}
-        <span className="ml-2 text-stone-500 text-sm">{currentCount} / {maxCasova} časova</span>
+        <span className="ml-2 text-stone-500 text-sm">{currentCount} / {maxCasova} radionica</span>
       </div>
 
       <div className="rounded-xl border border-stone-200 bg-white divide-y divide-stone-100">
         {(predavanja ?? []).length === 0 ? (
           <div className="p-6 text-center text-stone-500">
-            Nema predavanja u ovom terminu. Dodajte prvo predavanje.
+            Nema radionica u ovom terminu. Dodajte prvu radionicu.
           </div>
         ) : (
           (predavanja ?? []).map((p) => (
@@ -151,7 +146,7 @@ export default async function TerminDetailPage({
       {otherTermsWithPredavanja.length > 0 && (
         <section className="mt-8 rounded-xl border border-stone-200 bg-stone-50/80 p-4">
           <h2 className="text-sm font-medium text-stone-600 mb-3">
-            U istom terminu ({slotLabel}) drže čas i drugi predavači
+            U istom terminu ({slotLabel}) drže čas i drugi instruktori
           </h2>
           <ul className="space-y-2 text-sm">
             {otherTermsWithPredavanja.map((ot) => (
@@ -164,7 +159,7 @@ export default async function TerminDetailPage({
                     {' '}: {ot.predavanja.map((p) => p.client ? `${p.client.ime} ${p.client.prezime}` : '—').join(', ')}
                   </span>
                 ) : (
-                  <span className="text-stone-500"> (nema predavanja)</span>
+                  <span className="text-stone-500"> (nema radionica)</span>
                 )}
               </li>
             ))}

@@ -56,7 +56,7 @@ export default async function AdminTerminNoviPage({
 
   return (
     <div className="max-w-lg">
-      <h1 className="text-xl font-semibold text-stone-800 mb-2">Zakaži termin za predavača</h1>
+      <h1 className="text-xl font-semibold text-stone-800 mb-2">Zakaži termin za instruktora</h1>
       <div className="rounded-lg border border-stone-200 bg-stone-50 px-4 py-3 text-sm text-stone-700 mb-6">
         <p className="font-medium mb-1">Pravila za jedan slot (datum + vreme):</p>
         <ul className="list-disc list-inside space-y-0.5">
@@ -64,7 +64,7 @@ export default async function AdminTerminNoviPage({
           <li><strong>A)</strong> Jedan predavač može imati samo <strong>jedan</strong> termin u tom slotu.</li>
           <li><strong>B)</strong> Jedna učionica može biti korišćena samo u <strong>jednom</strong> terminu u tom slotu.</li>
         </ul>
-        <p className="mt-2 text-stone-600">U izboru su samo slobodni predavači i učionice.</p>
+        <p className="mt-2 text-stone-600">U izboru su samo slobodni instruktori i učionice.</p>
       </div>
       <AdminTerminForm
         instructors={(instructors ?? []) as { id: string; ime: string; prezime: string }[]}

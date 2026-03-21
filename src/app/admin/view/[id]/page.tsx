@@ -73,7 +73,7 @@ export default async function AdminViewPage({
       <section className="rounded-2xl border border-stone-200 bg-white shadow-sm overflow-hidden animate-in-delay-2">
         <div className="px-4 py-3 border-b border-stone-200 flex items-center justify-between bg-stone-50/80">
           <h2 className="text-sm font-medium text-stone-700">
-            Klijenti ovog predavača
+            Klijenti ovog instruktora
           </h2>
           <span className="text-xs text-stone-400">
             {klijenti.length} klijenata (na osnovu termina)
@@ -81,7 +81,7 @@ export default async function AdminViewPage({
         </div>
         {klijenti.length === 0 ? (
           <div className="p-4 text-sm text-stone-500">
-            Još uvek nema časova za ovog predavača, pa nema ni klijenata u statistici.
+            Još uvek nema časova za ovog instruktora, pa nema ni klijenata u statistici.
           </div>
         ) : (
           <ul className="divide-y divide-stone-100 stagger-children">

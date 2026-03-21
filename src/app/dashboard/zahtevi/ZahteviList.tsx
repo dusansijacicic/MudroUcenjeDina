@@ -100,7 +100,7 @@ export default function ZahteviList({
                   <p className="font-medium text-stone-800">{clientName}</p>
                   <p className="text-sm text-stone-600">
                     Želi termin: {dateStr} • {timeStr}
-                    {isAny && <span className="text-amber-600"> (bilo koji predavač)</span>}
+                    {isAny && <span className="text-amber-600"> (bilo koji instruktor)</span>}
                   </p>
                   {z.status !== 'pending' && (
                     <p className="text-xs text-stone-500 mt-1">Status: {z.status}</p>

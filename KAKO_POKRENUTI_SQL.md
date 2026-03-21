@@ -60,6 +60,10 @@ SQL fajlovi iz projekta **ne pokreću se automatski**. Morate ih ručno izvršit
    - Kopiraj i pokreni `supabase/migrations/012_instructor_availability.sql`.
    - Tabele `instructor_weekly_availability` i `instructor_availability_periods`; RPC `get_instructor_available_slots(instructor_id, datum)`. Predavač u Podešavanjima postavlja kada je dostupan; klijent pri zakazivanju vidi samo te slotove (spojene u blokove).
 
+   ### Dvadeset prva migracija (021) – datum testiranja klijenta
+   - Kopiraj i pokreni `supabase/migrations/021_client_datum_testiranja.sql`.
+   - Dodaje kolonu `clients.datum_testiranja` (opciono); liste klijenata u aplikaciji sortiraju se po ovom datumu (noviji prvi).
+
 4. **Provera**  
    U levom meniju otvori **Table Editor**. Trebalo bi da vidiš tabele: `instructors`, `clients`, `terms`, `predavanja`, `admin_users`, `instructor_clients`. Ako ih nema, vrati se na korak 3 i pokreni migracije redom.
 

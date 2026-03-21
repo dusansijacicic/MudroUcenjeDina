@@ -26,7 +26,7 @@ export default function NoviPredavacForm() {
         return;
       }
       if (result?.success) {
-        toast.success('Predavač je dodat.');
+        toast.success('Instruktor je dodat.');
         router.push('/admin');
         router.refresh();
         return;
@@ -93,7 +93,7 @@ export default function NoviPredavacForm() {
           disabled={loading}
           className="rounded-lg bg-amber-600 px-4 py-2 text-white font-medium hover:bg-amber-700 disabled:opacity-50"
         >
-          {loading ? 'Kreiranje...' : 'Kreiraj predavača'}
+          {loading ? 'Kreiranje...' : 'Kreiraj instruktora'}
         </button>
         <button
           type="button"

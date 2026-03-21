@@ -22,7 +22,7 @@ interface AdminPredavanjeFormProps {
   predavanje?: { id: string; client_id: string; odrzano: boolean; placeno: boolean; komentar: string | null; term_type_id?: string | null } | null;
   maxCasova?: number;
   currentCount?: number;
-  /** Stanje po vrstama za svakog klijenta (kod ovog predavača), da se prikaže ostalo pri izboru klijenta */
+  /** Stanje po vrstama za svakog klijenta (kod ovog instruktora), da se prikaže ostalo pri izboru klijenta */
   clientStanjeList?: { clientId: string; stanje: StanjeItem[] }[];
 }
 
@@ -83,7 +83,7 @@ export default function AdminPredavanjeForm({
           termTypeId || null
         );
         if (result.error) throw new Error(result.error);
-        toast.success('Predavanje sačuvano.');
+        toast.success('Radionica sačuvana.');
       } else {
         const result = await createPredavanjeAsAdmin(
           termId,
@@ -94,7 +94,7 @@ export default function AdminPredavanjeForm({
           termTypeId || null
         );
         if (result.error) throw new Error(result.error);
-        toast.success('Predavanje dodato.');
+        toast.success('Radionica dodata.');
       }
       router.push(backHref);
       router.refresh();
@@ -108,7 +108,7 @@ export default function AdminPredavanjeForm({
   };
 
   const handleDelete = async () => {
-    if (!predavanje || !confirm('Obrisati ovo predavanje?')) return;
+    if (!predavanje || !confirm('Obrisati ovu radionicu?')) return;
     setLoading(true);
     try {
       const result = await deletePredavanjeAsAdmin(predavanje.id, termId);
@@ -117,7 +117,7 @@ export default function AdminPredavanjeForm({
         toast.error(result.error);
         return;
       }
-      toast.success('Predavanje obrisano.');
+      toast.success('Radionica obrisana.');
       router.push(backHref);
       router.refresh();
     } catch {
@@ -134,13 +134,13 @@ export default function AdminPredavanjeForm({
         {termDate} • {slotLabel}
         {isNew && (
           <span className="ml-2 text-stone-400">
-            ({currentCount} / {maxCasova} časova u terminu)
+            ({currentCount} / {maxCasova} radionica u terminu)
           </span>
         )}
       </div>
       {atLimit && (
         <p className="text-sm text-amber-700 bg-amber-50 rounded-lg px-3 py-2">
-          Maksimalan broj časova u ovom terminu je {maxCasova}.
+          Maksimalan broj radionica u ovom terminu je {maxCasova}.
         </p>
       )}
       <div>
@@ -160,7 +160,7 @@ export default function AdminPredavanjeForm({
         </select>
         {clientId && selectedStanje.length > 0 && (
           <div className="mt-2 rounded-lg bg-stone-50 border border-stone-200 px-3 py-2 text-sm">
-            <span className="font-medium text-stone-600">Ostalo časova kod ovog predavača: </span>
+            <span className="font-medium text-stone-600">Ostalo časova kod ovog instruktora: </span>
             {selectedStanje.map((s) => (
               <span key={s.term_type_id ?? 'bez'} className="mr-2">
                 {s.term_type_naziv} <strong>{s.ostalo}</strong>
@@ -200,6 +200,9 @@ export default function AdminPredavanjeForm({
         {termTypes.length === 0 && (
           <p className="text-xs text-amber-600 mt-0.5">Dodajte bar jednu vrstu u Admin → Vrste termina.</p>
         )}
+        <p className="text-xs text-stone-500 mt-1.5">
+          Za grupni čas dodajte više radionica u istom terminu (po jednu po detetu), do maksimuma. Vrsta termina (npr. Grupni) već definiše kategoriju.
+        </p>
       </div>
       <div className="flex gap-4">
         <label className="flex items-center gap-2 cursor-pointer">
@@ -228,7 +231,7 @@ export default function AdminPredavanjeForm({
           disabled={loading || atLimit}
           className="rounded-lg bg-amber-600 px-4 py-2 text-white font-medium hover:bg-amber-700 disabled:opacity-50"
         >
-          {loading ? 'Čuvanje...' : predavanje ? 'Sačuvaj' : 'Dodaj predavanje'}
+          {loading ? 'Čuvanje...' : predavanje ? 'Sačuvaj' : 'Dodaj radionicu'}
         </button>
         <Link href={backHref} className="rounded-lg border border-stone-300 px-4 py-2 text-stone-700 hover:bg-stone-100">
           Odustani

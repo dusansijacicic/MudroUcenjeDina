@@ -39,7 +39,7 @@ export default async function AdminViewNoviKlijentPage({
         Novi polaznik – {instructor.ime} {instructor.prezime}
       </h1>
       <p className="text-stone-500 text-sm mb-6">
-        Dodajte klijenta (učenika) ovom predavaču. Opciono unesite „Email za prijavu učenika” da učenik može da vidi svoje časove.
+        Dodajte klijenta (učenika) ovom instruktoru. Opciono unesite „Email za prijavu učenika” da učenik može da vidi svoje časove.
       </p>
       <ClientForm
         instructorId={instructor.id}

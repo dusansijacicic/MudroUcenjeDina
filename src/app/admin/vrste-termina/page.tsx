@@ -19,7 +19,7 @@ export default async function AdminVrsteTerminaPage() {
     <div className="max-w-lg">
       <h1 className="text-xl font-semibold text-stone-800 mb-2">Vrste termina</h1>
       <p className="text-stone-500 text-sm mb-6">
-        Dodajte vrste termina (npr. individualni, grupa) i cenu po času. One se mogu dodeliti predavanjima.
+        Dodajte vrste termina (npr. individualni, grupa) i cenu po času. One se mogu dodeliti radionicama.
       </p>
       <TermTypesForm />
       <div className="mt-6 rounded-xl border border-stone-200 bg-white divide-y divide-stone-100">

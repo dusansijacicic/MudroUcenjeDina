@@ -19,14 +19,14 @@ export default async function AdminNoviPredavacPage() {
 
   return (
     <div className="max-w-lg">
-      <h1 className="text-xl font-semibold text-stone-800 mb-2">Novi predavač</h1>
+      <h1 className="text-xl font-semibold text-stone-800 mb-2">Novi instruktor</h1>
       <p className="text-stone-500 text-sm mb-6">
-        Kreiraće se nalog za prijavu (email + lozinka) i profil predavača. Predavač može odmah da se uloguje.
+        Kreiraće se nalog za prijavu (email + lozinka) i profil instruktora. Instruktor može odmah da se uloguje.
       </p>
       <NoviPredavacForm />
       <p className="mt-4">
         <Link href="/admin" className="text-sm text-amber-700 hover:underline">
-          ← Nazad na listu predavača
+          ← Nazad na listu instruktora
         </Link>
       </p>
     </div>

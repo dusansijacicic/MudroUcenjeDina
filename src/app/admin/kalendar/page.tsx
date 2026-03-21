@@ -115,7 +115,7 @@ export default async function AdminKalendarPage({
   return (
     <div>
       <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-        <h1 className="text-xl font-semibold text-stone-800">Kalendar (svi predavači)</h1>
+        <h1 className="text-xl font-semibold text-stone-800">Kalendar (svi instruktori)</h1>
         <div className="flex items-center gap-2 flex-wrap">
           <AdminCalendarFilters
             instructors={(instructorsList ?? []).map((i) => ({ id: i.id, ime: i.ime ?? '', prezime: i.prezime ?? '' }))}
@@ -136,7 +136,7 @@ export default async function AdminKalendarPage({
       {legendInstructors.length > 0 && (
         <div className="mb-4 flex flex-wrap items-start gap-4 rounded-lg border border-stone-200 bg-stone-50/80 px-4 py-2 text-sm">
           <div className="flex flex-col gap-1">
-            <span className="font-medium text-stone-600">Legenda boja predavača (font):</span>
+            <span className="font-medium text-stone-600">Legenda boja instruktora (font):</span>
             <div className="flex flex-wrap gap-3">
               {legendInstructors.map((i) => (
                 <span key={i.id} className="flex items-center gap-1.5">

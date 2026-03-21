@@ -128,7 +128,7 @@ export default async function UcenikKalendarPage({
         </Link>
       </div>
       <p className="text-sm text-[var(--kid-text-muted)] mb-4 animate-in-delay-1">
-        Samo tvoji zakazani časovi. Boja okvira = učionica, boja teksta = predavač.
+        Samo tvoji zakazani časovi. Boja okvira = učionica, boja teksta = instruktor.
       </p>
 
       {(legendClassrooms.length > 0 || legendInstructors.length > 0) && (
@@ -151,7 +151,7 @@ export default async function UcenikKalendarPage({
           )}
           {legendInstructors.length > 0 && (
             <div>
-              <span className="font-medium text-[var(--kid-text)]">Predavači (boja teksta):</span>
+              <span className="font-medium text-[var(--kid-text)]">Instruktori (boja teksta):</span>
               <div className="mt-1 flex flex-wrap gap-3">
                 {legendInstructors.map((i) => (
                   <span key={i.id} className="flex items-center gap-1.5">

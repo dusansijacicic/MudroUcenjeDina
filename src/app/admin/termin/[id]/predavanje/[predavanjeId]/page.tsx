@@ -47,7 +47,7 @@ export default async function AdminEditPredavanjePage({
   return (
     <div className="max-w-lg">
       <h1 className="text-xl font-semibold text-stone-800 mb-4">
-        Izmena predavanja – {term.date} {slotLabel}
+        Izmena radionice – {term.date} {slotLabel}
       </h1>
       <AdminPredavanjeForm
         termId={termId}

@@ -27,22 +27,22 @@ export default function AdminNoviKlijentPage() {
     <div className="max-w-md">
       <h1 className="text-xl font-semibold text-stone-800 mb-2">Novi klijent</h1>
       <p className="text-stone-500 text-sm mb-6">
-        Izaberite predavača kojem dodajete učenika; zatim popunite podatke.
+        Izaberite instruktora kojem dodajete učenika; zatim popunite podatke.
       </p>
       {loading ? (
         <p className="text-stone-500">Učitavanje...</p>
       ) : instructors.length === 0 ? (
         <p className="text-stone-600 mb-4">
-          Nema predavača u bazi. Prvo dodajte predavača na{' '}
+          Nema instruktora u bazi. Prvo dodajte instruktora na{' '}
           <Link href="/admin/predavaci/novi" className="text-amber-600 hover:underline">
-            Novi predavač
+            Novi instruktor
           </Link>
           .
         </p>
       ) : (
         <div className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-stone-700 mb-1">Predavač</label>
+            <label className="block text-sm font-medium text-stone-700 mb-1">Instruktor</label>
             <select
               value={selectedId}
               onChange={(e) => setSelectedId(e.target.value)}

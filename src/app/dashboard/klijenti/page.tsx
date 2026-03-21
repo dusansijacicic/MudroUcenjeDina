@@ -8,7 +8,7 @@ import type { Client } from '@/types/database';
 
 export type StanjeVrsta = { term_type_naziv: string; uplaceno: number; odrzano: number; ostalo: number };
 
-/** Svi klijenti – predavač vidi sve. Za svaki tip časa gde je plaćen makar jedan: plaćeno / održano / preostalo. */
+/** Svi klijenti – instruktor vidi sve. Za svaki tip časa gde je plaćen makar jedan: plaćeno / održano / preostalo. Sortirano po datumu testiranja (noviji prvi). */
 export default async function KlijentiPage() {
   const { instructor } = await getDashboardInstructor();
   if (!instructor) redirect('/login?reason=no_instructor');
@@ -63,6 +63,7 @@ export default async function KlijentiPage() {
           <thead className="bg-stone-50 border-b border-stone-200">
             <tr>
               <th className="text-left p-3 font-medium text-stone-600">Ime i prezime</th>
+              <th className="text-left p-3 font-medium text-stone-600">Datum testiranja</th>
               <th className="text-left p-3 font-medium text-stone-600">Godište</th>
               <th className="text-left p-3 font-medium text-stone-600">Razred</th>
               <th className="text-left p-3 font-medium text-stone-600">Škola</th>

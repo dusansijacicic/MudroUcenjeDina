@@ -44,14 +44,14 @@ export default function RegistracijaUcenikPage() {
           Registracija učenika
         </h1>
         <p className="text-stone-500 text-center text-sm mb-6">
-          Unesite email koji vam je dao predavač i izaberite lozinku. Posle toga
+          Unesite email koji vam je dao instruktor i izaberite lozinku. Posle toga
           možete da vidite svoje časove i šta je rađeno.
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-stone-700 mb-1">
-              Email (isti kao kod predavača)
+              Email (isti kao kod instruktora)
             </label>
             <input
               type="email"

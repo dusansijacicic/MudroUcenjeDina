@@ -30,6 +30,8 @@ export interface Client {
   kontakt_telefon: string | null;
   /** Popust u % za ovog klijenta (0–100). Dodeljuje super admin. */
   popust_percent?: number | null;
+  /** Datum testiranja / upisa (opciono); lista klijenata sortira se po ovom datumu. */
+  datum_testiranja?: string | null;
   created_at: string;
 }
 

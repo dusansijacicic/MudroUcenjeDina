@@ -55,7 +55,7 @@ export default async function NoviPredavanjePage({
   return (
     <div className="max-w-lg">
       <h1 className="text-xl font-semibold text-stone-800 mb-4">
-        Novo predavanje – {term.date} {slotLabel}
+        Nova radionica – {term.date} {slotLabel}
       </h1>
       <PredavanjeForm
         termId={termId}

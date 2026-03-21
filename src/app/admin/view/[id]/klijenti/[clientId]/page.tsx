@@ -49,7 +49,7 @@ export default async function AdminViewKlijentEditPage({
         Izmena klijenta – {client.ime} {client.prezime}
       </h1>
       <p className="text-stone-500 text-sm mb-6">
-        Predavač: {instructor.ime} {instructor.prezime}
+        Instruktor: {instructor.ime} {instructor.prezime}
       </p>
       <ClientForm
         instructorId={instructor.id}
@@ -59,7 +59,7 @@ export default async function AdminViewKlijentEditPage({
       />
       <p className="mt-4">
         <Link href={listHref} className="text-sm text-amber-700 hover:underline">
-          ← Nazad na klijente ovog predavača
+          ← Nazad na klijente ovog instruktora
         </Link>
       </p>
     </div>
