@@ -64,6 +64,10 @@ SQL fajlovi iz projekta **ne pokreću se automatski**. Morate ih ručno izvršit
    - Kopiraj i pokreni `supabase/migrations/021_client_datum_testiranja.sql`.
    - Dodaje kolonu `clients.datum_testiranja` (opciono); liste klijenata u aplikaciji sortiraju se po ovom datumu (noviji prvi).
 
+   ### Dvadeset druga migracija (022) – datum testiranja pri registraciji učenika
+   - Kopiraj i pokreni `supabase/migrations/022_link_client_datum_testiranja.sql`.
+   - Proširuje `link_client_to_user` opcionim datumom (forma „Registracija učenika” može da ga pošalje).
+
 4. **Provera**  
    U levom meniju otvori **Table Editor**. Trebalo bi da vidiš tabele: `instructors`, `clients`, `terms`, `predavanja`, `admin_users`, `instructor_clients`. Ako ih nema, vrati se na korak 3 i pokreni migracije redom.
 

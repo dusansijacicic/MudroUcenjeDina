@@ -9,6 +9,7 @@ export default function RegistracijaUcenikPage() {
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [datumTestiranja, setDatumTestiranja] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -73,6 +74,20 @@ export default function RegistracijaUcenikPage() {
               minLength={6}
               className="w-full rounded-lg border border-stone-300 px-3 py-2 text-stone-800 focus:ring-2 focus:ring-amber-500"
             />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-stone-700 mb-1">
+              Datum testiranja <span className="text-stone-400 font-normal">(opciono)</span>
+            </label>
+            <input
+              type="date"
+              value={datumTestiranja}
+              onChange={(e) => setDatumTestiranja(e.target.value)}
+              className="w-full max-w-[220px] rounded-lg border border-stone-300 px-3 py-2 text-stone-800 focus:ring-2 focus:ring-amber-500"
+            />
+            <p className="mt-1 text-xs text-stone-500">
+              Ako znate datum testiranja, unesite ga ovde. Može i kasnije da ga doda instruktor u vašem profilu.
+            </p>
           </div>
 
           {error && (

@@ -13,6 +13,7 @@
 DROP FUNCTION IF EXISTS public.get_instructor_available_slots(uuid, date);
 DROP FUNCTION IF EXISTS public.get_occupied_slots(date);
 DROP FUNCTION IF EXISTS public.link_client_to_user();
+DROP FUNCTION IF EXISTS public.link_client_to_user(date);
 
 DROP TABLE IF EXISTS instructor_availability_periods CASCADE;
 DROP TABLE IF EXISTS instructor_weekly_availability CASCADE;
@@ -366,20 +367,25 @@ CREATE POLICY "uplate_all_admin" ON uplate FOR ALL TO authenticated
 
 -- ----- 6. FUNKCIJE -----
 
--- Povezivanje učenika (login_email -> user_id)
-CREATE OR REPLACE FUNCTION public.link_client_to_user()
+-- Povezivanje učenika (login_email -> user_id); opciono p_datum_testiranja pri registraciji
+CREATE OR REPLACE FUNCTION public.link_client_to_user(p_datum_testiranja date DEFAULT NULL)
 RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 DECLARE
   user_email text;
 BEGIN
   SELECT email INTO user_email FROM auth.users WHERE id = auth.uid();
   UPDATE public.clients
-  SET user_id = auth.uid()
+  SET
+    user_id = auth.uid(),
+    datum_testiranja = CASE
+      WHEN p_datum_testiranja IS NOT NULL THEN p_datum_testiranja
+      ELSE datum_testiranja
+    END
   WHERE login_email = user_email AND (user_id IS NULL OR user_id = auth.uid());
 END;
 $$;
-GRANT EXECUTE ON FUNCTION public.link_client_to_user() TO authenticated;
-GRANT EXECUTE ON FUNCTION public.link_client_to_user() TO service_role;
+GRANT EXECUTE ON FUNCTION public.link_client_to_user(date) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.link_client_to_user(date) TO service_role;
 
 -- Zauzeti slotovi na dat datum (za klijentski zahtev)
 CREATE OR REPLACE FUNCTION public.get_occupied_slots(p_date date)
