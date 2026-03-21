@@ -29,6 +29,7 @@ export default function AdminClientForm({
   const [datum_testiranja, setDatumTestiranja] = useState(
     client.datum_testiranja?.slice(0, 10) ?? ''
   );
+  const [napomena, setNapomena] = useState(client.napomena ?? '');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -45,6 +46,11 @@ export default function AdminClientForm({
       setLoading(false);
       return;
     }
+    if (!kontakt_telefon.trim()) {
+      setError('Kontakt telefon je obavezan.');
+      setLoading(false);
+      return;
+    }
     const payload = {
       ime: ime.trim(),
       prezime: prezime.trim(),
@@ -54,6 +60,7 @@ export default function AdminClientForm({
       roditelj: roditelj.trim() || null,
       kontakt_telefon: kontakt_telefon.trim() || null,
       login_email: login_email.trim() || null,
+      napomena: napomena.trim() || null,
       popust_percent: popustNum,
       datum_testiranja: datum_testiranja.trim() || null,
     };
@@ -107,8 +114,16 @@ export default function AdminClientForm({
         <input type="text" value={roditelj} onChange={(e) => setRoditelj(e.target.value)} className="w-full rounded-lg border border-stone-300 px-3 py-2 text-stone-800" />
       </div>
       <div>
-        <label className="block text-sm font-medium text-stone-700 mb-1">Kontakt telefon</label>
-        <input type="tel" value={kontakt_telefon} onChange={(e) => setKontaktTelefon(e.target.value)} className="w-full rounded-lg border border-stone-300 px-3 py-2 text-stone-800" />
+        <label className="block text-sm font-medium text-stone-700 mb-1">
+          Kontakt telefon <span className="text-red-600">*</span>
+        </label>
+        <input
+          type="tel"
+          value={kontakt_telefon}
+          onChange={(e) => setKontaktTelefon(e.target.value)}
+          required
+          className="w-full rounded-lg border border-stone-300 px-3 py-2 text-stone-800"
+        />
       </div>
       <div>
         <label className="block text-sm font-medium text-stone-700 mb-1">Datum testiranja</label>
@@ -121,8 +136,32 @@ export default function AdminClientForm({
         <p className="mt-1 text-xs text-stone-500">Opciono. Lista klijenata sortira se po ovom datumu (noviji prvi).</p>
       </div>
       <div>
-        <label className="block text-sm font-medium text-stone-700 mb-1">Email za prijavu učenika</label>
-        <input type="email" value={login_email} onChange={(e) => setLoginEmail(e.target.value)} placeholder="učenik se registruje ovim emailom" className="w-full rounded-lg border border-stone-300 px-3 py-2 text-stone-800" />
+        <label className="block text-sm font-medium text-stone-700 mb-1">
+          Napomena <span className="text-stone-400 font-normal">(opciono)</span>
+        </label>
+        <p className="text-xs text-stone-500 mb-1">
+          Interna napomena – vide je i vi i predavač koji vodi klijenta.
+        </p>
+        <textarea
+          value={napomena}
+          onChange={(e) => setNapomena(e.target.value)}
+          rows={3}
+          className="w-full rounded-lg border border-stone-300 px-3 py-2 text-stone-800"
+          placeholder="Interna napomena o klijentu..."
+        />
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-stone-700 mb-1">
+          Email za prijavu učenika <span className="text-stone-400 font-normal">(opciono)</span>
+        </label>
+        <input
+          type="text"
+          inputMode="email"
+          value={login_email}
+          onChange={(e) => setLoginEmail(e.target.value)}
+          placeholder="nije obavezno"
+          className="w-full rounded-lg border border-stone-300 px-3 py-2 text-stone-800"
+        />
       </div>
       <div>
         <label className="block text-sm font-medium text-stone-700 mb-1">Popust na nivou klijenta (%)</label>

@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
+import { jedanKlijentIzJoina } from '@/lib/term-categories';
 
 const DEFAULT_MAX_CASOVA_PO_TERMINU = 4;
 const DEFAULT_MAX_TERMINA_PO_SLOTU = 4;
@@ -29,27 +30,42 @@ export async function getMaxTerminaPoSlotu(): Promise<number> {
   return Number.isFinite(n) && n >= 1 ? n : DEFAULT_MAX_TERMINA_PO_SLOTU;
 }
 
-/** Da li termin sme da primi još jedno predavanje (broj predavanja < max). */
+/** Da li termin sme da primi još jedno predavanje. Individualni termin = max 1 dete; grupni = max iz podešavanja. */
 export async function termMozeNovoPredavanje(termId: string): Promise<{ ok: boolean; count: number; max: number; error?: string }> {
-  const max = await getMaxCasovaPoTerminu();
+  const maxSetting = await getMaxCasovaPoTerminu();
   try {
     const { createAdminClient } = await import('@/lib/supabase/admin');
     const admin = createAdminClient();
+    const { data: term, error: termErr } = await admin
+      .from('terms')
+      .select('id, term_categories(jedan_klijent_po_terminu)')
+      .eq('id', termId)
+      .maybeSingle();
+    if (termErr) return { ok: false, count: 0, max: maxSetting, error: termErr.message };
+    const tc = term?.term_categories as { jedan_klijent_po_terminu?: boolean } | { jedan_klijent_po_terminu?: boolean }[] | null;
+    const effectiveMax = jedanKlijentIzJoina(tc) ? 1 : maxSetting;
     const { count, error } = await admin
       .from('predavanja')
       .select('*', { count: 'exact', head: true })
       .eq('term_id', termId);
-    if (error) return { ok: false, count: 0, max, error: error.message };
+    if (error) return { ok: false, count: 0, max: effectiveMax, error: error.message };
     const n = count ?? 0;
-    return { ok: n < max, count: n, max };
+    return { ok: n < effectiveMax, count: n, max: effectiveMax };
   } catch {
     const supabase = await createClient();
+    const { data: term } = await supabase
+      .from('terms')
+      .select('id, term_categories(jedan_klijent_po_terminu)')
+      .eq('id', termId)
+      .maybeSingle();
+    const tc = term?.term_categories as { jedan_klijent_po_terminu?: boolean } | { jedan_klijent_po_terminu?: boolean }[] | null;
+    const effectiveMax = jedanKlijentIzJoina(tc) ? 1 : maxSetting;
     const { count, error } = await supabase
       .from('predavanja')
       .select('*', { count: 'exact', head: true })
       .eq('term_id', termId);
-    if (error) return { ok: false, count: 0, max, error: error.message };
+    if (error) return { ok: false, count: 0, max: effectiveMax, error: error.message };
     const n = count ?? 0;
-    return { ok: n < max, count: n, max };
+    return { ok: n < effectiveMax, count: n, max: effectiveMax };
   }
 }

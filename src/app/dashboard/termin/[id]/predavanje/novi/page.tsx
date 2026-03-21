@@ -2,9 +2,10 @@ import { redirect, notFound } from 'next/navigation';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getDashboardInstructor } from '@/lib/dashboard';
 import { getMaxCasovaPoTerminu } from '@/lib/settings';
-import { getTermTypes, getClassrooms, getStanjePoVrstamaZaKlijenta } from '@/app/admin/actions';
+import { getTermTypes, getClassrooms, getStanjePoVrstamaZaKlijenta, getTermCategories } from '@/app/admin/actions';
 import PredavanjeForm from '../../../PredavanjeForm';
 import { TIME_SLOTS } from '@/lib/constants';
+import { jedanKlijentIzJoina, SEEDED_TERM_CATEGORY_INDIVIDUAL_ID } from '@/lib/term-categories';
 
 export default async function NoviPredavanjePage({
   params,
@@ -18,23 +19,30 @@ export default async function NoviPredavanjePage({
   const admin = createAdminClient();
   const { data: term } = await admin
     .from('terms')
-    .select('*, classroom_id')
+    .select('*, classroom_id, term_category_id, napomena')
     .eq('id', termId)
     .eq('instructor_id', instructor.id)
     .single();
 
   if (!term) notFound();
 
-  const [predRes, maxCasova, termTypes, classrooms, termsInSlotRes] = await Promise.all([
+  const [predRes, maxCasova, termTypes, termCategories, classrooms, termsInSlotRes, termWithCatRes] = await Promise.all([
     admin.from('predavanja').select('*', { count: 'exact', head: true }).eq('term_id', termId),
     getMaxCasovaPoTerminu(),
     getTermTypes(),
+    getTermCategories(),
     getClassrooms(),
     admin.from('terms').select('classroom_id').eq('date', term.date).eq('slot_index', term.slot_index).neq('id', termId),
+    admin.from('terms').select('term_categories(jedan_klijent_po_terminu)').eq('id', termId).single(),
   ]);
   const currentCount = predRes.count ?? 0;
-  if (currentCount >= maxCasova) {
-    redirect(`/dashboard/termin/${termId}?error=max_predavanja&message=${encodeURIComponent(`Ovaj termin već ima maksimalan broj časova (${maxCasova}).`)}`);
+  const tc = termWithCatRes.data?.term_categories as
+    | { jedan_klijent_po_terminu?: boolean }
+    | { jedan_klijent_po_terminu?: boolean }[]
+    | null;
+  const effectiveMax = jedanKlijentIzJoina(tc) ? 1 : maxCasova;
+  if (currentCount >= effectiveMax) {
+    redirect(`/dashboard/termin/${termId}?error=max_predavanja&message=${encodeURIComponent(`Ovaj termin već ima maksimalan broj radionica (${effectiveMax}).`)}`);
   }
   const termsInSlot = termsInSlotRes.data ?? [];
   const takenClassroomIds = termsInSlot.map((t: { classroom_id: string | null }) => t.classroom_id).filter((id: string | null): id is string => id != null);
@@ -63,12 +71,15 @@ export default async function NoviPredavanjePage({
         slotLabel={slotLabel}
         clients={clients ?? []}
         termTypes={termTypes}
+        termCategories={termCategories}
         maxCasova={maxCasova}
         currentCount={currentCount}
         classrooms={classrooms}
         initialClassroomId={termWithClassroom.classroom_id ?? null}
         takenClassroomIds={takenClassroomIds}
         clientStanjeList={clientStanjeList}
+        initialTermCategoryId={(term as { term_category_id?: string }).term_category_id ?? SEEDED_TERM_CATEGORY_INDIVIDUAL_ID}
+        initialTermNapomena={(term as { napomena?: string | null }).napomena ?? null}
       />
     </div>
   );

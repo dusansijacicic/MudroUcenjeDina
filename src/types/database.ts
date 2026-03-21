@@ -28,11 +28,22 @@ export interface Client {
   skola: string | null;
   roditelj: string | null;
   kontakt_telefon: string | null;
+  /** Interna napomena (admin / instruktor). */
+  napomena?: string | null;
   /** Popust u % za ovog klijenta (0–100). Dodeljuje super admin. */
   popust_percent?: number | null;
   /** Datum testiranja / upisa (opciono); lista klijenata sortira se po ovom datumu. */
   datum_testiranja?: string | null;
   created_at: string;
+}
+
+/** Kategorija termina (tabela term_categories; admin CRUD). */
+export interface TermCategory {
+  id: string;
+  naziv: string;
+  opis: string | null;
+  jedan_klijent_po_terminu: boolean;
+  created_at?: string;
 }
 
 /** Veza predavač–klijent (jedno dete može imati više predavača). placeno_casova je po ovoj vezi. */
@@ -48,6 +59,10 @@ export interface Term {
   instructor_id: string;
   date: string;
   slot_index: number;
+  term_category_id?: string;
+  /** Kada se učitava sa join-om */
+  term_categories?: TermCategory | TermCategory[] | null;
+  napomena?: string | null;
   created_at?: string;
 }
 

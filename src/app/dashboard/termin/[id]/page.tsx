@@ -4,8 +4,10 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { getDashboardInstructor } from '@/lib/dashboard';
 import { getMaxCasovaPoTerminu } from '@/lib/settings';
 import { TIME_SLOTS } from '@/lib/constants';
+import { jedanKlijentIzJoina, nazivKategorijeIzJoina } from '@/lib/term-categories';
 import type { Predavanje } from '@/types/database';
 import { deleteTermAsInstructor } from '@/app/dashboard/termin/actions';
+import TermNapomenaEditor from '@/app/dashboard/termin/TermNapomenaEditor';
 
 export default async function TerminDetailPage({
   params,
@@ -23,7 +25,7 @@ export default async function TerminDetailPage({
   const admin = createAdminClient();
   const { data: term } = await admin
     .from('terms')
-    .select('*')
+    .select('*, term_categories(id, naziv, jedan_klijent_po_terminu)')
     .eq('id', termId)
     .eq('instructor_id', instructor.id)
     .single();
@@ -38,8 +40,13 @@ export default async function TerminDetailPage({
 
   const maxCasova = await getMaxCasovaPoTerminu();
   const currentCount = (predavanja ?? []).length;
-  // Više radionica u istom terminu (npr. grupni čas – više dece), do limita iz podešavanja.
-  const canAddMore = currentCount < maxCasova;
+  const tcRaw = (term as { term_categories?: unknown }).term_categories;
+  const jedanOnly = jedanKlijentIzJoina(
+    tcRaw as { jedan_klijent_po_terminu?: boolean } | { jedan_klijent_po_terminu?: boolean }[] | null
+  );
+  const categoryNaziv = nazivKategorijeIzJoina(tcRaw as { naziv?: string } | { naziv?: string }[] | null);
+  const effectiveMax = jedanOnly ? 1 : maxCasova;
+  const canAddMore = currentCount < effectiveMax;
 
   const { data: otherTerms } = await admin
     .from('terms')
@@ -86,6 +93,10 @@ export default async function TerminDetailPage({
             {dateLabel}
           </h1>
           <p className="text-stone-500">{slotLabel}</p>
+          <TermNapomenaEditor
+            termId={termId}
+            initialNapomena={(term as { napomena?: string | null }).napomena ?? null}
+          />
         </div>
         <div className="flex items-center gap-3">
           <Link
@@ -125,10 +136,14 @@ export default async function TerminDetailPage({
           </Link>
         ) : (
           <p className="text-sm text-amber-700 bg-amber-50 rounded-lg px-3 py-2 inline-block">
-            {`Maksimalan broj radionica u ovom terminu (${maxCasova}) je dostignut.`}
+            {jedanOnly
+              ? `Kategorija „${categoryNaziv}” – u terminu može biti samo jedno dete. Za grupu promenite kategoriju pri dodavanju radionice ili u formi za novu radionicu.`
+              : `Maksimalan broj radionica u ovom terminu (${maxCasova}) je dostignut.`}
           </p>
         )}
-        <span className="ml-2 text-stone-500 text-sm">{currentCount} / {maxCasova} radionica</span>
+        <span className="ml-2 text-stone-500 text-sm">
+          {currentCount} / {effectiveMax} radionica · {categoryNaziv}
+        </span>
       </div>
 
       <div className="rounded-xl border border-stone-200 bg-white divide-y divide-stone-100">

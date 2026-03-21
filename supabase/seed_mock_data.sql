@@ -101,13 +101,13 @@ BEGIN
     d := next_monday + day_off;
     FOR s IN 0..8 LOOP
       IF room_ids IS NOT NULL AND array_length(room_ids, 1) > 0 THEN
-        INSERT INTO terms (instructor_id, date, slot_index, classroom_id)
-        VALUES (din_id, d, s, room_ids[((room_idx - 1) % array_length(room_ids, 1)) + 1])
+        INSERT INTO terms (instructor_id, date, slot_index, classroom_id, term_category_id)
+        VALUES (din_id, d, s, room_ids[((room_idx - 1) % array_length(room_ids, 1)) + 1], 'e8b4c5d0-1111-4a2a-9c3d-000000000001'::uuid)
         ON CONFLICT (instructor_id, date, slot_index) DO NOTHING;
         room_idx := room_idx + 1;
       ELSE
-        INSERT INTO terms (instructor_id, date, slot_index)
-        VALUES (din_id, d, s)
+        INSERT INTO terms (instructor_id, date, slot_index, term_category_id)
+        VALUES (din_id, d, s, 'e8b4c5d0-1111-4a2a-9c3d-000000000001'::uuid)
         ON CONFLICT (instructor_id, date, slot_index) DO NOTHING;
       END IF;
     END LOOP;

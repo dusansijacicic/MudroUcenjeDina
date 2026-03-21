@@ -1,11 +1,19 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
-import { createPredavanje, updatePredavanje, deletePredavanje, updateTermClassroom } from '@/app/dashboard/termin/actions';
+import {
+  createPredavanje,
+  createPredavanjaBatch,
+  updatePredavanje,
+  deletePredavanje,
+  updateTermClassroom,
+  updateTermMetaAsInstructor,
+} from '@/app/dashboard/termin/actions';
 import type { Predavanje } from '@/types/database';
+import type { TermCategoryRow } from '@/lib/term-categories';
 
 type ClientOption = { id: string; ime: string; prezime: string };
 type TermTypeOption = { id: string; naziv: string; opis: string | null };
@@ -17,16 +25,19 @@ interface PredavanjeFormProps {
   termDate: string;
   slotLabel: string;
   clients: ClientOption[];
-  predavanje?: Predavanje & { term_type_id?: string | null } | null;
+  predavanje?: (Predavanje & { term_type_id?: string | null }) | null;
   termTypes?: TermTypeOption[];
   maxCasova?: number;
   currentCount?: number;
   classrooms?: ClassroomOption[];
   initialClassroomId?: string | null;
-  /** ID-evi učionica koje su već zauzete u ovom slotu (drugi termini) – ne prikazivati u izboru */
   takenClassroomIds?: string[];
-  /** Stanje po vrstama za svakog klijenta (kod ovog instruktora), da se prikaže ostalo pri izboru klijenta */
   clientStanjeList?: { clientId: string; stanje: StanjeItem[] }[];
+  termCategories: TermCategoryRow[];
+  /** Sa servera: terms.term_category_id */
+  initialTermCategoryId: string;
+  /** Sa servera (kolona terms.napomena) */
+  initialTermNapomena?: string | null;
 }
 
 export default function PredavanjeForm({
@@ -38,10 +49,13 @@ export default function PredavanjeForm({
   termTypes = [],
   maxCasova = 4,
   currentCount = 0,
-   classrooms = [],
-   initialClassroomId = null,
-   takenClassroomIds = [],
-   clientStanjeList = [],
+  classrooms = [],
+  initialClassroomId = null,
+  takenClassroomIds = [],
+  clientStanjeList = [],
+  termCategories,
+  initialTermCategoryId,
+  initialTermNapomena = null,
 }: PredavanjeFormProps) {
   const availableClassrooms = classrooms.filter(
     (c) => !takenClassroomIds.includes(c.id) || c.id === (initialClassroomId ?? '')
@@ -57,13 +71,38 @@ export default function PredavanjeForm({
   const [error, setError] = useState('');
   const [classroomId, setClassroomId] = useState<string>(initialClassroomId ?? '');
 
+  const [termCategoryId, setTermCategoryId] = useState(() => {
+    if (initialTermCategoryId && termCategories.some((c) => c.id === initialTermCategoryId)) {
+      return initialTermCategoryId;
+    }
+    return termCategories[0]?.id ?? '';
+  });
+  const [termNapomena, setTermNapomena] = useState(initialTermNapomena ?? '');
+  const [grupniSelected, setGrupniSelected] = useState<string[]>([]);
+
+  const selectedCategory = termCategories.find((c) => c.id === termCategoryId);
+  const allowsMultipleClients = selectedCategory ? !selectedCategory.jedan_klijent_po_terminu : false;
+
   const isNew = !predavanje;
-  const atLimit = isNew && currentCount >= maxCasova;
+  const effectiveMax = allowsMultipleClients ? maxCasova : 1;
+  const atLimit = isNew && currentCount >= effectiveMax;
+
+  const toggleGrupni = (id: string) => {
+    setGrupniSelected((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     if (atLimit) return;
+    if (termCategories.length === 0) {
+      setError('Nema kategorija termina. Admin mora dodati kategorije u Admin → Kategorije termina.');
+      return;
+    }
+    if (!termCategoryId) {
+      setError('Izaberite kategoriju termina.');
+      return;
+    }
     if (termTypes.length === 0) {
       setError('Prvo dodajte bar jednu vrstu termina (Admin → Vrste termina).');
       return;
@@ -73,8 +112,13 @@ export default function PredavanjeForm({
       return;
     }
     setLoading(true);
-    console.log('[PredavanjeForm] submit', { termId, clientId, predavanje: !!predavanje });
     try {
+      const metaRes = await updateTermMetaAsInstructor(termId, {
+        term_category_id: termCategoryId,
+        napomena: termNapomena.trim() || null,
+      });
+      if (metaRes.error) throw new Error(metaRes.error);
+
       if (classrooms.length > 0 && availableClassrooms.length === 0) {
         throw new Error('Nema slobodnih učionica u ovom terminu (sve su zauzete). Kontaktirajte admina.');
       }
@@ -83,10 +127,9 @@ export default function PredavanjeForm({
       }
       if (classrooms.length > 0 && classroomId) {
         const res = await updateTermClassroom(termId, classroomId);
-        if (res.error) {
-          throw new Error(res.error);
-        }
+        if (res.error) throw new Error(res.error);
       }
+
       if (predavanje) {
         const result = await updatePredavanje(
           predavanje.id,
@@ -97,18 +140,31 @@ export default function PredavanjeForm({
           komentar.trim() || null,
           termTypeId || null
         );
-        if (result.error) {
-          console.error('[PredavanjeForm] update error', result.error);
-          throw new Error(result.error);
-        }
+        if (result.error) throw new Error(result.error);
         toast.success('Radionica sačuvana.');
       } else {
-        const result = await createPredavanje(termId, clientId, odrzano, placeno, komentar.trim() || null, termTypeId || null);
-        if (result.error) {
-          console.error('[PredavanjeForm] createPredavanje error', result.error);
-          throw new Error(result.error);
+        if (allowsMultipleClients) {
+          if (grupniSelected.length === 0) {
+            throw new Error('Za grupni termin označite bar jedno dete.');
+          }
+          const batchRes = await createPredavanjaBatch(termId, grupniSelected, termTypeId || null, komentar.trim() || null);
+          if (batchRes.error) throw new Error(batchRes.error);
+          toast.success(
+            grupniSelected.length === 1 ? 'Radionica dodata.' : `Dodato ${grupniSelected.length} radionica.`
+          );
+        } else {
+          if (!clientId) throw new Error('Izaberite klijenta.');
+          const result = await createPredavanje(
+            termId,
+            clientId,
+            odrzano,
+            placeno,
+            komentar.trim() || null,
+            termTypeId || null
+          );
+          if (result.error) throw new Error(result.error);
+          toast.success('Radionica dodata.');
         }
-        toast.success('Radionica dodata.');
       }
       const getMonday = (d: Date) => {
         const x = new Date(d);
@@ -123,7 +179,6 @@ export default function PredavanjeForm({
       const msg = err instanceof Error ? err.message : 'Greška pri čuvanju.';
       setError(msg);
       toast.error(msg);
-      console.error('[PredavanjeForm] catch', err);
     } finally {
       setLoading(false);
     }
@@ -142,8 +197,7 @@ export default function PredavanjeForm({
       toast.success('Radionica obrisana.');
       router.push(`/dashboard/termin/${termId}`);
       router.refresh();
-    } catch (err) {
-      console.error('[PredavanjeForm] delete catch', err);
+    } catch {
       setError('Greška pri brisanju.');
       toast.error('Greška pri brisanju.');
     } finally {
@@ -151,51 +205,125 @@ export default function PredavanjeForm({
     }
   };
 
+  const limitHint = useMemo(
+    () =>
+      allowsMultipleClients
+        ? `Grupa: do ${maxCasova} radionica (dece) u istom terminu.`
+        : 'U ovoj kategoriji u terminu je dozvoljena samo jedna radionica (jedno dete).',
+    [allowsMultipleClients, maxCasova]
+  );
+
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div className="text-sm text-stone-500">
         {termDate} • {slotLabel}
         {isNew && (
           <span className="ml-2 text-stone-400">
-            ({currentCount} / {maxCasova} radionica u terminu)
+            ({currentCount} / {effectiveMax} radionica)
           </span>
         )}
       </div>
+
+      <div className="rounded-lg border border-stone-200 bg-stone-50/80 p-4 space-y-3">
+        <h3 className="text-sm font-semibold text-stone-800">Kategorija termina</h3>
+        <p className="text-xs text-stone-600">{limitHint}</p>
+        <div>
+          <label className="block text-xs font-medium text-stone-700 mb-1">Kategorija</label>
+          <select
+            value={termCategoryId}
+            onChange={(e) => setTermCategoryId(e.target.value)}
+            className="w-full max-w-md rounded-lg border border-stone-300 px-3 py-2 text-sm text-stone-800 bg-white"
+            required
+          >
+            {termCategories.length === 0 ? (
+              <option value="">—</option>
+            ) : (
+              termCategories.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.naziv}
+                  {c.jedan_klijent_po_terminu ? ' (jedno dete)' : ' (grupa)'}
+                </option>
+              ))
+            )}
+          </select>
+          <p className="text-xs text-stone-500 mt-1">
+            Kategorije definiše admin (Admin → Kategorije termina).
+          </p>
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-stone-700 mb-1">Napomena za termin (opciono)</label>
+          <p className="text-xs text-stone-500 mb-1">Možete je menjati i vi i admin; vidljiva je na stranici termina.</p>
+          <textarea
+            value={termNapomena}
+            onChange={(e) => setTermNapomena(e.target.value)}
+            rows={2}
+            className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm text-stone-800"
+            placeholder="Interna napomena za ovaj termin..."
+          />
+        </div>
+      </div>
+
       {atLimit && (
         <p className="text-sm text-amber-700 bg-amber-50 rounded-lg px-3 py-2">
-          Maksimalan broj časova u ovom terminu je {maxCasova}. Podešavanje može da menja superadmin u Admin → Podešavanja.
+          {!allowsMultipleClients
+            ? 'Ova kategorija dozvoljava samo jedno dete u terminu. Za drugo dete u istom vremenu izaberite kategoriju za grupu ili drugi slot.'
+            : `Maksimalan broj radionica u ovom terminu je ${maxCasova}. Podešavanje može da menja superadmin u Admin → Podešavanja.`}
         </p>
       )}
-      <div>
-        <label className="block text-sm font-medium text-stone-700 mb-1">
-          Klijent
-        </label>
-        <select
-          value={clientId}
-          onChange={(e) => setClientId(e.target.value)}
-          required
-          className="w-full rounded-lg border border-stone-300 px-3 py-2 text-stone-800"
-        >
-          <option value="">Izaberite klijenta</option>
-          {clients.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.ime} {c.prezime}
-            </option>
-          ))}
-        </select>
-        {clientId && selectedStanje.length > 0 && (
-          <div className="mt-2 rounded-lg bg-stone-50 border border-stone-200 px-3 py-2 text-sm">
-            <span className="font-medium text-stone-600">Ostalo časova kod vas: </span>
-            {selectedStanje.map((s) => (
-              <span key={s.term_type_id ?? 'bez'} className="mr-2">
-                {s.term_type_naziv} <strong className="text-amber-800">{s.ostalo}</strong>
-              </span>
+
+      {isNew && allowsMultipleClients ? (
+        <div>
+          <label className="block text-sm font-medium text-stone-700 mb-2">Deca u grupnom terminu</label>
+          <p className="text-xs text-stone-500 mb-2">Označite jedno ili više dece (isti tip časa i cena = vrsta termina ispod).</p>
+          <div className="max-h-48 overflow-y-auto rounded-lg border border-stone-200 divide-y divide-stone-100">
+            {clients.map((c) => (
+              <label key={c.id} className="flex items-center gap-3 px-3 py-2 hover:bg-stone-50 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={grupniSelected.includes(c.id)}
+                  onChange={() => toggleGrupni(c.id)}
+                  className="rounded border-stone-300 text-amber-600"
+                />
+                <span className="text-sm text-stone-800">
+                  {c.ime} {c.prezime}
+                </span>
+              </label>
             ))}
           </div>
-        )}
-      </div>
+        </div>
+      ) : (
+        <div>
+          <label className="block text-sm font-medium text-stone-700 mb-1">Klijent</label>
+          <select
+            value={clientId}
+            onChange={(e) => setClientId(e.target.value)}
+            required={!predavanje}
+            className="w-full rounded-lg border border-stone-300 px-3 py-2 text-stone-800"
+          >
+            <option value="">Izaberite klijenta</option>
+            {clients.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.ime} {c.prezime}
+              </option>
+            ))}
+          </select>
+          {clientId && selectedStanje.length > 0 && (
+            <div className="mt-2 rounded-lg bg-stone-50 border border-stone-200 px-3 py-2 text-sm">
+              <span className="font-medium text-stone-600">Ostalo časova kod vas: </span>
+              {selectedStanje.map((s) => (
+                <span key={s.term_type_id ?? 'bez'} className="mr-2">
+                  {s.term_type_naziv} <strong className="text-amber-800">{s.ostalo}</strong>
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       <div>
-        <label className="block text-sm font-medium text-stone-700 mb-1">Vrsta termina <span className="text-red-600">*</span></label>
+        <label className="block text-sm font-medium text-stone-700 mb-1">
+          Vrsta termina (tip časa, cena) <span className="text-red-600">*</span>
+        </label>
         <select
           value={termTypeId}
           onChange={(e) => setTermTypeId(e.target.value)}
@@ -204,21 +332,21 @@ export default function PredavanjeForm({
         >
           <option value="">Izaberite vrstu termina</option>
           {termTypes.map((tt) => (
-            <option key={tt.id} value={tt.id}>{tt.naziv}</option>
+            <option key={tt.id} value={tt.id}>
+              {tt.naziv}
+            </option>
           ))}
         </select>
         {termTypes.length === 0 && (
           <p className="text-xs text-amber-600 mt-0.5">Admin mora dodati bar jednu vrstu u Admin → Vrste termina.</p>
         )}
         <p className="text-xs text-stone-500 mt-1.5">
-          Vrsta termina (npr. individualni ili grupni) zamenjuje posebne „kategorije”. Za <strong>grupni</strong> čas u istom terminu dodajte više radionica – po jednu po detetu – do maksimuma iz podešavanja.
+          Vrsta termina određuje tip časa i cenu. <strong>Kategorija</strong> iznad određuje da li je u terminu jedno dete ili više.
         </p>
       </div>
       {classrooms.length > 0 && (
         <div>
-          <label className="block text-sm font-medium text-stone-700 mb-1">
-            Učionica
-          </label>
+          <label className="block text-sm font-medium text-stone-700 mb-1">Učionica</label>
           <select
             value={classroomId}
             onChange={(e) => setClassroomId(e.target.value)}
@@ -258,9 +386,7 @@ export default function PredavanjeForm({
         </label>
       </div>
       <div>
-        <label className="block text-sm font-medium text-stone-700 mb-1">
-          Komentar (šta je rađeno)
-        </label>
+        <label className="block text-sm font-medium text-stone-700 mb-1">Komentar (šta je rađeno)</label>
         <textarea
           value={komentar}
           onChange={(e) => setKomentar(e.target.value)}

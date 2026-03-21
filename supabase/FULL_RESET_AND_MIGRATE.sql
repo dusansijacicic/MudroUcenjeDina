@@ -21,6 +21,7 @@ DROP TABLE IF EXISTS zahtevi_za_cas CASCADE;
 DROP TABLE IF EXISTS app_settings CASCADE;
 DROP TABLE IF EXISTS predavanja CASCADE;
 DROP TABLE IF EXISTS terms CASCADE;
+DROP TABLE IF EXISTS term_categories CASCADE;
 DROP TABLE IF EXISTS instructor_clients CASCADE;
 DROP TABLE IF EXISTS admin_users CASCADE;
 DROP TABLE IF EXISTS clients CASCADE;
@@ -59,6 +60,7 @@ CREATE TABLE clients (
   skola TEXT,
   roditelj TEXT,
   kontakt_telefon TEXT,
+  napomena TEXT,
   popust_percent DECIMAL(5,2) DEFAULT 0 CHECK (popust_percent >= 0 AND popust_percent <= 100),
   datum_testiranja DATE,
   created_at TIMESTAMPTZ DEFAULT now()
@@ -80,6 +82,18 @@ CREATE TABLE classrooms (
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
+-- Kategorije termina (admin CRUD) – pre terms zbog FK
+CREATE TABLE term_categories (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  naziv TEXT NOT NULL,
+  opis TEXT,
+  jedan_klijent_po_terminu BOOLEAN NOT NULL DEFAULT true,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+INSERT INTO term_categories (id, naziv, opis, jedan_klijent_po_terminu) VALUES
+  ('e8b4c5d0-1111-4a2a-9c3d-000000000001', 'Individualni', 'Samo jedno dete u terminu.', true),
+  ('e8b4c5d0-1111-4a2a-9c3d-000000000002', 'Grupni', 'Više dece u istom terminu, do limita iz podešavanja.', false);
+
 -- Termini: u JEDNOM slotu (datum + vreme) važi:
 --   A) Jedan predavač može imati samo JEDAN termin (UNIQUE ispod).
 --   B) Jedna učionica može biti korišćena samo u JEDNOM terminu (unique indeks ispod).
@@ -90,6 +104,8 @@ CREATE TABLE terms (
   date DATE NOT NULL,
   slot_index SMALLINT NOT NULL CHECK (slot_index >= 0 AND slot_index <= 12),
   classroom_id UUID REFERENCES classrooms(id) ON DELETE SET NULL,
+  term_category_id UUID NOT NULL REFERENCES term_categories(id) ON DELETE RESTRICT DEFAULT 'e8b4c5d0-1111-4a2a-9c3d-000000000001'::uuid,
+  napomena TEXT,
   UNIQUE(instructor_id, date, slot_index)
 );
 CREATE UNIQUE INDEX uniq_terms_classroom_date_slot ON terms(classroom_id, date, slot_index) WHERE classroom_id IS NOT NULL;
@@ -349,6 +365,12 @@ CREATE POLICY "classrooms_admin_all" ON classrooms FOR ALL TO authenticated USIN
 -- term_types
 CREATE POLICY "term_types_select_authenticated" ON term_types FOR SELECT TO authenticated USING (true);
 CREATE POLICY "term_types_admin_all" ON term_types FOR ALL TO authenticated USING (
+  auth.uid() IN (SELECT user_id FROM admin_users)
+) WITH CHECK (auth.uid() IN (SELECT user_id FROM admin_users));
+
+-- term_categories
+CREATE POLICY "term_categories_select_authenticated" ON term_categories FOR SELECT TO authenticated USING (true);
+CREATE POLICY "term_categories_admin_all" ON term_categories FOR ALL TO authenticated USING (
   auth.uid() IN (SELECT user_id FROM admin_users)
 ) WITH CHECK (auth.uid() IN (SELECT user_id FROM admin_users));
 

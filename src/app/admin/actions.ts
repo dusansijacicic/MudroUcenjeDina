@@ -2,9 +2,11 @@
 
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import type { TermCategoryRow } from '@/lib/term-categories';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { INSTRUCTOR_COLORS, isTermInPast } from '@/lib/constants';
+import { termMozeNovoPredavanje } from '@/lib/settings';
 
 export async function createInstructorAsAdmin(formData: FormData): Promise<{ error?: string; success?: boolean }> {
   const supabase = await createClient();
@@ -106,7 +108,9 @@ export async function createTermAsAdmin(
   instructorId: string,
   date: string,
   slotIndex: number,
-  classroomId: string | null
+  classroomId: string | null,
+  termCategoryId: string,
+  napomena: string | null = null
 ): Promise<{ termId?: string; instructorId?: string; error?: string }> {
   const supabase = await createClient();
   const {
@@ -162,9 +166,23 @@ export async function createTermAsAdmin(
     }
   }
 
+  if (!termCategoryId?.trim()) {
+    return { error: 'Izaberite kategoriju termina.' };
+  }
+  const { data: catOk } = await adminSupabase.from('term_categories').select('id').eq('id', termCategoryId.trim()).maybeSingle();
+  if (!catOk) {
+    return { error: 'Kategorija termina nije pronađena.' };
+  }
   const { data: inserted, error } = await adminSupabase
     .from('terms')
-    .insert({ instructor_id: instructorId, date: dateStr, slot_index: slot, classroom_id: classroomId })
+    .insert({
+      instructor_id: instructorId,
+      date: dateStr,
+      slot_index: slot,
+      classroom_id: classroomId,
+      term_category_id: termCategoryId.trim(),
+      napomena: napomena?.trim() || null,
+    })
     .select('id')
     .single();
 
@@ -205,6 +223,21 @@ export async function createPredavanjeAsAdmin(
   if (authErr || !admin) return { error: authErr ?? 'Niste ovlašćeni.' };
   const { data: term } = await admin.from('terms').select('id, instructor_id').eq('id', termId).single();
   if (!term) return { error: 'Termin nije pronađen.' };
+  const check = await termMozeNovoPredavanje(termId);
+  if (!check.ok) {
+    return {
+      error: `U ovom terminu nije moguće dodati još jedno dete (${check.count}/${check.max}). Za termin sa jednim detetom dozvoljena je samo jedna radionica; za grupu izaberite odgovarajuću kategoriju pri kreiranju termina.`,
+    };
+  }
+  const { data: dup } = await admin
+    .from('predavanja')
+    .select('id')
+    .eq('term_id', termId)
+    .eq('client_id', clientId)
+    .maybeSingle();
+  if (dup) {
+    return { error: 'Ovo dete je već uključeno u ovaj termin.' };
+  }
   const { error: insErr } = await admin.from('predavanja').insert({
     term_id: termId,
     client_id: clientId,
@@ -227,6 +260,38 @@ export async function createPredavanjeAsAdmin(
   return {};
 }
 
+/** Kategorija i napomena termina (admin). */
+export async function updateTermMetaAsAdmin(
+  termId: string,
+  payload: { term_category_id: string; napomena: string | null }
+): Promise<{ error?: string }> {
+  const { admin, error: authErr } = await requireAdmin();
+  if (authErr || !admin) return { error: authErr ?? 'Niste ovlašćeni.' };
+  const cid = payload.term_category_id?.trim();
+  if (!cid) return { error: 'Izaberite kategoriju termina.' };
+  const { data: cat } = await admin
+    .from('term_categories')
+    .select('id, jedan_klijent_po_terminu')
+    .eq('id', cid)
+    .maybeSingle();
+  if (!cat) return { error: 'Kategorija nije pronađena.' };
+  if (cat.jedan_klijent_po_terminu) {
+    const { count } = await admin.from('predavanja').select('*', { count: 'exact', head: true }).eq('term_id', termId);
+    if ((count ?? 0) > 1) {
+      return { error: 'Ova kategorija dozvoljava samo jedno dete u terminu. Prvo uklonite višak radionica.' };
+    }
+  }
+  const { error } = await admin
+    .from('terms')
+    .update({ term_category_id: cid, napomena: payload.napomena?.trim() || null })
+    .eq('id', termId);
+  if (error) return { error: error.message };
+  revalidatePath('/admin/kalendar');
+  revalidatePath(`/admin/termin/${termId}`);
+  revalidatePath('/dashboard');
+  return {};
+}
+
 export async function updatePredavanjeAsAdmin(
   predavanjeId: string,
   termId: string,
@@ -238,6 +303,16 @@ export async function updatePredavanjeAsAdmin(
 ): Promise<{ error?: string }> {
   const { admin, error: authErr } = await requireAdmin();
   if (authErr || !admin) return { error: authErr ?? 'Niste ovlašćeni.' };
+  const { data: dupOther } = await admin
+    .from('predavanja')
+    .select('id')
+    .eq('term_id', termId)
+    .eq('client_id', clientId)
+    .neq('id', predavanjeId)
+    .maybeSingle();
+  if (dupOther) {
+    return { error: 'Ovo dete je već uključeno u ovaj termin.' };
+  }
   const { error } = await admin
     .from('predavanja')
     .update({
@@ -367,6 +442,66 @@ export async function deleteTermTypeAsAdmin(id: string): Promise<{ error?: strin
   return {};
 }
 
+export async function getTermCategories(): Promise<TermCategoryRow[]> {
+  const admin = createAdminClient();
+  const { data } = await admin
+    .from('term_categories')
+    .select('id, naziv, opis, jedan_klijent_po_terminu')
+    .order('naziv');
+  return (data ?? []) as TermCategoryRow[];
+}
+
+export async function createTermCategoryAsAdmin(
+  naziv: string,
+  opis: string | null,
+  jedan_klijent_po_terminu: boolean
+): Promise<{ error?: string }> {
+  const { admin, error: authErr } = await requireAdmin();
+  if (authErr || !admin) return { error: authErr ?? 'Samo admin.' };
+  const { error } = await admin.from('term_categories').insert({
+    naziv: naziv.trim(),
+    opis: opis?.trim() || null,
+    jedan_klijent_po_terminu: Boolean(jedan_klijent_po_terminu),
+  });
+  if (error) return { error: error.message };
+  revalidatePath('/admin/kategorije-termina');
+  return {};
+}
+
+export async function updateTermCategoryAsAdmin(
+  id: string,
+  naziv: string,
+  opis: string | null,
+  jedan_klijent_po_terminu: boolean
+): Promise<{ error?: string }> {
+  const { admin, error: authErr } = await requireAdmin();
+  if (authErr || !admin) return { error: authErr ?? 'Samo admin.' };
+  const { error } = await admin
+    .from('term_categories')
+    .update({
+      naziv: naziv.trim(),
+      opis: opis?.trim() || null,
+      jedan_klijent_po_terminu: Boolean(jedan_klijent_po_terminu),
+    })
+    .eq('id', id);
+  if (error) return { error: error.message };
+  revalidatePath('/admin/kategorije-termina');
+  return {};
+}
+
+export async function deleteTermCategoryAsAdmin(id: string): Promise<{ error?: string }> {
+  const { admin, error: authErr } = await requireAdmin();
+  if (authErr || !admin) return { error: authErr ?? 'Samo admin.' };
+  const { count } = await admin.from('terms').select('*', { count: 'exact', head: true }).eq('term_category_id', id);
+  if ((count ?? 0) > 0) {
+    return { error: 'Kategorija se koristi u terminima; dodelite drugu kategoriju tim terminima pre brisanja.' };
+  }
+  const { error } = await admin.from('term_categories').delete().eq('id', id);
+  if (error) return { error: error.message };
+  revalidatePath('/admin/kategorije-termina');
+  return {};
+}
+
 export type ClassroomRow = { id: string; naziv: string; color: string | null };
 
 export async function getClassrooms(): Promise<ClassroomRow[]> {
@@ -438,12 +573,16 @@ export async function updateClientAsAdmin(
     roditelj: string | null;
     kontakt_telefon: string | null;
     login_email: string | null;
+    napomena: string | null;
     popust_percent: number | null;
     datum_testiranja: string | null;
   }
 ): Promise<{ error?: string }> {
   const { admin, error: authErr } = await requireAdmin();
   if (authErr || !admin) return { error: authErr ?? 'Samo admin.' };
+  if (!payload.kontakt_telefon?.trim()) {
+    return { error: 'Kontakt telefon je obavezan.' };
+  }
   const { error } = await admin.from('clients').update(payload).eq('id', clientId);
   if (error) return { error: error.message };
   revalidatePath('/admin/klijenti');

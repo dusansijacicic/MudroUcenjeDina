@@ -8,12 +8,14 @@ type Instructor = { id: string; ime: string; prezime: string };
 type Client = { id: string; ime: string; prezime: string };
 type Classroom = { id: string; naziv: string };
 type TermTypeOption = { id: string; naziv: string; opis: string | null };
+type TermCategoryOption = { id: string; naziv: string; jedan_klijent_po_terminu: boolean };
 
 export default function AdminTerminForm({
   instructors,
   clients,
   classrooms,
   termTypes = [],
+  termCategories = [],
   defaultDate,
   defaultSlotIndex = 0,
   slotLabels,
@@ -25,6 +27,7 @@ export default function AdminTerminForm({
   clients: Client[];
   classrooms: Classroom[];
   termTypes?: TermTypeOption[];
+  termCategories?: TermCategoryOption[];
   defaultDate: string;
   defaultSlotIndex?: number;
   slotLabels: readonly string[];
@@ -53,10 +56,20 @@ export default function AdminTerminForm({
     () => instructors.filter((i) => !initialTakenInstructorIds.includes(i.id))[0]?.id ?? ''
   );
   const [clientId, setClientId] = useState(clients[0]?.id ?? '');
+  const [termCategoryId, setTermCategoryId] = useState(
+    () =>
+      termCategories.find((c) => c.jedan_klijent_po_terminu)?.id ?? termCategories[0]?.id ?? ''
+  );
+  const [termNapomena, setTermNapomena] = useState('');
+  const [grupniIds, setGrupniIds] = useState<string[]>([]);
   const [classroomId, setClassroomId] = useState(
     () => classrooms.filter((c) => !initialTakenClassroomIds.includes(c.id))[0]?.id ?? ''
   );
   const [termTypeId, setTermTypeId] = useState(termTypes[0]?.id ?? '');
+
+  const toggleGrupni = (id: string) => {
+    setGrupniIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  };
 
   useEffect(() => {
     if (availableInstructors.length && !availableInstructors.some((i) => i.id === instructorId)) {
@@ -86,13 +99,28 @@ export default function AdminTerminForm({
     };
   }, [date, slotIndex]);
 
+  const selectedCat = termCategories.find((c) => c.id === termCategoryId);
+  const allowsMultipleClients = selectedCat ? !selectedCat.jedan_klijent_po_terminu : false;
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setLoading(true);
     try {
-      if (!clientId) {
+      if (termCategories.length === 0) {
+        setError('Nema kategorija termina. Dodajte ih u Admin → Kategorije termina.');
+        return;
+      }
+      if (!termCategoryId) {
+        setError('Izaberite kategoriju termina.');
+        return;
+      }
+      if (!allowsMultipleClients && !clientId) {
         setError('Izaberite klijenta.');
+        return;
+      }
+      if (allowsMultipleClients && grupniIds.length === 0) {
+        setError('Za grupni termin označite bar jedno dete.');
         return;
       }
       if (!classroomId) {
@@ -108,23 +136,33 @@ export default function AdminTerminForm({
         return;
       }
 
-      const termResult = await createTermAsAdmin(instructorId, date, slotIndex, classroomId);
+      const termResult = await createTermAsAdmin(
+        instructorId,
+        date,
+        slotIndex,
+        classroomId,
+        termCategoryId,
+        termNapomena.trim() || null
+      );
       if (termResult.error || !termResult.termId) {
         setError(termResult.error ?? 'Greška pri kreiranju termina.');
         return;
       }
 
-      const predavanjeResult = await createPredavanjeAsAdmin(
-        termResult.termId,
-        clientId,
-        false,
-        false,
-        null,
-        termTypeId || null
-      );
-      if (predavanjeResult.error) {
-        setError(predavanjeResult.error);
-        return;
+      const idsToAdd = allowsMultipleClients ? grupniIds : [clientId];
+      for (const cid of idsToAdd) {
+        const predavanjeResult = await createPredavanjeAsAdmin(
+          termResult.termId,
+          cid,
+          false,
+          false,
+          null,
+          termTypeId || null
+        );
+        if (predavanjeResult.error) {
+          setError(predavanjeResult.error);
+          return;
+        }
       }
 
       router.push(`/admin/termin/${termResult.termId}`);
@@ -162,6 +200,14 @@ export default function AdminTerminForm({
     return (
       <p className="text-stone-500 text-sm">
         Nema vrsta termina. Dodajte bar jednu vrstu u Admin → Vrste termina, pa se vratite na zakazivanje.
+      </p>
+    );
+  }
+
+  if (termCategories.length === 0) {
+    return (
+      <p className="text-stone-500 text-sm">
+        Nema kategorija termina. Dodajte bar jednu u Admin → Kategorije termina, pa se vratite na zakazivanje.
       </p>
     );
   }
@@ -216,21 +262,73 @@ export default function AdminTerminForm({
             <p className="text-xs text-stone-500 mt-0.5">{takenInstructorIds.length} instruktor(a) već ima termin u ovom slotu.</p>
           )}
         </div>
-        <div>
-          <label className="block text-sm font-medium text-stone-700 mb-1">Klijent</label>
-          <select
-            value={clientId}
-            onChange={(e) => setClientId(e.target.value)}
-            required
-            className="w-full rounded-lg border border-stone-300 px-3 py-2 text-stone-800"
-          >
-            {clients.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.ime} {c.prezime}
-              </option>
-            ))}
-          </select>
+        <div className="sm:col-span-2 space-y-3 rounded-lg border border-stone-200 bg-stone-50/80 p-3">
+          <p className="text-sm font-medium text-stone-800">Kategorija termina</p>
+          {termCategories.length === 0 ? (
+            <p className="text-sm text-amber-700">Dodajte kategorije u Admin → Kategorije termina.</p>
+          ) : (
+            <div>
+              <label className="block text-xs font-medium text-stone-700 mb-1">Kategorija</label>
+              <select
+                value={termCategoryId}
+                onChange={(e) => setTermCategoryId(e.target.value)}
+                className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm text-stone-800 bg-white"
+              >
+                {termCategories.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.naziv}
+                    {c.jedan_klijent_po_terminu ? ' (jedno dete)' : ' (grupa)'}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+          <div>
+            <label className="block text-xs font-medium text-stone-700 mb-1">Napomena za termin (opciono)</label>
+            <textarea
+              value={termNapomena}
+              onChange={(e) => setTermNapomena(e.target.value)}
+              rows={2}
+              className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm text-stone-800"
+            />
+          </div>
         </div>
+        {allowsMultipleClients ? (
+          <div className="sm:col-span-2">
+            <label className="block text-sm font-medium text-stone-700 mb-2">Deca u grupnom terminu</label>
+            <div className="max-h-40 overflow-y-auto rounded-lg border border-stone-200 divide-y divide-stone-100">
+              {clients.map((c) => (
+                <label key={c.id} className="flex items-center gap-3 px-3 py-2 hover:bg-stone-50 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={grupniIds.includes(c.id)}
+                    onChange={() => toggleGrupni(c.id)}
+                    className="rounded border-stone-300 text-amber-600"
+                  />
+                  <span className="text-sm">
+                    {c.ime} {c.prezime}
+                  </span>
+                </label>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div>
+            <label className="block text-sm font-medium text-stone-700 mb-1">Klijent</label>
+            <select
+              value={clientId}
+              onChange={(e) => setClientId(e.target.value)}
+              required
+              className="w-full rounded-lg border border-stone-300 px-3 py-2 text-stone-800"
+            >
+              {clients.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.ime} {c.prezime}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
       <div>
         <label className="block text-sm font-medium text-stone-700 mb-1">Učionica</label>
@@ -253,7 +351,7 @@ export default function AdminTerminForm({
         )}
       </div>
       <div>
-        <label className="block text-sm font-medium text-stone-700 mb-1">Vrsta termina</label>
+        <label className="block text-sm font-medium text-stone-700 mb-1">Vrsta termina (tip časa, cena)</label>
         <select
           value={termTypeId}
           onChange={(e) => setTermTypeId(e.target.value)}
@@ -265,6 +363,7 @@ export default function AdminTerminForm({
             <option key={tt.id} value={tt.id}>{tt.naziv}</option>
           ))}
         </select>
+        <p className="text-xs text-stone-500 mt-1">Kategorija = jedno dete ili grupa; vrsta = koja obuka i cena.</p>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>

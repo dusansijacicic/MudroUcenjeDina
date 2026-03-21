@@ -4,7 +4,7 @@ import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import AdminTerminForm from './AdminTerminForm';
 import { TIME_SLOTS } from '@/lib/constants';
-import { getTermTypes, getTakenForSlot } from '@/app/admin/actions';
+import { getTermTypes, getTakenForSlot, getTermCategories } from '@/app/admin/actions';
 import { getMaxTerminaPoSlotu } from '@/lib/settings';
 
 export default async function AdminTerminNoviPage({
@@ -42,7 +42,7 @@ export default async function AdminTerminNoviPage({
     .from('classrooms')
     .select('id, naziv')
     .order('naziv');
-  const termTypes = await getTermTypes();
+  const [termTypes, termCategories] = await Promise.all([getTermTypes(), getTermCategories()]);
 
   const tomorrow = new Date();
   tomorrow.setDate(tomorrow.getDate() + 1);
@@ -71,6 +71,7 @@ export default async function AdminTerminNoviPage({
         clients={(clients ?? []) as { id: string; ime: string; prezime: string }[]}
         classrooms={(classrooms ?? []) as { id: string; naziv: string }[]}
         termTypes={termTypes}
+        termCategories={termCategories}
         defaultDate={defaultDate}
         defaultSlotIndex={defaultSlot}
         slotLabels={TIME_SLOTS}

@@ -2,10 +2,11 @@ import { redirect, notFound } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getDashboardInstructor } from '@/lib/dashboard';
-import { getTermTypes, getClassrooms, getStanjePoVrstamaZaKlijenta } from '@/app/admin/actions';
+import { getTermTypes, getClassrooms, getStanjePoVrstamaZaKlijenta, getTermCategories } from '@/app/admin/actions';
 import { termMozeNovoPredavanje } from '@/lib/settings';
 import PredavanjeForm from '@/app/dashboard/termin/PredavanjeForm';
 import { TIME_SLOTS } from '@/lib/constants';
+import { SEEDED_TERM_CATEGORY_INDIVIDUAL_ID } from '@/lib/term-categories';
 
 async function movePredavanjeToAnotherTerm(formData: FormData) {
   'use server';
@@ -53,6 +54,7 @@ async function movePredavanjeToAnotherTerm(formData: FormData) {
         instructor_id: instructor.id,
         date: targetDate,
         slot_index: targetSlot,
+        term_category_id: SEEDED_TERM_CATEGORY_INDIVIDUAL_ID,
       })
       .select('id')
       .single();
@@ -113,7 +115,14 @@ export default async function EditPredavanjePage({
     notFound();
   }
 
-  const term = predavanje.term as { id: string; date: string; slot_index: number; classroom_id?: string | null };
+  const term = predavanje.term as {
+    id: string;
+    date: string;
+    slot_index: number;
+    classroom_id?: string | null;
+    term_category_id?: string;
+    napomena?: string | null;
+  };
   const slotLabel = TIME_SLOTS[term.slot_index] ?? '—';
 
   const { data: linkRows } = await admin
@@ -129,8 +138,9 @@ export default async function EditPredavanjePage({
     (a, b) =>
       (a.prezime ?? '').localeCompare(b.prezime ?? '') || (a.ime ?? '').localeCompare(b.ime ?? '')
   );
-  const [termTypes, classrooms, termsInSlotRes] = await Promise.all([
+  const [termTypes, termCategories, classrooms, termsInSlotRes] = await Promise.all([
     getTermTypes(),
+    getTermCategories(),
     getClassrooms(),
     admin.from('terms').select('classroom_id').eq('date', term.date).eq('slot_index', term.slot_index).neq('id', term.id),
   ]);
@@ -150,10 +160,13 @@ export default async function EditPredavanjePage({
           slotLabel={slotLabel}
           clients={clients ?? []}
           termTypes={termTypes}
+          termCategories={termCategories}
           classrooms={classrooms}
           initialClassroomId={term.classroom_id ?? null}
           takenClassroomIds={takenClassroomIds}
           clientStanjeList={clientStanjeList}
+          initialTermCategoryId={term.term_category_id ?? SEEDED_TERM_CATEGORY_INDIVIDUAL_ID}
+          initialTermNapomena={term.napomena ?? null}
           predavanje={{
             ...predavanje,
             term_type_id: (predavanje as { term_type_id?: string | null }).term_type_id,

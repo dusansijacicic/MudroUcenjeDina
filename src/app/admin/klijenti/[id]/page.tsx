@@ -29,7 +29,7 @@ export default async function AdminKlijentEditPage({
 
   const adminSupabase = createAdminClient();
   const [{ data: client, error }, stanjePoVrstama, { data: predavanjaRaw }] = await Promise.all([
-    adminSupabase.from('clients').select('*, popust_percent').eq('id', clientId).single(),
+    adminSupabase.from('clients').select('*, popust_percent, napomena').eq('id', clientId).single(),
     getStanjePoVrstamaZaKlijenta(clientId),
     adminSupabase
       .from('predavanja')

@@ -4,7 +4,8 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { getDashboardInstructor } from '@/lib/dashboard';
 import { getMaxCasovaPoTerminu, getMaxTerminaPoSlotu } from '@/lib/settings';
 import { TIME_SLOTS } from '@/lib/constants';
-import { getTermTypes, getClassrooms } from '@/app/admin/actions';
+import { getTermTypes, getClassrooms, getTermCategories } from '@/app/admin/actions';
+import { SEEDED_TERM_CATEGORY_INDIVIDUAL_ID, jedanKlijentIzJoina } from '@/lib/term-categories';
 import PredavanjeForm from '../PredavanjeForm';
 
 export default async function NoviTerminPage({
@@ -25,7 +26,7 @@ export default async function NoviTerminPage({
   let term: { id: string; classroom_id?: string | null } | null = null;
   const { data: existing } = await admin
     .from('terms')
-    .select('id, classroom_id')
+    .select('id, classroom_id, term_category_id, napomena')
     .eq('instructor_id', instructor.id)
     .eq('date', date)
     .eq('slot_index', slotIndex)
@@ -46,8 +47,9 @@ export default async function NoviTerminPage({
         instructor_id: instructor.id,
         date,
         slot_index: slotIndex,
+        term_category_id: SEEDED_TERM_CATEGORY_INDIVIDUAL_ID,
       })
-      .select('id, classroom_id')
+      .select('id, classroom_id, term_category_id, napomena')
       .single();
     if (error) {
       console.error('[termin/novi] terms insert failed', error.message);
@@ -60,14 +62,20 @@ export default async function NoviTerminPage({
     redirect('/dashboard');
   }
 
-  const [predRes, maxCasova, termsInSlotRes] = await Promise.all([
+  const [predRes, maxCasova, termsInSlotRes, termWithCatRes] = await Promise.all([
     admin.from('predavanja').select('*', { count: 'exact', head: true }).eq('term_id', term.id),
     getMaxCasovaPoTerminu(),
     admin.from('terms').select('classroom_id').eq('date', date).eq('slot_index', slotIndex).neq('id', term.id),
+    admin.from('terms').select('term_categories(jedan_klijent_po_terminu)').eq('id', term.id).single(),
   ]);
   const currentCount = predRes.count ?? 0;
-  if (currentCount >= maxCasova) {
-    redirect(`/dashboard?error=max_predavanja&message=${encodeURIComponent(`Ovaj termin već ima maksimalan broj časova (${maxCasova}). Ne možete dodati novu radionicu.`)}`);
+  const tc = termWithCatRes.data?.term_categories as
+    | { jedan_klijent_po_terminu?: boolean }
+    | { jedan_klijent_po_terminu?: boolean }[]
+    | null;
+  const effectiveMax = jedanKlijentIzJoina(tc) ? 1 : maxCasova;
+  if (currentCount >= effectiveMax) {
+    redirect(`/dashboard?error=max_predavanja&message=${encodeURIComponent(`Ovaj termin već ima maksimalan broj radionica (${effectiveMax}). Ne možete dodati novu radionicu.`)}`);
   }
   const termsInSlot = termsInSlotRes.data ?? [];
   const takenClassroomIds = termsInSlot.map((t: { classroom_id: string | null }) => t.classroom_id).filter((id: string | null): id is string => id != null);
@@ -83,8 +91,9 @@ export default async function NoviTerminPage({
     prezime: c.prezime ?? '',
   }));
 
-  const [termTypes, classrooms] = await Promise.all([
+  const [termTypes, termCategories, classrooms] = await Promise.all([
     getTermTypes(),
+    getTermCategories(),
     getClassrooms(),
   ]);
 
@@ -104,11 +113,14 @@ export default async function NoviTerminPage({
         slotLabel={slotLabel}
         clients={clients ?? []}
         termTypes={termTypes}
+        termCategories={termCategories}
         maxCasova={maxCasova}
         currentCount={currentCount}
         classrooms={classrooms}
         initialClassroomId={term.classroom_id ?? null}
         takenClassroomIds={takenClassroomIds}
+        initialTermCategoryId={(term as { term_category_id?: string }).term_category_id ?? SEEDED_TERM_CATEGORY_INDIVIDUAL_ID}
+        initialTermNapomena={(term as { napomena?: string | null }).napomena ?? null}
       />
     </div>
   );

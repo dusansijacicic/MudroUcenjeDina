@@ -14,6 +14,7 @@ type ClientPayload = {
   roditelj: string | null;
   kontakt_telefon: string | null;
   login_email: string | null;
+  napomena: string | null;
   /** YYYY-MM-DD ili null */
   datum_testiranja: string | null;
 };
@@ -117,6 +118,10 @@ export async function updateClientAsInstructor(
       .eq('client_id', clientId)
       .maybeSingle();
     if (!link) return { error: 'Niste ovlašćeni da menjate ovog klijenta.' };
+  }
+
+  if (!payload.kontakt_telefon?.trim()) {
+    return { error: 'Kontakt telefon je obavezan.' };
   }
 
   const { error: updateErr } = await admin.from('clients').update(payload).eq('id', clientId);

@@ -45,8 +45,21 @@ export async function createPredavanje(
   const check = await termMozeNovoPredavanje(termId);
   if (!check.ok) {
     return {
-      error: `Maksimalan broj radionica u ovom terminu je ${check.max}. Trenutno ima ${check.count}. Podešavanja može da menja superadmin.`,
+      error:
+        check.max === 1
+          ? 'Ovaj termin je za jedno dete – u njemu može biti samo jedna radionica. Za više dece u istom vremenu koristite kategoriju koja dozvoljava grupu (Admin → Kategorije termina).'
+          : `Maksimalan broj radionica u ovom terminu je ${check.max}. Trenutno ima ${check.count}. Podešavanja može da menja superadmin.`,
     };
+  }
+
+  const { data: dup } = await admin
+    .from('predavanja')
+    .select('id')
+    .eq('term_id', termId)
+    .eq('client_id', clientId)
+    .maybeSingle();
+  if (dup) {
+    return { error: 'Ovo dete je već uključeno u ovaj termin.' };
   }
 
   const { error: insErr } = await admin.from('predavanja').insert({
@@ -75,6 +88,77 @@ export async function createPredavanje(
   return {};
 }
 
+/** Više radionica odjednom (grupni termin). Svi isti term_type_id. */
+export async function createPredavanjaBatch(
+  termId: string,
+  clientIds: string[],
+  termTypeId: string | null,
+  komentar: string | null
+): Promise<{ error?: string }> {
+  const unique = [...new Set(clientIds.filter(Boolean))];
+  if (unique.length === 0) return { error: 'Izaberite bar jedno dete.' };
+
+  const { instructor } = await getDashboardInstructor();
+  if (!instructor) return { error: 'Niste instruktor.' };
+  let admin;
+  try {
+    admin = createAdminClient();
+  } catch {
+    return { error: 'Server greška.' };
+  }
+  const { data: term, error: termErr } = await admin
+    .from('terms')
+    .select('id, instructor_id, term_categories(jedan_klijent_po_terminu)')
+    .eq('id', termId)
+    .single();
+  if (termErr || !term) return { error: 'Termin nije pronađen.' };
+  if (term.instructor_id !== instructor.id) return { error: 'Niste ovlašćeni za ovaj termin.' };
+  const tc = term.term_categories as { jedan_klijent_po_terminu?: boolean } | { jedan_klijent_po_terminu?: boolean }[] | null;
+  const jedanOnly = Array.isArray(tc) ? tc[0]?.jedan_klijent_po_terminu !== false : tc?.jedan_klijent_po_terminu !== false;
+  if (jedanOnly && unique.length > 1) {
+    return { error: 'Ova kategorija termina dozvoljava samo jedno dete. Izaberite drugu kategoriju ili jedno dete.' };
+  }
+
+  const { data: existingPreds } = await admin.from('predavanja').select('client_id').eq('term_id', termId);
+  const alreadyIn = new Set((existingPreds ?? []).map((r: { client_id: string }) => r.client_id));
+  for (const cid of unique) {
+    if (alreadyIn.has(cid)) {
+      return { error: 'Jedno ili više izabranih dece je već u ovom terminu.' };
+    }
+  }
+
+  for (const clientId of unique) {
+    const check = await termMozeNovoPredavanje(termId);
+    if (!check.ok) {
+      return {
+        error:
+          check.max === 1
+            ? 'Individualni termin već ima dete.'
+            : `Dostignut je maksimalan broj radionica u terminu (${check.max}).`,
+      };
+    }
+    const { error: insErr } = await admin.from('predavanja').insert({
+      term_id: termId,
+      client_id: clientId,
+      odrzano: false,
+      placeno: false,
+      komentar: komentar?.trim() || null,
+      term_type_id: termTypeId || null,
+    });
+    if (insErr) return { error: insErr.message };
+    const { error: icErr } = await admin
+      .from('instructor_clients')
+      .insert({ instructor_id: instructor.id, client_id: clientId, placeno_casova: 0 });
+    if (icErr && icErr.code !== '23505') {
+      console.warn('[termin] instructor_clients batch', icErr.message);
+    }
+  }
+  revalidatePath(`/dashboard/termin/${termId}`);
+  revalidatePath('/dashboard');
+  revalidatePath('/dashboard/klijenti');
+  return {};
+}
+
 export async function updatePredavanje(
   predavanjeId: string,
   termId: string,
@@ -94,6 +178,16 @@ export async function updatePredavanje(
   }
   const { data: term } = await admin.from('terms').select('instructor_id').eq('id', termId).single();
   if (!term || term.instructor_id !== instructor.id) return { error: 'Niste ovlašćeni.' };
+  const { data: dupOther } = await admin
+    .from('predavanja')
+    .select('id')
+    .eq('term_id', termId)
+    .eq('client_id', clientId)
+    .neq('id', predavanjeId)
+    .maybeSingle();
+  if (dupOther) {
+    return { error: 'Ovo dete je već uključeno u ovaj termin (druga radionica).' };
+  }
   const { error } = await admin
     .from('predavanja')
     .update({
@@ -198,6 +292,70 @@ export async function moveTermAsInstructor(
   const { error } = await admin
     .from('terms')
     .update({ date: dateStr, slot_index: slot })
+    .eq('id', termId);
+  if (error) return { error: error.message };
+  revalidatePath('/dashboard');
+  revalidatePath(`/dashboard/termin/${termId}`);
+  return {};
+}
+
+/** Kategorija termina i napomena. */
+export async function updateTermMetaAsInstructor(
+  termId: string,
+  payload: { term_category_id: string; napomena: string | null }
+): Promise<{ error?: string }> {
+  const { instructor } = await getDashboardInstructor();
+  if (!instructor) return { error: 'Niste instruktor.' };
+  let admin;
+  try {
+    admin = createAdminClient();
+  } catch {
+    return { error: 'Server greška.' };
+  }
+  const { data: term } = await admin.from('terms').select('instructor_id').eq('id', termId).single();
+  if (!term || term.instructor_id !== instructor.id) return { error: 'Niste ovlašćeni za ovaj termin.' };
+  const cid = payload.term_category_id?.trim();
+  if (!cid) return { error: 'Izaberite kategoriju termina.' };
+  const { data: cat } = await admin
+    .from('term_categories')
+    .select('id, jedan_klijent_po_terminu')
+    .eq('id', cid)
+    .maybeSingle();
+  if (!cat) return { error: 'Kategorija nije pronađena.' };
+  if (cat.jedan_klijent_po_terminu) {
+    const { count } = await admin.from('predavanja').select('*', { count: 'exact', head: true }).eq('term_id', termId);
+    if ((count ?? 0) > 1) {
+      return { error: 'Ova kategorija dozvoljava samo jedno dete u terminu. Prvo uklonite višak radionica.' };
+    }
+  }
+  const { error } = await admin
+    .from('terms')
+    .update({ term_category_id: cid, napomena: payload.napomena?.trim() || null })
+    .eq('id', termId);
+  if (error) return { error: error.message };
+  revalidatePath('/dashboard');
+  revalidatePath(`/dashboard/termin/${termId}`);
+  return {};
+}
+
+/** Samo napomena termina (bez menjanja kategorije). */
+export async function updateTermNapomenaAsInstructor(
+  termId: string,
+  napomena: string | null
+): Promise<{ error?: string }> {
+  const { instructor } = await getDashboardInstructor();
+  if (!instructor) return { error: 'Niste instruktor.' };
+  let admin;
+  try {
+    admin = createAdminClient();
+  } catch {
+    return { error: 'Server greška.' };
+  }
+  const { data: term } = await admin.from('terms').select('instructor_id').eq('id', termId).single();
+  if (!term || term.instructor_id !== instructor.id) return { error: 'Niste ovlašćeni za ovaj termin.' };
+  const { error } = await admin
+    .from('terms')
+    .update({ napomena: napomena?.trim() || null })
     .eq('id', termId);
   if (error) return { error: error.message };
   revalidatePath('/dashboard');

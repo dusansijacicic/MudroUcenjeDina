@@ -3,6 +3,7 @@
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getDashboardInstructor } from '@/lib/dashboard';
 import { termMozeNovoPredavanje } from '@/lib/settings';
+import { SEEDED_TERM_CATEGORY_INDIVIDUAL_ID } from '@/lib/term-categories';
 import { revalidatePath } from 'next/cache';
 
 function getAdmin() {
@@ -92,7 +93,12 @@ export async function potvrdiZahtev(zahtevId: string): Promise<{ error?: string 
   } else {
     const { data: inserted, error: insErr } = await admin
       .from('terms')
-      .insert({ instructor_id: targetInstructorId, date: dateStr, slot_index: slot })
+      .insert({
+        instructor_id: targetInstructorId,
+        date: dateStr,
+        slot_index: slot,
+        term_category_id: SEEDED_TERM_CATEGORY_INDIVIDUAL_ID,
+      })
       .select('id')
       .single();
     if (insErr || !inserted) {
@@ -177,7 +183,12 @@ export async function promeniTerminZahtev(
   } else {
     const { data: inserted, error: insErr } = await admin
       .from('terms')
-      .insert({ instructor_id: targetInstructorId, date: dateStr, slot_index: slot })
+      .insert({
+        instructor_id: targetInstructorId,
+        date: dateStr,
+        slot_index: slot,
+        term_category_id: SEEDED_TERM_CATEGORY_INDIVIDUAL_ID,
+      })
       .select('id')
       .single();
     if (insErr || !inserted) {

@@ -5,7 +5,9 @@ import Link from 'next/link';
 import { TIME_SLOTS } from '@/lib/constants';
 import { getMaxCasovaPoTerminu } from '@/lib/settings';
 import type { Predavanje } from '@/types/database';
-import { deleteTermAsAdmin } from '@/app/admin/actions';
+import { deleteTermAsAdmin, getTermCategories } from '@/app/admin/actions';
+import { jedanKlijentIzJoina, nazivKategorijeIzJoina } from '@/lib/term-categories';
+import AdminTermMetaForm from '@/app/admin/termin/AdminTermMetaForm';
 
 export default async function AdminTerminDetailPage({
   params,
@@ -20,12 +22,15 @@ export default async function AdminTerminDetailPage({
   if (!admin) redirect('/login');
 
   const adminSupabase = createAdminClient();
-  const { data: term } = await adminSupabase
-    .from('terms')
-    .select('*, instructor:instructors(id, ime, prezime)')
-    .eq('id', termId)
-    .single();
-
+  const [termRes, termCategories] = await Promise.all([
+    adminSupabase
+      .from('terms')
+      .select('*, instructor:instructors(id, ime, prezime), term_categories(id, naziv, jedan_klijent_po_terminu)')
+      .eq('id', termId)
+      .single(),
+    getTermCategories(),
+  ]);
+  const term = termRes.data;
   if (!term) notFound();
 
   const instructor = Array.isArray((term as { instructor?: unknown }).instructor)
@@ -40,7 +45,15 @@ export default async function AdminTerminDetailPage({
 
   const maxCasova = await getMaxCasovaPoTerminu();
   const currentCount = (predavanja ?? []).length;
-  const canAddMore = currentCount < maxCasova;
+  const tcRaw = (term as { term_categories?: unknown }).term_categories;
+  const jedanOnly = jedanKlijentIzJoina(
+    tcRaw as { jedan_klijent_po_terminu?: boolean } | { jedan_klijent_po_terminu?: boolean }[] | null
+  );
+  const categoryNaziv = nazivKategorijeIzJoina(tcRaw as { naziv?: string } | { naziv?: string }[] | null);
+  const effectiveMax = jedanOnly ? 1 : maxCasova;
+  const initialTermCategoryId =
+    (term as { term_category_id?: string }).term_category_id ?? termCategories[0]?.id ?? '';
+  const canAddMore = currentCount < effectiveMax;
   const slotLabel = TIME_SLOTS[term.slot_index] ?? '—';
   const dateLabel = new Date(term.date + 'T12:00:00').toLocaleDateString('sr-Latn-RS', {
     weekday: 'long',
@@ -56,8 +69,18 @@ export default async function AdminTerminDetailPage({
           <h1 className="text-xl font-semibold text-stone-800 capitalize">{dateLabel}</h1>
           <p className="text-stone-500">{slotLabel}</p>
           <p className="text-sm text-stone-600 mt-1">
-            Predavač: {instructor ? `${instructor.ime} ${instructor.prezime}` : '—'}
+            Instruktor: {instructor ? `${instructor.ime} ${instructor.prezime}` : '—'}
           </p>
+          <p className="text-sm text-stone-600 mt-1">
+            <span className="font-medium">Kategorija:</span> {categoryNaziv}
+            <span className="text-stone-400 mx-2">·</span>
+            <span className="font-medium">Radionica:</span> {currentCount} / {effectiveMax}
+          </p>
+          {(term as { napomena?: string | null }).napomena ? (
+            <p className="text-sm text-stone-500 mt-2 whitespace-pre-wrap border-l-2 border-amber-200 pl-3">
+              {(term as { napomena?: string | null }).napomena}
+            </p>
+          ) : null}
         </div>
         <div className="flex items-center gap-3">
           <Link href="/admin/kalendar" className="text-sm text-stone-500 hover:text-stone-700">
@@ -83,6 +106,13 @@ export default async function AdminTerminDetailPage({
         </div>
       </div>
 
+      <AdminTermMetaForm
+        termId={termId}
+        termCategories={termCategories}
+        initialTermCategoryId={initialTermCategoryId}
+        initialNapomena={(term as { napomena?: string | null }).napomena ?? null}
+      />
+
       <div className="mb-6">
         {canAddMore ? (
           <Link
@@ -93,10 +123,12 @@ export default async function AdminTerminDetailPage({
           </Link>
         ) : (
           <p className="text-sm text-amber-700 bg-amber-50 rounded-lg px-3 py-2 inline-block">
-            Maksimalan broj časova u ovom terminu ({maxCasova}) je dostignut.
+            {jedanOnly
+              ? `Kategorija „${categoryNaziv}” – samo jedno dete. Za grupu promenite kategoriju iznad.`
+              : `Maksimalan broj radionica u ovom terminu (${maxCasova}) je dostignut.`}
           </p>
         )}
-        <span className="ml-2 text-stone-500 text-sm">{currentCount} / {maxCasova} časova</span>
+        <span className="ml-2 text-stone-500 text-sm">{currentCount} / {effectiveMax} radionica</span>
       </div>
 
       <div className="rounded-xl border border-stone-200 bg-white divide-y divide-stone-100">

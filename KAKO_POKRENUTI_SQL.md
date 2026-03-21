@@ -68,6 +68,15 @@ SQL fajlovi iz projekta **ne pokreću se automatski**. Morate ih ručno izvršit
    - Kopiraj i pokreni `supabase/migrations/022_link_client_datum_testiranja.sql`.
    - Proširuje `link_client_to_user` opcionim datumom (forma „Registracija učenika” može da ga pošalje).
 
+   ### Dvadeset treća migracija (023) – kategorija termina, napomene
+   - Kopiraj i pokreni `supabase/migrations/023_term_kategorija_napomene.sql`.
+   - Dodaje `terms.kategorija` (privremeno TEXT), `terms.napomena`, `clients.napomena`.
+
+   ### Dvadeset četvrta migracija (024) – kategorije termina kao tabela
+   - Kopiraj i pokreni `supabase/migrations/024_term_categories_table.sql` **posle 023**.
+   - Kreira `term_categories` (naziv, opis, `jedan_klijent_po_terminu`), ubacuje Individualni / Grupni; dodaje `terms.term_category_id`, briše `terms.kategorija`. RLS: svi ulogovani čitaju, samo admin menja.
+   - Ako si krenuo od **FULL_RESET_AND_MIGRATE.sql**, u njemu je već ova šema (nema potrebe za 023+024 odvojeno).
+
 4. **Provera**  
    U levom meniju otvori **Table Editor**. Trebalo bi da vidiš tabele: `instructors`, `clients`, `terms`, `predavanja`, `admin_users`, `instructor_clients`. Ako ih nema, vrati se na korak 3 i pokreni migracije redom.
 
