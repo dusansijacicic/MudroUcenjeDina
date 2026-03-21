@@ -45,18 +45,23 @@ function termsByKey(terms: AdminTerm[], date: string, slot: number): AdminTerm[]
 
 const DEFAULT_COLOR = '#0d9488';
 
+const DEFAULT_MAX_TERMINA_PO_SLOTU = 4;
+
 export default function AdminCalendarView({
   terms,
   startOfWeek,
   singleDay,
   monthStart,
   view,
+  maxTerminaPoSlotu = DEFAULT_MAX_TERMINA_PO_SLOTU,
 }: {
   terms: AdminTerm[];
   startOfWeek: string;
   singleDay?: string;
   monthStart?: string;
   view: string;
+  /** Iz Admin → Podešavanja; koliko paralelnih termina u istom vremenu */
+  maxTerminaPoSlotu?: number;
 }) {
   const router = useRouter();
   const [draggedTermId, setDraggedTermId] = useState<string | null>(null);
@@ -86,6 +91,7 @@ export default function AdminCalendarView({
         base={base}
         draggedTermId={draggedTermId}
         onDropCell={handleDrop}
+        maxTerminaPoSlotu={maxTerminaPoSlotu}
       />
     );
   }
@@ -108,6 +114,7 @@ export default function AdminCalendarView({
       draggedTermId={draggedTermId}
       setDraggedTermId={setDraggedTermId}
       onDropCell={handleDrop}
+      maxTerminaPoSlotu={maxTerminaPoSlotu}
     />
   );
 }
@@ -119,6 +126,7 @@ function AdminCellContent({
   draggedTermId,
   setDraggedTermId,
   onDropCell,
+  maxTerminaPoSlotu,
 }: {
   termsInSlot: AdminTerm[];
   emptyDate: string;
@@ -126,8 +134,11 @@ function AdminCellContent({
   draggedTermId: string | null;
   setDraggedTermId: (id: string | null) => void;
   onDropCell: (date: string, slot: number) => void | Promise<void>;
+  maxTerminaPoSlotu: number;
 }) {
   const newTermHref = `/admin/termin/novi?date=${emptyDate}&slot=${emptySlot}`;
+  const slotCount = termsInSlot.length;
+  const canAddParallelTerm = slotCount < maxTerminaPoSlotu;
   if (termsInSlot.length === 0) {
     return (
       <Link
@@ -192,6 +203,18 @@ function AdminCellContent({
           </Link>
         );
       })}
+      {canAddParallelTerm ? (
+        <Link
+          href={newTermHref}
+          className="block rounded-lg border border-dashed border-stone-200 p-1.5 text-stone-500 hover:border-amber-400 hover:bg-amber-50/50 hover:text-amber-800 text-xs text-center"
+        >
+          + Dodaj još termin u ovom slotu ({slotCount}/{maxTerminaPoSlotu})
+        </Link>
+      ) : (
+        <p className="text-[0.7rem] text-stone-400 px-1">
+          Slot pun ({maxTerminaPoSlotu} termina). Povećajte limit u Admin → Podešavanja ili izaberite drugo vreme.
+        </p>
+      )}
     </div>
   );
 }
@@ -204,6 +227,7 @@ function AdminWeekView({
   draggedTermId,
   setDraggedTermId,
   onDropCell,
+  maxTerminaPoSlotu,
 }: {
   startOfWeek: string;
   terms: AdminTerm[];
@@ -212,6 +236,7 @@ function AdminWeekView({
   draggedTermId: string | null;
   setDraggedTermId: (id: string | null) => void;
   onDropCell: (date: string, slot: number) => void | Promise<void>;
+  maxTerminaPoSlotu: number;
 }) {
   const dates = getWeekDates(startOfWeek);
   const prevWeek = (() => {
@@ -269,6 +294,7 @@ function AdminWeekView({
                         draggedTermId={draggedTermId}
                         setDraggedTermId={setDraggedTermId}
                         onDropCell={onDropCell}
+                        maxTerminaPoSlotu={maxTerminaPoSlotu}
                       />
                     </td>
                   );
@@ -289,6 +315,7 @@ function AdminDayView({
   base,
   draggedTermId,
   onDropCell,
+  maxTerminaPoSlotu,
 }: {
   date: string;
   terms: AdminTerm[];
@@ -296,6 +323,7 @@ function AdminDayView({
   base: string;
   draggedTermId: string | null;
   onDropCell: (date: string, slot: number) => void | Promise<void>;
+  maxTerminaPoSlotu: number;
 }) {
   const label = new Date(date + 'T12:00:00').toLocaleDateString('sr-Latn-RS', {
     weekday: 'long',
@@ -341,6 +369,7 @@ function AdminDayView({
                   draggedTermId={draggedTermId}
                   setDraggedTermId={() => {}}
                   onDropCell={onDropCell}
+                  maxTerminaPoSlotu={maxTerminaPoSlotu}
                 />
               </div>
             </div>

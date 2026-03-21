@@ -58,14 +58,25 @@ export default async function AdminTerminNoviPage({
     <div className="max-w-lg">
       <h1 className="text-xl font-semibold text-stone-800 mb-2">Zakaži termin za instruktora</h1>
       <div className="rounded-lg border border-stone-200 bg-stone-50 px-4 py-3 text-sm text-stone-700 mb-6">
-        <p className="font-medium mb-1">Pravila za jedan slot (datum + vreme):</p>
+        <p className="font-medium mb-1">Paralelni termini u istom vremenu (slotu):</p>
         <ul className="list-disc list-inside space-y-0.5">
-          <li>Max broj termina u slotu = podešavanje (Admin → Podešavanja).</li>
-          <li><strong>A)</strong> Jedan predavač može imati samo <strong>jedan</strong> termin u tom slotu.</li>
-          <li><strong>B)</strong> Jedna učionica može biti korišćena samo u <strong>jednom</strong> terminu u tom slotu.</li>
-          <li>U formi redosled: <strong>vrsta časa</strong> → <strong>kategorija</strong> (individualni / grupni) → <strong>deca</strong>. Grupni = više dece, jedan predavač, jedna učionica.</li>
+          <li>
+            U istom slotu (npr. 9:00) može biti <strong>do {maxTerminaPoSlotu} termina odjednom</strong> — kao u podešavanjima (Admin → Podešavanja). To su paralelne radionice: različiti predavači, različite učionice.
+          </li>
+          <li>
+            Svaki od tih termina može biti <strong>individualni</strong> (jedno dete) ili <strong>grupni</strong> (više dece u tom terminu), prema izabranoj kategoriji.
+          </li>
+          <li>
+            <strong>A)</strong> Isti predavač: najviše <strong>jedan</strong> termin u tom slotu.
+          </li>
+          <li>
+            <strong>B)</strong> Ista učionica: najviše <strong>jedan</strong> termin u tom slotu.
+          </li>
+          <li>U formi redosled: <strong>vrsta časa</strong> → <strong>kategorija</strong> → <strong>deca</strong>.</li>
         </ul>
-        <p className="mt-2 text-stone-600">U izboru su samo slobodni instruktori i učionice. Iz kalendara se otvara slot sa datumom i vremenom.</p>
+        <p className="mt-2 text-stone-600">
+          U padajućim listama vide se samo predavači i učionice koji su još slobodni u izabranom slotu. Iz kalendara koristite „+“ ili „Dodaj još termin u ovom slotu“.
+        </p>
       </div>
       <AdminTerminForm
         instructors={(instructors ?? []) as { id: string; ime: string; prezime: string }[]}

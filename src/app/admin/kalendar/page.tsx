@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import AdminCalendarView, { type AdminTerm } from './AdminCalendarView';
 import AdminCalendarFilters from './AdminCalendarFilters';
+import { getMaxTerminaPoSlotu } from '@/lib/settings';
 
 export default async function AdminKalendarPage({
   searchParams,
@@ -64,7 +65,7 @@ export default async function AdminKalendarPage({
   }
 
   const adminSupabase = createAdminClient();
-  const [{ data: termsRaw }, { data: instructorsList }, { data: classroomsList }, { data: clientsList }] = await Promise.all([
+  const [{ data: termsRaw }, { data: instructorsList }, { data: classroomsList }, { data: clientsList }, maxTerminaPoSlotu] = await Promise.all([
     adminSupabase
       .from('terms')
       .select('*, instructor:instructors(id, ime, prezime, color), classroom:classrooms(id, naziv, color), predavanja(*, client:clients(id, ime, prezime))')
@@ -75,6 +76,7 @@ export default async function AdminKalendarPage({
     adminSupabase.from('instructors').select('id, ime, prezime, color').order('prezime').order('ime'),
     adminSupabase.from('classrooms').select('id, naziv').order('naziv'),
     adminSupabase.from('clients').select('id, ime, prezime').order('prezime').order('ime'),
+    getMaxTerminaPoSlotu(),
   ]);
 
   let terms: AdminTerm[] = (termsRaw ?? []).map((t) => {
@@ -154,12 +156,17 @@ export default async function AdminKalendarPage({
           </div>
         </div>
       )}
+      <p className="text-sm text-stone-600 mb-4 max-w-3xl">
+        U jednom slotu (npr. 9:00) može biti do <strong>{maxTerminaPoSlotu}</strong> paralelnih termina — svaki svoj predavač i svoja učionica.
+        Svaki od njih može biti <strong>individualni</strong> (jedno dete) ili <strong>grupni</strong> (više dece). Ispod postojećih termina u ćeliji: „Dodaj još termin u ovom slotu“.
+      </p>
       <AdminCalendarView
         terms={terms}
         view={view}
         startOfWeek={startOfWeek}
         singleDay={singleDay}
         monthStart={monthStart}
+        maxTerminaPoSlotu={maxTerminaPoSlotu}
       />
       <p className="mt-4">
         <Link href="/admin" className="text-sm text-amber-700 hover:underline">← Nazad na admin</Link>
