@@ -67,7 +67,7 @@ export default function ClientForm({
         toast.success('Klijent sačuvan.');
       } else {
         console.log('[ClientForm] insert client', clientPayload.ime, clientPayload.prezime);
-        const result = await createClientAsInstructor(clientPayload, 0);
+        const result = await createClientAsInstructor(clientPayload, 0, instructorId);
         if (result.error) {
           console.error('[ClientForm] create failed', result.error);
           setError(result.error);
