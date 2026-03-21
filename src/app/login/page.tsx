@@ -7,7 +7,10 @@ import toast from 'react-hot-toast';
 const REASON_MESSAGES: Record<string, string> = {
   no_session: 'Sesija nije pronađena ili je istekla. Ulogujte se ponovo.',
   not_authorized: 'Niste ovlašćeni za tu stranicu.',
-  no_instructor: 'Za ovaj nalog nije pronađen instruktor. Dodajte se u admin_users ili kao instruktor.',
+  no_instructor:
+    'Za ovaj nalog nije pronađen predavač ni učenik u sistemu. Ako ste učenik, instruktor mora u vašoj kartici klijenta da unese isti email u polje „Email za prijavu učenika” kao što koristite ovde.',
+  client_email_taken:
+    'Ovaj email za učenika je već povezan sa drugim nalogom. Javite se adminu ili instruktoru.',
   error_rls: 'Greška pri proveri uloge (RLS). U Supabase SQL Editoru pokrenite FULL_RESET_AND_MIGRATE.sql ili migraciju 015_rls_break_recursion.sql.',
 };
 

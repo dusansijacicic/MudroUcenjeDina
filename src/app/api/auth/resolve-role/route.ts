@@ -1,10 +1,10 @@
 import { createClient } from '@/lib/supabase/server';
-import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse } from 'next/server';
+import { resolvePostAuthPath } from '@/lib/resolve-post-auth-path';
 
 /**
- * Nakon logina: proveri ulogu preko service role (zaobilazi RLS) i preusmeri na admin/dashboard/ucenik.
- * Klijent ne šalje upite na instructors/clients pa nema 500 u konzoli.
+ * Nakon logina: uloga (admin / predavač / učenik) i preusmerenje.
+ * Učenik: i kada je samo unešen login_email kod klijenta — poziva se link_client_to_user.
  */
 export async function GET(request: Request) {
   const supabase = await createClient();
@@ -15,20 +15,11 @@ export async function GET(request: Request) {
     return NextResponse.redirect(new URL('/login?reason=no_session', request.url));
   }
 
-  let target = '/dashboard';
   try {
-    const admin = createAdminClient();
-    const [admRes, instRes, clRes] = await Promise.all([
-      admin.from('admin_users').select('user_id').eq('user_id', user.id).maybeSingle(),
-      admin.from('instructors').select('id').eq('user_id', user.id).maybeSingle(),
-      admin.from('clients').select('id').eq('user_id', user.id).maybeSingle(),
-    ]);
-    if (admRes.data) target = '/admin';
-    else if (instRes.data) target = '/dashboard';
-    else if (clRes.data) target = '/ucenik';
-  } catch {
-    // nema SUPABASE_SERVICE_ROLE_KEY ili greška – ostani na dashboard
+    const path = await resolvePostAuthPath(user, supabase);
+    return NextResponse.redirect(new URL(path, request.url));
+  } catch (e) {
+    console.error('[resolve-role]', e);
+    return NextResponse.redirect(new URL('/login?reason=error_rls', request.url));
   }
-
-  return NextResponse.redirect(new URL(target, request.url));
 }
