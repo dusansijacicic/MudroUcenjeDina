@@ -25,6 +25,12 @@ export default function UcenikNav({ client }: { client: Client }) {
           <Link href="/ucenik/kalendar" className="font-semibold text-[var(--kid-teal)] transition-smooth hover:text-[#0f766e] focus:outline-none focus:ring-2 focus:ring-[var(--kid-teal)] rounded-lg px-3 py-2 bg-[var(--kid-teal)]/15 min-h-[44px] flex items-center">
             Kalendar
           </Link>
+          <Link
+            href="/ucenik/profil"
+            className="font-semibold text-[var(--kid-text)] transition-smooth hover:text-[var(--kid-teal)] focus:outline-none focus:ring-2 focus:ring-[var(--kid-teal)] rounded-lg px-3 py-2 min-h-[44px] flex items-center"
+          >
+            Profil
+          </Link>
         </nav>
         <div className="flex items-center gap-2">
           <span className="text-sm text-[var(--kid-text-muted)] truncate max-w-[140px] sm:max-w-none">

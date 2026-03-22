@@ -4,10 +4,12 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getDashboardInstructor } from '@/lib/dashboard';
 import { revalidatePath } from 'next/cache';
+import { normalizeClientPol } from '@/lib/client-pol';
 
 type ClientPayload = {
   ime: string;
   prezime: string;
+  pol: string | null;
   godiste: number | null;
   razred: string | null;
   skola: string | null;
@@ -59,9 +61,10 @@ export async function createClientAsInstructor(
     effectiveInstructorId = instructor.id;
   }
 
+  const row = { ...payload, pol: normalizeClientPol(payload.pol) };
   const { data: newClient, error: insertErr } = await admin
     .from('clients')
-    .insert(payload)
+    .insert(row)
     .select('id')
     .single();
   if (insertErr || !newClient) {
@@ -124,7 +127,8 @@ export async function updateClientAsInstructor(
     return { error: 'Kontakt telefon je obavezan.' };
   }
 
-  const { error: updateErr } = await admin.from('clients').update(payload).eq('id', clientId);
+  const row = { ...payload, pol: normalizeClientPol(payload.pol) };
+  const { error: updateErr } = await admin.from('clients').update(row).eq('id', clientId);
   if (updateErr) {
     console.error('[klijenti] clients update', updateErr.message);
     return { error: updateErr.message };

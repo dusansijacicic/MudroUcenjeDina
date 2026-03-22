@@ -3,6 +3,12 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { getStanjePoVrstamaZaKlijenteBatch } from '@/app/admin/actions';
+import { CLIENT_POL_OPTIONS } from '@/lib/client-pol';
+
+function polLabel(pol: string | null | undefined): string {
+  if (!pol) return '—';
+  return CLIENT_POL_OPTIONS.find((o) => o.value === pol)?.label ?? pol;
+}
 
 export default async function AdminSviKlijentiPage() {
   const supabase = await createClient();
@@ -31,6 +37,7 @@ export default async function AdminSviKlijentiPage() {
         id: string;
         ime: string;
         prezime: string;
+        pol?: string | null;
         login_email?: string | null;
         godiste?: number;
         razred?: string;
@@ -46,6 +53,7 @@ export default async function AdminSviKlijentiPage() {
       id: string;
       ime: string;
       prezime: string;
+      pol?: string | null;
       login_email?: string;
       godiste?: number;
       razred?: string;
@@ -107,6 +115,7 @@ export default async function AdminSviKlijentiPage() {
           <thead className="bg-stone-50 border-b border-stone-200">
             <tr>
               <th className="text-left p-3 font-medium text-stone-600">Ime i prezime</th>
+              <th className="text-left p-3 font-medium text-stone-600">Pol</th>
               <th className="text-left p-3 font-medium text-stone-600">Datum testiranja</th>
               <th className="text-left p-3 font-medium text-stone-600">Email za prijavu</th>
               <th className="text-left p-3 font-medium text-stone-600">Godište / Razred</th>
@@ -130,6 +139,7 @@ export default async function AdminSviKlijentiPage() {
                     </span>
                   )}
                 </td>
+                <td className="p-3 text-stone-600 whitespace-nowrap">{polLabel(client.pol)}</td>
                 <td className="p-3 text-stone-600 whitespace-nowrap">
                   {client.datum_testiranja
                     ? new Date(client.datum_testiranja + 'T12:00:00').toLocaleDateString('sr-Latn-RS')

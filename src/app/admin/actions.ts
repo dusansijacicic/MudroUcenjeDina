@@ -7,6 +7,7 @@ import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { INSTRUCTOR_COLORS, isTermInPast } from '@/lib/constants';
 import { termMozeNovoPredavanje } from '@/lib/settings';
+import { normalizeClientPol } from '@/lib/client-pol';
 
 export async function createInstructorAsAdmin(formData: FormData): Promise<{ error?: string; success?: boolean }> {
   const supabase = await createClient();
@@ -567,6 +568,7 @@ export async function updateClientAsAdmin(
   payload: {
     ime: string;
     prezime: string;
+    pol: string | null;
     godiste: number | null;
     razred: string | null;
     skola: string | null;
@@ -583,7 +585,8 @@ export async function updateClientAsAdmin(
   if (!payload.kontakt_telefon?.trim()) {
     return { error: 'Kontakt telefon je obavezan.' };
   }
-  const { error } = await admin.from('clients').update(payload).eq('id', clientId);
+  const row = { ...payload, pol: normalizeClientPol(payload.pol) };
+  const { error } = await admin.from('clients').update(row).eq('id', clientId);
   if (error) return { error: error.message };
   revalidatePath('/admin/klijenti');
   revalidatePath(`/admin/klijenti/${clientId}`);

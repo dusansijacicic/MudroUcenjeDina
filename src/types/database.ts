@@ -23,6 +23,8 @@ export interface Client {
   login_email: string | null; // email za prijavu učenika (povezuje nalog sa klijentom)
   ime: string;
   prezime: string;
+  /** Pol učenika: muski / zenski; opciono. */
+  pol?: string | null;
   godiste: number | null;
   razred: string | null;
   skola: string | null;

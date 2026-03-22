@@ -77,6 +77,11 @@ SQL fajlovi iz projekta **ne pokreću se automatski**. Morate ih ručno izvršit
    - Kreira `term_categories` (naziv, opis, `jedan_klijent_po_terminu`), ubacuje Individualni / Grupni; dodaje `terms.term_category_id`, briše `terms.kategorija`. RLS: svi ulogovani čitaju, samo admin menja.
    - Ako si krenuo od **FULL_RESET_AND_MIGRATE.sql**, u njemu je već ova šema (nema potrebe za 023+024 odvojeno).
 
+   ### Migracije 025–027 – učenik / email / pol / profil
+   - **025** `025_link_client_email_case_insensitive.sql` – `link_client_to_user` poredi email bez obzira na velika slova.
+   - **026** `026_clients_pol.sql` – kolona `clients.pol` (`muski` / `zenski`, opciono).
+   - **027** `027_link_client_pol_ucenik_profil.sql` – `link_client_to_user(datum, pol)` i funkcija `ucenik_update_own_profile` za stranicu „Moj profil” učenika.
+
 4. **Provera**  
    U levom meniju otvori **Table Editor**. Trebalo bi da vidiš tabele: `instructors`, `clients`, `terms`, `predavanja`, `admin_users`, `instructor_clients`. Ako ih nema, vrati se na korak 3 i pokreni migracije redom.
 

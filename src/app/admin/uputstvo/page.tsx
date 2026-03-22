@@ -53,6 +53,8 @@ export default function AdminUputstvoPage() {
         badgeClass="bg-emerald-700 text-white"
         intro="Nalog povezan sa redom u tabeli clients (npr. posle registracije na /registracija-ucenik). Ulaz na /ucenik."
         items={[
+          'Na /ucenik/profil može uneti ili izmeniti pol i datum testiranja; ime i prezime unosi predavač u kartici klijenta.',
+          'Pri registraciji može uneti pol i datum testiranja (ako instruktor nije uneo email za prijavu, prvo ga tražiti).',
           'Vidi sopstvene zakazane časove i kalendar vezan za svog predavača.',
           'Može poslati zahtev za novi čas (datum/slot) u okviru pravila dostupnosti predavača.',
           'Ne vidi: tuđe klijente, admin panel, uplate drugih, podešavanja škole.',

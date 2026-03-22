@@ -6,6 +6,7 @@ import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { updateClientAsAdmin } from '@/app/admin/actions';
 import type { Client } from '@/types/database';
+import ClientPolSelect from '@/components/ClientPolSelect';
 
 export default function AdminClientForm({
   client,
@@ -17,6 +18,7 @@ export default function AdminClientForm({
   const router = useRouter();
   const [ime, setIme] = useState(client.ime ?? '');
   const [prezime, setPrezime] = useState(client.prezime ?? '');
+  const [pol, setPol] = useState(client.pol ?? '');
   const [godiste, setGodiste] = useState(client.godiste != null ? String(client.godiste) : '');
   const [razred, setRazred] = useState(client.razred ?? '');
   const [skola, setSkola] = useState(client.skola ?? '');
@@ -54,6 +56,7 @@ export default function AdminClientForm({
     const payload = {
       ime: ime.trim(),
       prezime: prezime.trim(),
+      pol: pol.trim() || null,
       godiste: godiste ? parseInt(godiste, 10) : null,
       razred: razred.trim() || null,
       skola: skola.trim() || null,
@@ -85,7 +88,8 @@ export default function AdminClientForm({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      <div className="grid grid-cols-2 gap-4">
+      <p className="text-sm font-semibold text-stone-800">Osnovni podaci</p>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
         <div>
           <label className="block text-sm font-medium text-stone-700 mb-1">Ime</label>
           <input type="text" value={ime} onChange={(e) => setIme(e.target.value)} required className="w-full rounded-lg border border-stone-300 px-3 py-2 text-stone-800" />
@@ -94,6 +98,7 @@ export default function AdminClientForm({
           <label className="block text-sm font-medium text-stone-700 mb-1">Prezime</label>
           <input type="text" value={prezime} onChange={(e) => setPrezime(e.target.value)} required className="w-full rounded-lg border border-stone-300 px-3 py-2 text-stone-800" />
         </div>
+        <ClientPolSelect id="admin-client-pol" value={pol} onChange={setPol} />
       </div>
       <div className="grid grid-cols-2 gap-4">
         <div>

@@ -6,6 +6,7 @@ import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { createClientAsInstructor, updateClientAsInstructor } from './actions';
 import type { Client } from '@/types/database';
+import ClientPolSelect from '@/components/ClientPolSelect';
 
 interface ClientFormProps {
   instructorId: string;
@@ -25,6 +26,7 @@ export default function ClientForm({
   const router = useRouter();
   const [ime, setIme] = useState(client?.ime ?? '');
   const [prezime, setPrezime] = useState(client?.prezime ?? '');
+  const [pol, setPol] = useState(client?.pol ?? '');
   const [godiste, setGodiste] = useState(
     client?.godiste != null ? String(client.godiste) : ''
   );
@@ -56,6 +58,7 @@ export default function ClientForm({
     const clientPayload = {
       ime: ime.trim(),
       prezime: prezime.trim(),
+      pol: pol.trim() || null,
       godiste: godiste ? parseInt(godiste, 10) : null,
       razred: razred.trim() || null,
       skola: skola.trim() || null,
@@ -101,7 +104,8 @@ export default function ClientForm({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      <div className="grid grid-cols-2 gap-4">
+      <p className="text-sm font-semibold text-stone-800">Osnovni podaci</p>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
         <div>
           <label className="block text-sm font-medium text-stone-700 mb-1">
             Ime
@@ -126,6 +130,7 @@ export default function ClientForm({
             className="w-full rounded-lg border border-stone-300 px-3 py-2 text-stone-800"
           />
         </div>
+        <ClientPolSelect id="dashboard-client-pol" value={pol} onChange={setPol} />
       </div>
       <div className="grid grid-cols-2 gap-4">
         <div>
