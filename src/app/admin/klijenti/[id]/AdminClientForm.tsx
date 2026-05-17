@@ -8,12 +8,16 @@ import { updateClientAsAdmin } from '@/app/admin/actions';
 import type { Client } from '@/types/database';
 import ClientPolSelect from '@/components/ClientPolSelect';
 
+type TermTypeOption = { id: string; naziv: string };
+
 export default function AdminClientForm({
   client,
   redirectAfterSave,
+  termTypes = [],
 }: {
   client: Client;
   redirectAfterSave: string;
+  termTypes?: TermTypeOption[];
 }) {
   const router = useRouter();
   const [ime, setIme] = useState(client.ime ?? '');
@@ -30,6 +34,9 @@ export default function AdminClientForm({
   );
   const [datum_testiranja, setDatumTestiranja] = useState(
     client.datum_testiranja?.slice(0, 10) ?? ''
+  );
+  const [accessibleTermTypeIds, setAccessibleTermTypeIds] = useState<string[]>(
+    (client as { accessible_term_type_ids?: string[] }).accessible_term_type_ids ?? []
   );
   const [napomena, setNapomena] = useState(client.napomena ?? '');
   const [loading, setLoading] = useState(false);
@@ -66,6 +73,7 @@ export default function AdminClientForm({
       napomena: napomena.trim() || null,
       popust_percent: popustNum,
       datum_testiranja: datum_testiranja.trim() || null,
+      accessible_term_type_ids: accessibleTermTypeIds,
     };
     try {
       const result = await updateClientAsAdmin(client.id, payload);
@@ -140,6 +148,38 @@ export default function AdminClientForm({
         />
         <p className="mt-1 text-xs text-stone-500">Opciono. Lista klijenata sortira se po ovom datumu (noviji prvi).</p>
       </div>
+      {termTypes.length > 0 && (
+        <div className="rounded-lg border border-stone-200 bg-stone-50/80 p-3 space-y-2">
+          <label className="block text-sm font-medium text-stone-700">
+            Vrste časova <span className="text-stone-400 font-normal">(opciono)</span>
+          </label>
+          <p className="text-xs text-stone-500">
+            Označite kojim vrstama časova ovaj učenik ima pristup. Prazno = sve vrste.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {termTypes.map((tt) => {
+              const checked = accessibleTermTypeIds.includes(tt.id);
+              return (
+                <label key={tt.id} className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() =>
+                      setAccessibleTermTypeIds(
+                        checked
+                          ? accessibleTermTypeIds.filter((id) => id !== tt.id)
+                          : [...accessibleTermTypeIds, tt.id]
+                      )
+                    }
+                    className="rounded border-stone-300 text-amber-600"
+                  />
+                  <span className="text-sm text-stone-800">{tt.naziv}</span>
+                </label>
+              );
+            })}
+          </div>
+        </div>
+      )}
       <div>
         <label className="block text-sm font-medium text-stone-700 mb-1">
           Napomena <span className="text-stone-400 font-normal">(opciono)</span>

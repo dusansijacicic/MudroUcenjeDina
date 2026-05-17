@@ -8,9 +8,13 @@ import { createClientAsInstructor, updateClientAsInstructor } from './actions';
 import type { Client } from '@/types/database';
 import ClientPolSelect from '@/components/ClientPolSelect';
 
+type TermTypeOption = { id: string; naziv: string };
+
 interface ClientFormProps {
   instructorId: string;
   client?: Client | null;
+  /** Sve vrste termina za prikaz multi-selecta pristupa */
+  termTypes?: TermTypeOption[];
   /** Ako je setovan, posle čuvanja redirect ovde (npr. za admin: /admin/view/123/klijenti) */
   redirectAfterSave?: string;
   /** Tekst za „Nazad” / „Odustani” link (opciono) */
@@ -20,6 +24,7 @@ interface ClientFormProps {
 export default function ClientForm({
   instructorId,
   client,
+  termTypes = [],
   redirectAfterSave,
   cancelLabel,
 }: ClientFormProps) {
@@ -43,6 +48,9 @@ export default function ClientForm({
     (client as { datum_testiranja?: string | null })?.datum_testiranja?.slice(0, 10) ?? ''
   );
   const [napomena, setNapomena] = useState(client?.napomena ?? '');
+  const [accessibleTermTypeIds, setAccessibleTermTypeIds] = useState<string[]>(
+    (client as { accessible_term_type_ids?: string[] })?.accessible_term_type_ids ?? []
+  );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -67,6 +75,7 @@ export default function ClientForm({
       login_email: login_email.trim() || null,
       napomena: napomena.trim() || null,
       datum_testiranja: datum_testiranja.trim() || null,
+      accessible_term_type_ids: accessibleTermTypeIds,
     };
     try {
       if (client) {
@@ -204,6 +213,38 @@ export default function ClientForm({
           className="w-full max-w-[220px] rounded-lg border border-stone-300 px-3 py-2 text-stone-800"
         />
       </div>
+      {termTypes.length > 0 && (
+        <div className="rounded-lg border border-stone-200 bg-stone-50/80 p-3 space-y-2">
+          <label className="block text-sm font-medium text-stone-700">
+            Vrste časova <span className="text-stone-400 font-normal">(opciono)</span>
+          </label>
+          <p className="text-xs text-stone-500">
+            Označite kojim vrstama časova ovaj učenik ima pristup. Ako ništa nije označeno, dostupne su sve vrste.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {termTypes.map((tt) => {
+              const checked = accessibleTermTypeIds.includes(tt.id);
+              return (
+                <label key={tt.id} className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() =>
+                      setAccessibleTermTypeIds(
+                        checked
+                          ? accessibleTermTypeIds.filter((id) => id !== tt.id)
+                          : [...accessibleTermTypeIds, tt.id]
+                      )
+                    }
+                    className="rounded border-stone-300 text-amber-600"
+                  />
+                  <span className="text-sm text-stone-800">{tt.naziv}</span>
+                </label>
+              );
+            })}
+          </div>
+        </div>
+      )}
       <div>
         <label className="block text-sm font-medium text-stone-700 mb-1">
           Napomena <span className="text-stone-400 font-normal">(opciono)</span>

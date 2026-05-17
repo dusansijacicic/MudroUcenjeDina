@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { redirect, notFound } from 'next/navigation';
 import Link from 'next/link';
 import ClientForm from '@/app/dashboard/klijenti/ClientForm';
+import { getTermTypes } from '@/app/admin/actions';
 
 export default async function AdminViewNoviKlijentPage({
   params,
@@ -31,7 +32,7 @@ export default async function AdminViewNoviKlijentPage({
     .single();
   if (!instructor) notFound();
 
-  const listHref = `/admin/view/${id}/klijenti`;
+  const [termTypes, listHref] = [await getTermTypes(), `/admin/view/${id}/klijenti`];
 
   return (
     <div className="max-w-lg">
@@ -43,6 +44,7 @@ export default async function AdminViewNoviKlijentPage({
       </p>
       <ClientForm
         instructorId={instructor.id}
+        termTypes={termTypes}
         redirectAfterSave={listHref}
         cancelLabel="Nazad na klijente"
       />

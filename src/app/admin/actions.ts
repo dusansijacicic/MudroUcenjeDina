@@ -89,7 +89,7 @@ export async function getTakenForSlot(
   date: string,
   slotIndex: number
 ): Promise<{ takenInstructorIds: string[]; takenClassroomIds: string[] }> {
-  const slot = Math.min(12, Math.max(0, slotIndex));
+  const slot = Math.min(15, Math.max(0, slotIndex));
   const dateStr = date.slice(0, 10);
   const admin = createAdminClient();
   const { data: terms } = await admin
@@ -126,7 +126,7 @@ export async function createTermAsAdmin(
     .single();
   if (!admin) return { error: 'Samo admin može da zakazuje termine za instruktore.' };
 
-  const slot = Math.min(12, Math.max(0, slotIndex));
+  const slot = Math.min(15, Math.max(0, slotIndex));
   const dateStr = date.slice(0, 10);
   const adminSupabase = createAdminClient();
 
@@ -340,6 +340,85 @@ export async function deletePredavanjeAsAdmin(predavanjeId: string, termId: stri
   return {};
 }
 
+/**
+ * Menja instruktora za jedno predavanje (administratorska operacija).
+ * Pronalazi ili kreira termin novog instruktora na istom datumu i slotu,
+ * zatim premešta predavanje u taj termin.
+ */
+export async function reassignPredavanjeInstructorAsAdmin(
+  predavanjeId: string,
+  currentTermId: string,
+  newInstructorId: string,
+  termDate: string,
+  slotIndex: number
+): Promise<{ error?: string; newTermId?: string }> {
+  const { admin, error: authErr } = await requireAdmin();
+  if (authErr || !admin) return { error: authErr ?? 'Niste ovlašćeni.' };
+
+  const { data: pred } = await admin
+    .from('predavanja')
+    .select('id, client_id, term_id')
+    .eq('id', predavanjeId)
+    .single();
+  if (!pred) return { error: 'Radionica nije pronađena.' };
+
+  // Tražimo postojeći termin novog instruktora u istom slotu
+  const { data: existingTerm } = await admin
+    .from('terms')
+    .select('id')
+    .eq('instructor_id', newInstructorId)
+    .eq('date', termDate.slice(0, 10))
+    .eq('slot_index', slotIndex)
+    .maybeSingle();
+
+  let newTermId: string;
+  if (existingTerm) {
+    newTermId = existingTerm.id as string;
+  } else {
+    // Kreiramo novi termin za novog instruktora
+    const { data: inserted, error: insErr } = await admin
+      .from('terms')
+      .insert({
+        instructor_id: newInstructorId,
+        date: termDate.slice(0, 10),
+        slot_index: slotIndex,
+      })
+      .select('id')
+      .single();
+    if (insErr || !inserted) return { error: insErr?.message ?? 'Greška pri kreiranju termina.' };
+    newTermId = inserted.id as string;
+  }
+
+  // Proveravamo da ovo dete nije već u novom terminu
+  const { data: dup } = await admin
+    .from('predavanja')
+    .select('id')
+    .eq('term_id', newTermId)
+    .eq('client_id', pred.client_id)
+    .maybeSingle();
+  if (dup) return { error: 'Ovo dete je već u terminu novog instruktora.' };
+
+  // Premešta predavanje
+  const { error: updErr } = await admin
+    .from('predavanja')
+    .update({ term_id: newTermId })
+    .eq('id', predavanjeId);
+  if (updErr) return { error: updErr.message };
+
+  // Osigurava link instruktor–klijent za novog instruktora
+  const { error: icErr } = await admin
+    .from('instructor_clients')
+    .insert({ instructor_id: newInstructorId, client_id: pred.client_id, placeno_casova: 0 });
+  if (icErr && icErr.code !== '23505') {
+    console.warn('[admin] instructor_clients upsert (non-fatal)', icErr.message);
+  }
+
+  revalidatePath('/admin/kalendar');
+  revalidatePath(`/admin/termin/${currentTermId}`);
+  revalidatePath(`/admin/termin/${newTermId}`);
+  return { newTermId };
+}
+
 /** Premeštanje termina: ista pravila – u ciljnom slotu moraju biti jedinstveni predavač i učionica, i ne sme se premašiti max termina po slotu. */
 export async function moveTermAsAdmin(
   termId: string,
@@ -348,7 +427,7 @@ export async function moveTermAsAdmin(
 ): Promise<{ error?: string }> {
   const { admin, error: authErr } = await requireAdmin();
   if (authErr || !admin) return { error: authErr ?? 'Niste ovlašćeni.' };
-  const slot = Math.min(12, Math.max(0, newSlotIndex));
+  const slot = Math.min(15, Math.max(0, newSlotIndex));
   const dateStr = newDate.slice(0, 10);
 
   const { data: term } = await admin.from('terms').select('instructor_id, classroom_id, date, slot_index').eq('id', termId).single();
@@ -578,6 +657,7 @@ export async function updateClientAsAdmin(
     napomena: string | null;
     popust_percent: number | null;
     datum_testiranja: string | null;
+    accessible_term_type_ids?: string[];
   }
 ): Promise<{ error?: string }> {
   const { admin, error: authErr } = await requireAdmin();
@@ -591,6 +671,53 @@ export async function updateClientAsAdmin(
   revalidatePath('/admin/klijenti');
   revalidatePath(`/admin/klijenti/${clientId}`);
   return {};
+}
+
+/**
+ * Admin kreira klijenta bez dodele instruktora (instruktor se dodaje kasnije kroz edit ili pri prvom zakazivanju).
+ */
+export async function createClientAsAdminDirect(payload: {
+  ime: string;
+  prezime: string;
+  pol: string | null;
+  godiste: number | null;
+  razred: string | null;
+  skola: string | null;
+  roditelj: string | null;
+  kontakt_telefon: string | null;
+  login_email: string | null;
+  napomena: string | null;
+  datum_testiranja: string | null;
+  instructorId?: string | null;
+}): Promise<{ error?: string; clientId?: string }> {
+  const { admin, error: authErr } = await requireAdmin();
+  if (authErr || !admin) return { error: authErr ?? 'Samo admin.' };
+  if (!payload.kontakt_telefon?.trim()) return { error: 'Kontakt telefon je obavezan.' };
+
+  const { instructorId, ...rest } = payload;
+  const row = { ...rest, pol: normalizeClientPol(rest.pol) };
+  const { data: newClient, error: insErr } = await admin
+    .from('clients')
+    .insert(row)
+    .select('id')
+    .single();
+  if (insErr || !newClient) return { error: insErr?.message ?? 'Klijent nije kreiran.' };
+
+  if (instructorId) {
+    const { error: linkErr } = await admin.from('instructor_clients').insert({
+      instructor_id: instructorId,
+      client_id: newClient.id,
+      placeno_casova: 0,
+    });
+    if (linkErr && linkErr.code !== '23505') {
+      console.warn('[admin] instructor_clients insert (non-fatal)', linkErr.message);
+    }
+  }
+
+  revalidatePath('/admin/klijenti');
+  revalidatePath('/admin/kalendar');
+  if (instructorId) revalidatePath(`/admin/view/${instructorId}/klijenti`);
+  return { clientId: newClient.id };
 }
 
 /**

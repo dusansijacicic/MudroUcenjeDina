@@ -241,7 +241,7 @@ export async function moveTermAsInstructor(
   } catch (e) {
     return { error: 'Server greška.' };
   }
-  const slot = Math.min(12, Math.max(0, newSlotIndex));
+  const slot = Math.min(15, Math.max(0, newSlotIndex));
   const dateStr = newDate.slice(0, 10);
 
   const { data: term } = await admin

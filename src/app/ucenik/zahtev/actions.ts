@@ -20,7 +20,7 @@ export async function createZahtevAsClient(
     client_id: clientId,
     instructor_id: instructorId,
     requested_date: requestedDate.slice(0, 10),
-    requested_slot_index: Math.min(12, Math.max(0, requestedSlotIndex)),
+    requested_slot_index: Math.min(15, Math.max(0, requestedSlotIndex)),
     status: 'pending',
   });
   if (error) return { error: error.message };

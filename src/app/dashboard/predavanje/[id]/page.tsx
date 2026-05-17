@@ -17,7 +17,7 @@ async function movePredavanjeToAnotherTerm(formData: FormData) {
   const targetSlotRaw = String(formData.get('target_slot') ?? '');
 
   const targetDate = targetDateRaw.slice(0, 10);
-  const targetSlot = Math.min(12, Math.max(0, Number.isNaN(Number(targetSlotRaw)) ? 0 : Number(targetSlotRaw)));
+  const targetSlot = Math.min(15, Math.max(0, Number.isNaN(Number(targetSlotRaw)) ? 0 : Number(targetSlotRaw)));
 
   const { instructor } = await getDashboardInstructor();
   if (!instructor) {
@@ -136,7 +136,7 @@ export default async function EditPredavanjePage({
   }[];
   clients.sort(
     (a, b) =>
-      (a.prezime ?? '').localeCompare(b.prezime ?? '') || (a.ime ?? '').localeCompare(b.ime ?? '')
+      (a.ime ?? '').localeCompare(b.ime ?? '', 'sr') || (a.prezime ?? '').localeCompare(b.prezime ?? '', 'sr')
   );
   const [termTypes, termCategories, classrooms, termsInSlotRes] = await Promise.all([
     getTermTypes(),

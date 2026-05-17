@@ -78,7 +78,7 @@ export async function potvrdiZahtev(zahtevId: string): Promise<{ error?: string 
   if (targetInstructorId !== instructor.id) return { error: 'Niste ovlašćeni.' };
 
   const dateStr = String(zahtev.requested_date).slice(0, 10);
-  const slot = Math.min(12, Math.max(0, zahtev.requested_slot_index));
+  const slot = Math.min(15, Math.max(0, zahtev.requested_slot_index));
 
   let termId: string;
   const { data: existing } = await admin
@@ -168,7 +168,7 @@ export async function promeniTerminZahtev(
   if (targetInstructorId !== instructor.id) return { error: 'Niste ovlašćeni.' };
 
   const dateStr = newDate.slice(0, 10);
-  const slot = Math.min(12, Math.max(0, newSlotIndex));
+  const slot = Math.min(15, Math.max(0, newSlotIndex));
 
   let termId: string;
   const { data: existing } = await admin

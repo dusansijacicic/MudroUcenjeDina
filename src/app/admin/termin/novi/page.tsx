@@ -25,7 +25,7 @@ export default async function AdminTerminNoviPage({
 
   const params = await searchParams;
   const dateFromUrl = params.date?.slice(0, 10);
-  const slotFromUrl = params.slot != null ? Math.min(12, Math.max(0, parseInt(params.slot, 10) || 0)) : undefined;
+  const slotFromUrl = params.slot != null ? Math.min(15, Math.max(0, parseInt(params.slot, 10) || 0)) : undefined;
 
   const adminSupabase = createAdminClient();
   const { data: instructors } = await adminSupabase

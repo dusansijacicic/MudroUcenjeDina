@@ -53,6 +53,7 @@ export default async function AdminNoviPredavanjePage({
       <AdminPredavanjeForm
         termId={termId}
         termDate={term.date}
+        slotIndex={term.slot_index}
         slotLabel={slotLabel}
         clients={clients}
         termTypes={termTypes}

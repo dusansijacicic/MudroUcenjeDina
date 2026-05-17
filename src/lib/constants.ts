@@ -1,4 +1,4 @@
-// Blokovi termina: početak svakog časa (45 min), od 09:00 do 18:00
+// Blokovi termina: početak svakog časa (45 min), od 09:00 do 20:15
 export const TIME_SLOTS = [
   '09:00',
   '09:45',
@@ -13,15 +13,18 @@ export const TIME_SLOTS = [
   '16:30',
   '17:15',
   '18:00',
+  '18:45',
+  '19:30',
+  '20:15',
 ] as const;
 
 export const SLOT_DURATION_MINUTES = 45;
 
 /** Kraj vremena slota (npr. slot 0 = 09:00–09:45 → "09:45"). */
 export function getSlotEndTime(slotIndex: number): string {
-  if (slotIndex < 0 || slotIndex >= TIME_SLOTS.length) return '18:45';
+  if (slotIndex < 0 || slotIndex >= TIME_SLOTS.length) return '21:00';
   if (slotIndex < TIME_SLOTS.length - 1) return TIME_SLOTS[slotIndex + 1];
-  return '18:45';
+  return '21:00';
 }
 
 /** Da li je termin (datum + slot) već prošao u odnosu na trenutno vreme. */

@@ -19,6 +19,8 @@ type ClientPayload = {
   napomena: string | null;
   /** YYYY-MM-DD ili null */
   datum_testiranja: string | null;
+  /** Vrste termina kojima učenik ima pristup; prazan niz = sve */
+  accessible_term_type_ids?: string[];
 };
 
 /**

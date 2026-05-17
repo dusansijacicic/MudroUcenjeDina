@@ -36,6 +36,8 @@ export interface Client {
   popust_percent?: number | null;
   /** Datum testiranja / upisa (opciono); lista klijenata sortira se po ovom datumu. */
   datum_testiranja?: string | null;
+  /** Vrste termina kojima učenik ima pristup (prazno = sve). */
+  accessible_term_type_ids?: string[];
   created_at: string;
 }
 

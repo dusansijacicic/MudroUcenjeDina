@@ -47,12 +47,16 @@ export default async function NoviPredavanjePage({
   const termsInSlot = termsInSlotRes.data ?? [];
   const takenClassroomIds = termsInSlot.map((t: { classroom_id: string | null }) => t.classroom_id).filter((id: string | null): id is string => id != null);
 
-  const { data: allClients } = await admin.from('clients').select('id, ime, prezime').order('prezime').order('ime');
-  const clients: { id: string; ime: string; prezime: string }[] = (allClients ?? []).map((c) => ({
-    id: c.id,
-    ime: c.ime ?? '',
-    prezime: c.prezime ?? '',
-  }));
+  const { data: clientLinks } = await admin
+    .from('instructor_clients')
+    .select('client:clients(id, ime, prezime)')
+    .eq('instructor_id', instructor.id);
+  const clients: { id: string; ime: string; prezime: string }[] = (
+    (clientLinks ?? []).map((r) => r.client).filter(Boolean) as unknown as { id: string; ime: string; prezime: string }[]
+  ).sort((a, b) =>
+    (a.ime ?? '').localeCompare(b.ime ?? '', 'sr') ||
+    (a.prezime ?? '').localeCompare(b.prezime ?? '', 'sr')
+  );
 
   const clientStanjeList = await Promise.all(
     clients.map(async (c) => ({ clientId: c.id, stanje: await getStanjePoVrstamaZaKlijenta(c.id, instructor.id) }))

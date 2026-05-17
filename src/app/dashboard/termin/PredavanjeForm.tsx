@@ -15,6 +15,7 @@ import {
 import type { Predavanje } from '@/types/database';
 import type { TermCategoryRow } from '@/lib/term-categories';
 import GrupniKlijentiPicker from '@/components/GrupniKlijentiPicker';
+import SingleKlijentPicker from '@/components/SingleKlijentPicker';
 
 type ClientOption = { id: string; ime: string; prezime: string };
 type TermTypeOption = { id: string; naziv: string; opis: string | null };
@@ -312,19 +313,13 @@ export default function PredavanjeForm({
           <label className="block text-sm font-medium text-stone-700 mb-1">
             {isNew ? '3. Klijent' : 'Klijent'}
           </label>
-          <select
+          <SingleKlijentPicker
+            clients={clients}
             value={clientId}
-            onChange={(e) => setClientId(e.target.value)}
-            required={!predavanje}
-            className="w-full rounded-lg border border-stone-300 px-3 py-2 text-stone-800"
-          >
-            <option value="">Izaberite klijenta</option>
-            {clients.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.ime} {c.prezime}
-              </option>
-            ))}
-          </select>
+            onChange={setClientId}
+            disabled={loading}
+            inputId="dashboard-predavanje-klijent-search"
+          />
           {clientId && selectedStanje.length > 0 && (
             <div className="mt-2 rounded-lg bg-stone-50 border border-stone-200 px-3 py-2 text-sm">
               <span className="font-medium text-stone-600">Ostalo časova kod vas: </span>
