@@ -688,6 +688,7 @@ export async function createClientAsAdminDirect(payload: {
   login_email: string | null;
   napomena: string | null;
   datum_testiranja: string | null;
+  accessible_term_type_ids?: string[];
   instructorId?: string | null;
 }): Promise<{ error?: string; clientId?: string }> {
   const { admin, error: authErr } = await requireAdmin();
@@ -695,7 +696,11 @@ export async function createClientAsAdminDirect(payload: {
   if (!payload.kontakt_telefon?.trim()) return { error: 'Kontakt telefon je obavezan.' };
 
   const { instructorId, ...rest } = payload;
-  const row = { ...rest, pol: normalizeClientPol(rest.pol) };
+  const row = {
+    ...rest,
+    pol: normalizeClientPol(rest.pol),
+    accessible_term_type_ids: rest.accessible_term_type_ids ?? [],
+  };
   const { data: newClient, error: insErr } = await admin
     .from('clients')
     .insert(row)
