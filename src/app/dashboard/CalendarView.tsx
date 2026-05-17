@@ -15,6 +15,7 @@ export type RawTerm = {
   date: string;
   slot_index: number;
   classroom?: { id: string; naziv: string; color?: string } | null;
+  term_category?: { id: string; naziv: string; is_testing: boolean } | null;
   predavanja?: Array<{
     id: string;
     term_id: string;
@@ -24,6 +25,14 @@ export type RawTerm = {
     komentar: string | null;
     client?: { id: string; ime: string; prezime: string } | null;
     term_type?: { naziv: string } | { naziv: string }[] | null;
+  }>;
+  potential_clients?: Array<{
+    id: string;
+    ime: string;
+    prezime?: string | null;
+    ime_roditelja?: string | null;
+    mobilni_roditelja?: string | null;
+    status: string;
   }>;
 };
 
@@ -221,6 +230,10 @@ function CellContent({
       </div>
     );
   }
+  const tcRaw = term?.term_category;
+  const isTesting = Array.isArray(tcRaw) ? (tcRaw as {is_testing: boolean}[])[0]?.is_testing === true : tcRaw?.is_testing === true;
+  const potentialClients = term?.potential_clients ?? [];
+
   return (
     <div className="space-y-1.5 min-h-[52px]">
       {term && (
@@ -235,30 +248,59 @@ function CellContent({
           {term.classroom && (
             <span className="text-xs block mb-0.5 text-stone-500">{term.classroom.naziv}</span>
           )}
-          {(() => {
-            const tt = term.predavanja?.[0]?.term_type;
-            const naziv = Array.isArray(tt) ? tt[0]?.naziv : tt?.naziv;
-            return naziv ? <span className="text-xs block mb-1 font-semibold" style={{ color: textColor }}>{naziv}</span> : null;
-          })()}
-          {(term.predavanja ?? []).length === 0 ? (
-            <span className="text-sm" style={{ color: textColor }}>+ Dodaj radionicu</span>
-          ) : (
-            <div className="space-y-1.5">
-              {(term.predavanja ?? []).map((p) => (
-                <div key={p.id} className="rounded-md bg-white/40 px-1 py-0.5">
-                  <span
-                    className="block text-[13px] sm:text-sm font-semibold leading-snug text-stone-900 break-words antialiased"
-                    style={{ borderLeft: `3px solid ${textColor}`, paddingLeft: '6px' }}
-                  >
-                    {p.client ? `${p.client.ime} ${p.client.prezime}`.trim() || '—' : '—'}
-                  </span>
-                  <div className="flex gap-1 mt-0.5 flex-wrap pl-2">
-                    {p.odrzano && <span className="text-xs bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded font-medium">Održano</span>}
-                    {p.placeno && <span className="text-xs bg-sky-100 text-sky-800 px-1.5 py-0.5 rounded font-medium">Plaćeno</span>}
-                  </div>
+          {isTesting ? (
+            <div>
+              <span className="text-xs block mb-1 font-bold uppercase tracking-wide" style={{ color: textColor }}>
+                Testiranje
+              </span>
+              {potentialClients.length === 0 ? (
+                <span className="text-xs text-stone-400">Nema prijavljenih</span>
+              ) : (
+                <div className="space-y-1">
+                  {potentialClients.map((pc) => (
+                    <div key={pc.id} className="rounded-md bg-white/40 px-1 py-0.5">
+                      <span className="block text-[13px] font-semibold leading-snug text-stone-900" style={{ borderLeft: `3px solid ${textColor}`, paddingLeft: '6px' }}>
+                        {pc.ime}{pc.prezime ? ` ${pc.prezime}` : ''}
+                      </span>
+                      {pc.ime_roditelja && (
+                        <span className="block text-xs text-stone-500 pl-2">rod: {pc.ime_roditelja}</span>
+                      )}
+                      {pc.mobilni_roditelja && (
+                        <span className="block text-xs text-stone-500 pl-2">{pc.mobilni_roditelja}</span>
+                      )}
+                    </div>
+                  ))}
                 </div>
-              ))}
+              )}
             </div>
+          ) : (
+            <>
+              {(() => {
+                const tt = term.predavanja?.[0]?.term_type;
+                const naziv = Array.isArray(tt) ? tt[0]?.naziv : tt?.naziv;
+                return naziv ? <span className="text-xs block mb-1 font-semibold" style={{ color: textColor }}>{naziv}</span> : null;
+              })()}
+              {(term.predavanja ?? []).length === 0 ? (
+                <span className="text-sm" style={{ color: textColor }}>+ Dodaj radionicu</span>
+              ) : (
+                <div className="space-y-1.5">
+                  {(term.predavanja ?? []).map((p) => (
+                    <div key={p.id} className="rounded-md bg-white/40 px-1 py-0.5">
+                      <span
+                        className="block text-[13px] sm:text-sm font-semibold leading-snug text-stone-900 break-words antialiased"
+                        style={{ borderLeft: `3px solid ${textColor}`, paddingLeft: '6px' }}
+                      >
+                        {p.client ? `${p.client.ime} ${p.client.prezime}`.trim() || '—' : '—'}
+                      </span>
+                      <div className="flex gap-1 mt-0.5 flex-wrap pl-2">
+                        {p.odrzano && <span className="text-xs bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded font-medium">Održano</span>}
+                        {p.placeno && <span className="text-xs bg-sky-100 text-sky-800 px-1.5 py-0.5 rounded font-medium">Plaćeno</span>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
           )}
         </Link>
       )}

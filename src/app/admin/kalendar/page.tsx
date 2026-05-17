@@ -68,7 +68,7 @@ export default async function AdminKalendarPage({
   const [{ data: termsRaw }, { data: instructorsList }, { data: classroomsList }, { data: clientsList }, maxTerminaPoSlotu] = await Promise.all([
     adminSupabase
       .from('terms')
-      .select('*, instructor:instructors(id, ime, prezime, color), classroom:classrooms(id, naziv, color), predavanja(*, client:clients(id, ime, prezime), term_type:term_types(naziv))')
+      .select('*, instructor:instructors(id, ime, prezime, color), classroom:classrooms(id, naziv, color), term_category:term_categories(id, naziv, is_testing), predavanja(*, client:clients(id, ime, prezime), term_type:term_types(naziv)), potential_clients(id, ime, prezime, ime_roditelja, mobilni_roditelja, status)')
       .gte('date', dateFrom)
       .lte('date', dateTo)
       .order('date')
@@ -89,6 +89,9 @@ export default async function AdminKalendarPage({
       classroom?: { id: string; naziv: string; color?: string | null } | Array<unknown>;
     }).classroom;
     const classroom = Array.isArray(classroomRaw) ? classroomRaw[0] : classroomRaw;
+    const tcRaw = (t as { term_category?: unknown }).term_category;
+    const term_category = (Array.isArray(tcRaw) ? tcRaw[0] : tcRaw) as AdminTerm['term_category'];
+    const potential_clients = ((t as { potential_clients?: unknown[] }).potential_clients ?? []) as AdminTerm['potential_clients'];
     return {
       id: t.id,
       instructor_id: t.instructor_id,
@@ -96,7 +99,9 @@ export default async function AdminKalendarPage({
       slot_index: t.slot_index,
       classroom: classroom as AdminTerm['classroom'],
       instructor: instructor as AdminTerm['instructor'],
+      term_category,
       predavanja: t.predavanja as AdminTerm['predavanja'],
+      potential_clients,
     };
   });
 

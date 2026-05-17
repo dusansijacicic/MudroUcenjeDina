@@ -81,7 +81,9 @@ export default async function DashboardPage({
     classroom_id?: string | null;
     instructor?: { id: string; ime: string; prezime: string; color?: string | null } | { id: string; ime: string; prezime: string; color?: string | null }[] | null;
     classroom?: { id: string; naziv: string; color?: string | null } | { id: string; naziv: string; color?: string | null }[] | null;
+    term_category?: { id: string; naziv: string; is_testing: boolean } | { id: string; naziv: string; is_testing: boolean }[] | null;
     predavanja?: RawTerm['predavanja'];
+    potential_clients?: RawTerm['potential_clients'];
   };
 
   let allTermsRaw: TermRow[] | null = null;
@@ -91,7 +93,7 @@ export default async function DashboardPage({
     const admin = createAdminClient();
     serviceRoleUsed = true;
     const [termsRes, classRes] = await Promise.all([
-      admin.from('terms').select('id, instructor_id, date, slot_index, classroom_id, instructor:instructors(id, ime, prezime, color), classroom:classrooms(id, naziv, color), predavanja(*, client:clients(id, ime, prezime), term_type:term_types(naziv))').gte('date', dateFrom).lte('date', dateTo).order('date').order('slot_index'),
+      admin.from('terms').select('id, instructor_id, date, slot_index, classroom_id, instructor:instructors(id, ime, prezime, color), classroom:classrooms(id, naziv, color), term_category:term_categories(id, naziv, is_testing), predavanja(*, client:clients(id, ime, prezime), term_type:term_types(naziv)), potential_clients(id, ime, prezime, ime_roditelja, mobilni_roditelja, status)').gte('date', dateFrom).lte('date', dateTo).order('date').order('slot_index'),
       admin.from('classrooms').select('id, naziv, color').order('naziv'),
     ]);
     console.log('[dashboard] admin termsRes.error:', termsRes.error);
@@ -102,7 +104,7 @@ export default async function DashboardPage({
     console.error('[dashboard] createAdminClient or terms fetch failed – using fallback (samo vaši termini). Postavite SUPABASE_SERVICE_ROLE_KEY na Vercel.', err);
     const supabase = await createClient();
     const [termsRes, classRes] = await Promise.all([
-      supabase.from('terms').select('id, instructor_id, date, slot_index, classroom_id, instructor:instructors(id, ime, prezime, color), classroom:classrooms(id, naziv, color), predavanja(*, client:clients(id, ime, prezime), term_type:term_types(naziv))').eq('instructor_id', instructorId).gte('date', dateFrom).lte('date', dateTo).order('date').order('slot_index'),
+      supabase.from('terms').select('id, instructor_id, date, slot_index, classroom_id, instructor:instructors(id, ime, prezime, color), classroom:classrooms(id, naziv, color), term_category:term_categories(id, naziv, is_testing), predavanja(*, client:clients(id, ime, prezime), term_type:term_types(naziv)), potential_clients(id, ime, prezime, ime_roditelja, mobilni_roditelja, status)').eq('instructor_id', instructorId).gte('date', dateFrom).lte('date', dateTo).order('date').order('slot_index'),
       supabase.from('classrooms').select('id, naziv, color').order('naziv'),
     ]);
     console.log('[dashboard] fallback termsRes.error:', termsRes.error);
@@ -148,7 +150,9 @@ export default async function DashboardPage({
     });
 
   let terms: RawTerm[] = myTerms.map((t) => {
-    const { instructor: inst, classroom: room } = norm(t);
+    const { classroom: room } = norm(t);
+    const tcRaw = t.term_category;
+    const term_category = (Array.isArray(tcRaw) ? tcRaw[0] : tcRaw) as RawTerm['term_category'];
     return {
       id: t.id,
       instructor_id: t.instructor_id,
@@ -156,6 +160,8 @@ export default async function DashboardPage({
       slot_index: t.slot_index,
       predavanja: t.predavanja,
       classroom: room ? { id: room.id, naziv: room.naziv, color: room.color ?? undefined } : null,
+      term_category,
+      potential_clients: t.potential_clients,
     };
   });
   let filteredOtherTerms = otherTerms;

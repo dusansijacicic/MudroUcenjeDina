@@ -8,6 +8,15 @@ import { moveTermAsAdmin } from '@/app/admin/actions';
 
 const DAY_NAMES = ['Pon', 'Uto', 'Sre', 'Čet', 'Pet', 'Sub', 'Ned'];
 
+export type PotentialClientCalendar = {
+  id: string;
+  ime: string;
+  prezime?: string | null;
+  ime_roditelja?: string | null;
+  mobilni_roditelja?: string | null;
+  status: string;
+};
+
 export type AdminTerm = {
   id: string;
   instructor_id: string;
@@ -15,11 +24,13 @@ export type AdminTerm = {
   slot_index: number;
   classroom?: { id: string; naziv: string; color?: string | null } | null;
   instructor?: { id: string; ime: string; prezime: string; color?: string | null } | null;
+  term_category?: { id: string; naziv: string; is_testing: boolean } | null;
   predavanja?: Array<{
     id: string;
     client?: { id: string; ime: string; prezime: string } | null;
     term_type?: { naziv: string } | { naziv: string }[] | null;
   }>;
+  potential_clients?: PotentialClientCalendar[];
 };
 
 function getWeekDates(start: string): string[] {
@@ -177,6 +188,10 @@ function AdminCellContent({
           ? `${term.instructor.ime} ${term.instructor.prezime}`
           : '—';
         const classroomName = term.classroom?.naziv ?? 'Učionica';
+        const tcRaw = term.term_category;
+        const isTesting = Array.isArray(tcRaw) ? (tcRaw as {is_testing: boolean}[])[0]?.is_testing === true : tcRaw?.is_testing === true;
+        const potentialClients = term.potential_clients ?? [];
+
         return (
           <Link
             key={term.id}
@@ -187,33 +202,53 @@ function AdminCellContent({
             onDragStart={() => setDraggedTermId(term.id)}
             onDragEnd={() => setDraggedTermId(null)}
           >
-            <span className="font-medium">
-              {instructorName}
-            </span>
+            <span className="font-medium">{instructorName}</span>
             <span className="ml-1 text-[0.7rem] uppercase tracking-wide opacity-80">
               ({classroomName})
             </span>
-            {(() => {
-              const tt = predavanja[0]?.term_type;
-              const naziv = Array.isArray(tt) ? tt[0]?.naziv : tt?.naziv;
-              return naziv ? <span className="block text-[11px] font-semibold mt-0.5 opacity-90">{naziv}</span> : null;
-            })()}
-            {predavanja.length > 0 && (
-              <ul className="mt-1.5 space-y-1 pl-0 list-none border-t border-stone-200/80 pt-1.5">
-                {predavanja.map((p) => (
-                  <li
-                    key={p.id}
-                    className="text-[13px] sm:text-sm leading-snug font-semibold text-stone-900 break-words antialiased"
-                  >
-                    {p.client
-                      ? `${p.client.ime ?? ''} ${p.client.prezime ?? ''}`.trim() || '—'
-                      : '—'}
-                  </li>
-                ))}
-              </ul>
-            )}
-            {predavanja.length === 0 && (
-              <span className="text-stone-500 text-xs">+ radionica</span>
+            {isTesting ? (
+              <div className="mt-1 border-t border-stone-200/80 pt-1">
+                <span className="block text-[11px] font-bold uppercase tracking-wide mb-1" style={{ color: instructorColor }}>
+                  Testiranje
+                </span>
+                {potentialClients.length === 0 ? (
+                  <span className="text-xs text-stone-400">Nema prijavljenih</span>
+                ) : (
+                  <ul className="space-y-1 pl-0 list-none">
+                    {potentialClients.map((pc) => (
+                      <li key={pc.id} className="text-[12px] leading-snug text-stone-900">
+                        <span className="font-semibold">{pc.ime}{pc.prezime ? ` ${pc.prezime}` : ''}</span>
+                        {pc.ime_roditelja && (
+                          <span className="block text-stone-500">rod: {pc.ime_roditelja}</span>
+                        )}
+                        {pc.mobilni_roditelja && (
+                          <span className="block text-stone-500">{pc.mobilni_roditelja}</span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            ) : (
+              <>
+                {(() => {
+                  const tt = predavanja[0]?.term_type;
+                  const naziv = Array.isArray(tt) ? tt[0]?.naziv : tt?.naziv;
+                  return naziv ? <span className="block text-[11px] font-semibold mt-0.5 opacity-90">{naziv}</span> : null;
+                })()}
+                {predavanja.length > 0 && (
+                  <ul className="mt-1.5 space-y-1 pl-0 list-none border-t border-stone-200/80 pt-1.5">
+                    {predavanja.map((p) => (
+                      <li key={p.id} className="text-[13px] sm:text-sm leading-snug font-semibold text-stone-900 break-words antialiased">
+                        {p.client ? `${p.client.ime ?? ''} ${p.client.prezime ?? ''}`.trim() || '—' : '—'}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {predavanja.length === 0 && (
+                  <span className="text-stone-500 text-xs">+ radionica</span>
+                )}
+              </>
             )}
           </Link>
         );

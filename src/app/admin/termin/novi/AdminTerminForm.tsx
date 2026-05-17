@@ -344,8 +344,7 @@ export default function AdminTerminForm({
             >
               {termCategories.map((c) => (
                 <option key={c.id} value={c.id}>
-                  {c.naziv}
-                  {c.is_testing ? ' (testiranje)' : c.jedan_klijent_po_terminu ? ' (jedno dete)' : ' (grupa)'}
+                  {c.naziv}{c.is_testing ? '' : c.jedan_klijent_po_terminu ? ' (jedno dete)' : ' (grupa)'}
                 </option>
               ))}
             </select>
