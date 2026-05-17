@@ -348,11 +348,52 @@ export async function updatePredavanjeAsAdmin(
   return {};
 }
 
+async function savePredavanjeToHistory(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  admin: any,
+  predavanjeId: string
+) {
+  const { data: pred } = await admin
+    .from('predavanja')
+    .select('client_id, placeno, term:terms(date, slot_index, instructor_id, instructor:instructors(id, ime, prezime), classroom:classrooms(naziv)), term_type:term_types(naziv), client:clients(ime, prezime)')
+    .eq('id', predavanjeId)
+    .single();
+  if (!pred) return;
+  const term = Array.isArray(pred.term) ? pred.term[0] : pred.term;
+  const instr = term?.instructor && Array.isArray(term.instructor) ? term.instructor[0] : term?.instructor;
+  const classroom = term?.classroom && Array.isArray(term.classroom) ? term.classroom[0] : term?.classroom;
+  const termType = Array.isArray(pred.term_type) ? pred.term_type[0] : pred.term_type;
+  const client = Array.isArray(pred.client) ? pred.client[0] : pred.client;
+  await admin.from('otkazani_termini').insert({
+    client_id: pred.client_id,
+    client_ime: (client as { ime?: string } | null)?.ime ?? '',
+    client_prezime: (client as { prezime?: string } | null)?.prezime ?? null,
+    instructor_id: (instr as { id?: string } | null)?.id ?? null,
+    instructor_ime: (instr as { ime?: string } | null)?.ime ?? null,
+    instructor_prezime: (instr as { prezime?: string } | null)?.prezime ?? null,
+    classroom_naziv: (classroom as { naziv?: string } | null)?.naziv ?? null,
+    term_date: term?.date,
+    slot_index: term?.slot_index,
+    term_type_naziv: (termType as { naziv?: string } | null)?.naziv ?? null,
+    placeno: pred.placeno ?? false,
+  });
+}
+
 export async function deletePredavanjeAsAdmin(predavanjeId: string, termId: string): Promise<{ error?: string }> {
   const { admin, error: authErr } = await requireAdmin();
   if (authErr || !admin) return { error: authErr ?? 'Niste ovlašćeni.' };
+
+  await savePredavanjeToHistory(admin, predavanjeId);
+
   const { error } = await admin.from('predavanja').delete().eq('id', predavanjeId);
   if (error) return { error: error.message };
+
+  // If term has no more predavanja, delete the term (frees instructor + classroom)
+  const { count } = await admin.from('predavanja').select('*', { count: 'exact', head: true }).eq('term_id', termId);
+  if ((count ?? 0) === 0) {
+    await admin.from('terms').delete().eq('id', termId);
+  }
+
   revalidatePath('/admin/kalendar');
   revalidatePath(`/admin/termin/${termId}`);
   return {};
@@ -481,6 +522,13 @@ export async function moveTermAsAdmin(
 export async function deleteTermAsAdmin(termId: string): Promise<{ error?: string }> {
   const { admin, error: authErr } = await requireAdmin();
   if (authErr || !admin) return { error: authErr ?? 'Niste ovlašćeni.' };
+
+  // Save all predavanja in this term to history before deleting
+  const { data: preds } = await admin.from('predavanja').select('id').eq('term_id', termId);
+  for (const p of preds ?? []) {
+    await savePredavanjeToHistory(admin, p.id);
+  }
+
   const { error } = await admin.from('terms').delete().eq('id', termId);
   if (error) return { error: error.message };
   revalidatePath('/admin/kalendar');
@@ -1061,4 +1109,52 @@ export async function getAllPotentialClients(): Promise<PotentialClientRow[]> {
     .select('*')
     .order('created_at', { ascending: false });
   return (data ?? []) as PotentialClientRow[];
+}
+
+// ── Otkazani termini ─────────────────────────────────────────────────────────
+
+export type OtkazaniTerminRow = {
+  id: string;
+  client_id: string | null;
+  client_ime: string;
+  client_prezime: string | null;
+  instructor_id: string | null;
+  instructor_ime: string | null;
+  instructor_prezime: string | null;
+  classroom_naziv: string | null;
+  term_date: string;
+  slot_index: number;
+  term_type_naziv: string | null;
+  placeno: boolean;
+  napomena: string | null;
+  otkazano_at: string;
+};
+
+export async function getOtkazaneTermineZaKlijenta(clientId: string): Promise<OtkazaniTerminRow[]> {
+  const adminClient = createAdminClient();
+  const { data } = await adminClient
+    .from('otkazani_termini')
+    .select('*')
+    .eq('client_id', clientId)
+    .order('term_date', { ascending: false })
+    .order('slot_index', { ascending: false });
+  return (data ?? []) as OtkazaniTerminRow[];
+}
+
+export async function updateOtkazaniTerminPlaceno(id: string, placeno: boolean, clientId: string): Promise<{ error?: string }> {
+  const { admin, error: authErr } = await requireAdmin();
+  if (authErr || !admin) return { error: authErr ?? 'Niste ovlašćeni.' };
+  const { error } = await admin.from('otkazani_termini').update({ placeno }).eq('id', id);
+  if (error) return { error: error.message };
+  revalidatePath(`/admin/klijenti/${clientId}`);
+  return {};
+}
+
+export async function deleteOtkazaniTermin(id: string, clientId: string): Promise<{ error?: string }> {
+  const { admin, error: authErr } = await requireAdmin();
+  if (authErr || !admin) return { error: authErr ?? 'Niste ovlašćeni.' };
+  const { error } = await admin.from('otkazani_termini').delete().eq('id', id);
+  if (error) return { error: error.message };
+  revalidatePath(`/admin/klijenti/${clientId}`);
+  return {};
 }

@@ -8,6 +8,18 @@ import { moveTermAsAdmin } from '@/app/admin/actions';
 
 const DAY_NAMES = ['Pon', 'Uto', 'Sre', 'Čet', 'Pet', 'Sub', 'Ned'];
 
+export type OtkazaniTerminCalendar = {
+  id: string;
+  client_ime: string;
+  client_prezime?: string | null;
+  instructor_ime?: string | null;
+  instructor_prezime?: string | null;
+  term_date: string;
+  slot_index: number;
+  term_type_naziv?: string | null;
+  placeno: boolean;
+};
+
 export type PotentialClientCalendar = {
   id: string;
   ime: string;
@@ -61,6 +73,7 @@ const DEFAULT_MAX_TERMINA_PO_SLOTU = 4;
 
 export default function AdminCalendarView({
   terms,
+  otkazaniTermini = [],
   startOfWeek,
   singleDay,
   monthStart,
@@ -68,6 +81,7 @@ export default function AdminCalendarView({
   maxTerminaPoSlotu = DEFAULT_MAX_TERMINA_PO_SLOTU,
 }: {
   terms: AdminTerm[];
+  otkazaniTermini?: OtkazaniTerminCalendar[];
   startOfWeek: string;
   singleDay?: string;
   monthStart?: string;
@@ -99,6 +113,7 @@ export default function AdminCalendarView({
       <AdminDayView
         date={singleDay}
         terms={terms}
+        otkazaniTermini={otkazaniTermini}
         linkSuffix={linkSuffix}
         base={base}
         draggedTermId={draggedTermId}
@@ -121,6 +136,7 @@ export default function AdminCalendarView({
     <AdminWeekView
       startOfWeek={startOfWeek}
       terms={terms}
+      otkazaniTermini={otkazaniTermini}
       linkSuffix={linkSuffix}
       base={base}
       draggedTermId={draggedTermId}
@@ -133,6 +149,7 @@ export default function AdminCalendarView({
 
 function AdminCellContent({
   termsInSlot,
+  otkazaniInSlot,
   emptyDate,
   emptySlot,
   draggedTermId,
@@ -141,6 +158,7 @@ function AdminCellContent({
   maxTerminaPoSlotu,
 }: {
   termsInSlot: AdminTerm[];
+  otkazaniInSlot: OtkazaniTerminCalendar[];
   emptyDate: string;
   emptySlot: number;
   draggedTermId: string | null;
@@ -151,21 +169,41 @@ function AdminCellContent({
   const newTermHref = `/admin/termin/novi?date=${emptyDate}&slot=${emptySlot}`;
   const slotCount = termsInSlot.length;
   const canAddParallelTerm = slotCount < maxTerminaPoSlotu;
+
+  const CancelledEntries = otkazaniInSlot.length > 0 ? (
+    <div className="mt-1 space-y-1">
+      {otkazaniInSlot.map((ot) => (
+        <div key={ot.id} className="rounded-lg border border-stone-200 bg-stone-50 p-1.5 text-xs text-stone-400 opacity-70">
+          <span className="line-through block">
+            {ot.client_ime}{ot.client_prezime ? ` ${ot.client_prezime}` : ''}
+          </span>
+          {ot.instructor_ime && (
+            <span className="block text-[11px]">{ot.instructor_ime} {ot.instructor_prezime ?? ''}</span>
+          )}
+          <span className="text-[10px] uppercase tracking-wide">otkazano{ot.placeno ? ' · naplaćeno' : ''}</span>
+        </div>
+      ))}
+    </div>
+  ) : null;
+
   if (termsInSlot.length === 0) {
     return (
-      <Link
-        href={newTermHref}
-        className="block rounded-lg border border-dashed border-stone-200 p-2 text-stone-400 hover:border-amber-400 hover:bg-amber-50/50 min-h-[52px]"
-        onDragOver={(e) => {
-          if (draggedTermId) e.preventDefault();
-        }}
-        onDrop={(e) => {
-          e.preventDefault();
-          if (draggedTermId) onDropCell(emptyDate, emptySlot);
-        }}
-      >
-        +
-      </Link>
+      <div>
+        <Link
+          href={newTermHref}
+          className="block rounded-lg border border-dashed border-stone-200 p-2 text-stone-400 hover:border-amber-400 hover:bg-amber-50/50 min-h-[52px]"
+          onDragOver={(e) => {
+            if (draggedTermId) e.preventDefault();
+          }}
+          onDrop={(e) => {
+            e.preventDefault();
+            if (draggedTermId) onDropCell(emptyDate, emptySlot);
+          }}
+        >
+          +
+        </Link>
+        {CancelledEntries}
+      </div>
     );
   }
   return (
@@ -265,6 +303,7 @@ function AdminCellContent({
           Slot pun ({maxTerminaPoSlotu} termina). Povećajte limit u Admin → Podešavanja ili izaberite drugo vreme.
         </p>
       )}
+      {CancelledEntries}
     </div>
   );
 }
@@ -272,6 +311,7 @@ function AdminCellContent({
 function AdminWeekView({
   startOfWeek,
   terms,
+  otkazaniTermini,
   linkSuffix,
   base,
   draggedTermId,
@@ -281,6 +321,7 @@ function AdminWeekView({
 }: {
   startOfWeek: string;
   terms: AdminTerm[];
+  otkazaniTermini: OtkazaniTerminCalendar[];
   linkSuffix: string;
   base: string;
   draggedTermId: string | null;
@@ -360,10 +401,12 @@ function AdminWeekView({
                 <td className="p-2 text-stone-500 font-medium w-16">{time}</td>
                 {allDates.map((date, idx) => {
                   const termsInSlot = termsByKey(terms, date, slotIndex);
+                  const otkazaniInSlot = otkazaniTermini.filter((ot) => ot.term_date === date && ot.slot_index === slotIndex);
                   return (
                     <td key={date} className={`p-1 align-top${idx === 7 ? ' border-l-2 border-stone-300' : ''}`}>
                       <AdminCellContent
                         termsInSlot={termsInSlot}
+                        otkazaniInSlot={otkazaniInSlot}
                         emptyDate={date}
                         emptySlot={slotIndex}
                         draggedTermId={draggedTermId}
@@ -386,6 +429,7 @@ function AdminWeekView({
 function AdminDayView({
   date,
   terms,
+  otkazaniTermini,
   linkSuffix,
   base,
   draggedTermId,
@@ -394,6 +438,7 @@ function AdminDayView({
 }: {
   date: string;
   terms: AdminTerm[];
+  otkazaniTermini: OtkazaniTerminCalendar[];
   linkSuffix: string;
   base: string;
   draggedTermId: string | null;
@@ -433,12 +478,14 @@ function AdminDayView({
       <div className="rounded-xl border border-stone-200 bg-white divide-y divide-stone-100">
         {TIME_SLOTS.map((time, slotIndex) => {
           const termsInSlot = termsByKey(terms, date, slotIndex);
+          const otkazaniInSlot = otkazaniTermini.filter((ot) => ot.term_date === date && ot.slot_index === slotIndex);
           return (
             <div key={slotIndex} className="flex items-stretch gap-4 p-3">
               <div className="w-16 shrink-0 text-stone-500 font-medium">{time}</div>
               <div className="flex-1 min-w-0">
                 <AdminCellContent
                   termsInSlot={termsInSlot}
+                  otkazaniInSlot={otkazaniInSlot}
                   emptyDate={date}
                   emptySlot={slotIndex}
                   draggedTermId={draggedTermId}

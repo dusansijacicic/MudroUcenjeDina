@@ -219,8 +219,43 @@ export async function deletePredavanje(predavanjeId: string, termId: string): Pr
   if (!pred) return { error: 'Radionica nije pronađena.' };
   const { data: term } = await admin.from('terms').select('instructor_id').eq('id', pred.term_id).single();
   if (!term || term.instructor_id !== instructor.id) return { error: 'Niste ovlašćeni.' };
+
+  // Save to history before deleting
+  const { data: fullPred } = await admin
+    .from('predavanja')
+    .select('client_id, placeno, term:terms(date, slot_index, instructor_id, instructor:instructors(id, ime, prezime), classroom:classrooms(naziv)), term_type:term_types(naziv), client:clients(ime, prezime)')
+    .eq('id', predavanjeId)
+    .single();
+  if (fullPred) {
+    const t = Array.isArray(fullPred.term) ? fullPred.term[0] : fullPred.term;
+    const instr = t?.instructor && Array.isArray(t.instructor) ? t.instructor[0] : t?.instructor;
+    const classroom = t?.classroom && Array.isArray(t.classroom) ? t.classroom[0] : t?.classroom;
+    const termType = Array.isArray(fullPred.term_type) ? fullPred.term_type[0] : fullPred.term_type;
+    const client = Array.isArray(fullPred.client) ? fullPred.client[0] : fullPred.client;
+    await admin.from('otkazani_termini').insert({
+      client_id: fullPred.client_id,
+      client_ime: (client as { ime?: string } | null)?.ime ?? '',
+      client_prezime: (client as { prezime?: string } | null)?.prezime ?? null,
+      instructor_id: (instr as { id?: string } | null)?.id ?? null,
+      instructor_ime: (instr as { ime?: string } | null)?.ime ?? null,
+      instructor_prezime: (instr as { prezime?: string } | null)?.prezime ?? null,
+      classroom_naziv: (classroom as { naziv?: string } | null)?.naziv ?? null,
+      term_date: t?.date,
+      slot_index: t?.slot_index,
+      term_type_naziv: (termType as { naziv?: string } | null)?.naziv ?? null,
+      placeno: fullPred.placeno ?? false,
+    });
+  }
+
   const { error } = await admin.from('predavanja').delete().eq('id', predavanjeId);
   if (error) return { error: error.message };
+
+  // If term is now empty, delete it (frees instructor + classroom)
+  const { count } = await admin.from('predavanja').select('*', { count: 'exact', head: true }).eq('term_id', termId);
+  if ((count ?? 0) === 0) {
+    await admin.from('terms').delete().eq('id', termId);
+  }
+
   revalidatePath(`/dashboard/termin/${termId}`);
   revalidatePath('/dashboard');
   revalidatePath('/dashboard/klijenti');

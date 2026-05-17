@@ -4,9 +4,10 @@ import { redirect, notFound } from 'next/navigation';
 import Link from 'next/link';
 import AdminClientForm from './AdminClientForm';
 import AdminDeleteClientButton from './AdminDeleteClientButton';
-import { getStanjePoVrstamaZaKlijenta, markPastPredavanjaAsOdrzano, getTermTypes } from '@/app/admin/actions';
+import { getStanjePoVrstamaZaKlijenta, markPastPredavanjaAsOdrzano, getTermTypes, getOtkazaneTermineZaKlijenta } from '@/app/admin/actions';
 import { TIME_SLOTS, isTermInPast } from '@/lib/constants';
 import type { Client } from '@/types/database';
+import OtkazaniTerminiSection from './OtkazaniTerminiSection';
 
 export default async function AdminKlijentEditPage({
   params,
@@ -28,7 +29,7 @@ export default async function AdminKlijentEditPage({
   await markPastPredavanjaAsOdrzano(clientId);
 
   const adminSupabase = createAdminClient();
-  const [{ data: client, error }, stanjePoVrstama, { data: predavanjaRaw }, termTypes] = await Promise.all([
+  const [{ data: client, error }, stanjePoVrstama, { data: predavanjaRaw }, termTypes, otkazani] = await Promise.all([
     adminSupabase.from('clients').select('*, popust_percent, napomena, accessible_term_type_ids').eq('id', clientId).single(),
     getStanjePoVrstamaZaKlijenta(clientId),
     adminSupabase
@@ -36,6 +37,7 @@ export default async function AdminKlijentEditPage({
       .select('id, odrzano, placeno, term_id, term:terms(date, slot_index, instructor:instructors(ime, prezime))')
       .eq('client_id', clientId),
     getTermTypes(),
+    getOtkazaneTermineZaKlijenta(clientId),
   ]);
 
   if (error || !client) notFound();
@@ -181,6 +183,17 @@ export default async function AdminKlijentEditPage({
               </ul>
             )}
           </div>
+        </div>
+      </section>
+
+      {/* Otkazani termini */}
+      <section className="rounded-2xl border border-stone-200 bg-white shadow-sm overflow-hidden animate-in-delay-4">
+        <div className="border-b border-stone-100 bg-stone-50/80 px-5 py-3">
+          <h2 className="text-base font-semibold text-stone-800">Otkazani termini</h2>
+          <p className="text-xs text-stone-500 mt-0.5">Istorijat otkazanih termina. Može se označiti kao naplaćen ili obrisati iz istorije.</p>
+        </div>
+        <div className="p-5">
+          <OtkazaniTerminiSection otkazani={otkazani} clientId={clientId} />
         </div>
       </section>
 
