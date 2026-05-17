@@ -158,7 +158,16 @@ function AdminCellContent({
     );
   }
   return (
-    <div className="space-y-1.5 min-h-[52px]">
+    <div
+      className="space-y-1.5 min-h-[52px]"
+      onDragOver={(e) => {
+        if (draggedTermId && canAddParallelTerm) e.preventDefault();
+      }}
+      onDrop={(e) => {
+        e.preventDefault();
+        if (draggedTermId && canAddParallelTerm) onDropCell(emptyDate, emptySlot);
+      }}
+    >
       {termsInSlot.map((term) => {
         const instructorColor = term.instructor?.color ?? DEFAULT_COLOR;
         const classroomColor = term.classroom?.color ?? '#64748b'; // fallback siva
