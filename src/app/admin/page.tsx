@@ -23,18 +23,18 @@ export default async function AdminPage({
     .single();
   if (!admin) redirect('/login');
 
-  let instructors: { id: string; ime: string; prezime: string; email: string }[] | null = null;
+  let instructors: { id: string; ime: string; prezime: string; email: string; color: string | null }[] | null = null;
   try {
     const adminSupabase = createAdminClient();
     const { data } = await adminSupabase
       .from('instructors')
-      .select('id, ime, prezime, email')
+      .select('id, ime, prezime, email, color')
       .order('prezime');
     instructors = data;
   } catch {
     const { data } = await supabase
       .from('instructors')
-      .select('id, ime, prezime, email')
+      .select('id, ime, prezime, email, color')
       .order('prezime');
     instructors = data;
   }
@@ -66,22 +66,30 @@ export default async function AdminPage({
           <ul className="stagger-children">
             {(instructors ?? []).map((inst) => (
               <li key={inst.id}>
-                <Link
-                  href={`/admin/view/${inst.id}`}
-                  className="flex items-center justify-between p-4 hover:bg-amber-50/60 gap-4 ui-transition border-b border-stone-100 last:border-0 focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-inset"
-                >
+                <div className="flex items-center gap-4 p-4 border-b border-stone-100 last:border-0">
+                  <div
+                    className="w-3 h-3 rounded-full shrink-0"
+                    style={{ backgroundColor: inst.color ?? '#EAB308' }}
+                  />
                   <div className="flex-1 min-w-0">
                     <div className="font-medium text-stone-800 truncate">
                       {inst.ime} {inst.prezime}
                     </div>
-                    <div className="text-sm text-stone-500 truncate">
-                      {inst.email}
-                    </div>
+                    <div className="text-sm text-stone-500 truncate">{inst.email}</div>
                   </div>
-                  <span className="text-sm text-amber-600 shrink-0 font-medium">
+                  <Link
+                    href={`/admin/predavaci/${inst.id}`}
+                    className="text-sm text-stone-500 hover:text-amber-700 shrink-0 ui-transition"
+                  >
+                    Uredi
+                  </Link>
+                  <Link
+                    href={`/admin/view/${inst.id}`}
+                    className="text-sm text-amber-600 hover:text-amber-700 shrink-0 font-medium ui-transition"
+                  >
                     Pregled →
-                  </span>
-                </Link>
+                  </Link>
+                </div>
               </li>
             ))}
           </ul>

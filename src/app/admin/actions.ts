@@ -203,6 +203,24 @@ export async function getAdminInstructorsList(): Promise<{ id: string; ime: stri
   return data ?? [];
 }
 
+export async function updateInstructorAsAdmin(
+  instructorId: string,
+  payload: { ime: string; prezime: string; telefon: string | null; color: string | null }
+): Promise<{ error?: string }> {
+  const { admin, error: authErr } = await requireAdmin();
+  if (authErr || !admin) return { error: authErr ?? 'Samo admin.' };
+  const { error } = await admin
+    .from('instructors')
+    .update({ ime: payload.ime, prezime: payload.prezime, telefon: payload.telefon, color: payload.color })
+    .eq('id', instructorId);
+  if (error) return { error: error.message };
+  revalidatePath('/admin');
+  revalidatePath(`/admin/predavaci/${instructorId}`);
+  revalidatePath(`/admin/view/${instructorId}`);
+  revalidatePath('/admin/kalendar');
+  return {};
+}
+
 async function requireAdmin() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
