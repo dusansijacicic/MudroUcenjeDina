@@ -1,12 +1,14 @@
 /** Podrazumevani seed iz migracije 024 / FULL_RESET (Individualni). */
 export const SEEDED_TERM_CATEGORY_INDIVIDUAL_ID = 'e8b4c5d0-1111-4a2a-9c3d-000000000001';
 export const SEEDED_TERM_CATEGORY_GRUPNI_ID = 'e8b4c5d0-1111-4a2a-9c3d-000000000002';
+export const SEEDED_TERM_CATEGORY_TESTING_ID = 'e8b4c5d0-1111-4a2a-9c3d-000000000003';
 
 export type TermCategoryRow = {
   id: string;
   naziv: string;
   opis: string | null;
   jedan_klijent_po_terminu: boolean;
+  is_testing?: boolean;
 };
 
 export function effectiveMaxRadionica(
@@ -42,6 +44,14 @@ export function jedanKlijentIzJoinaPouzdano(tc: JoinShape): boolean | null {
   if (typeof tc !== 'object') return null;
   if (!('jedan_klijent_po_terminu' in tc)) return null;
   return Boolean(tc.jedan_klijent_po_terminu);
+}
+
+export function isTestingCategoryJoin(
+  tc: { is_testing?: boolean } | { is_testing?: boolean }[] | null | undefined
+): boolean {
+  if (tc == null) return false;
+  if (Array.isArray(tc)) return tc[0]?.is_testing === true;
+  return tc.is_testing === true;
 }
 
 export function nazivKategorijeIzJoina(

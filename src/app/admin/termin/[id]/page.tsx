@@ -6,8 +6,22 @@ import { TIME_SLOTS } from '@/lib/constants';
 import { getMaxCasovaPoTerminu } from '@/lib/settings';
 import type { Predavanje } from '@/types/database';
 import { deleteTermAsAdmin, getTermCategories } from '@/app/admin/actions';
-import { jedanKlijentIzJoina, nazivKategorijeIzJoina } from '@/lib/term-categories';
+import { jedanKlijentIzJoina, nazivKategorijeIzJoina, isTestingCategoryJoin } from '@/lib/term-categories';
 import AdminTermMetaForm from '@/app/admin/termin/AdminTermMetaForm';
+import type { PotentialClientRow, PotentialClientStatus } from '@/app/admin/actions';
+
+const STATUS_LABEL: Record<PotentialClientStatus, string> = {
+  zakazan: 'Zakazan',
+  pojavio_se: 'Pojavio se',
+  nije_se_pojavio: 'Nije se pojavio',
+  prebacen_u_klijenta: 'Prebačen u klijenta',
+};
+const STATUS_COLOR: Record<PotentialClientStatus, string> = {
+  zakazan: 'bg-stone-100 text-stone-600',
+  pojavio_se: 'bg-blue-100 text-blue-700',
+  nije_se_pojavio: 'bg-red-100 text-red-700',
+  prebacen_u_klijenta: 'bg-emerald-100 text-emerald-700',
+};
 
 export default async function AdminTerminDetailPage({
   params,
@@ -25,7 +39,7 @@ export default async function AdminTerminDetailPage({
   const [termRes, termCategories] = await Promise.all([
     adminSupabase
       .from('terms')
-      .select('*, instructor:instructors(id, ime, prezime), term_categories(id, naziv, jedan_klijent_po_terminu)')
+      .select('*, instructor:instructors(id, ime, prezime), term_categories(id, naziv, jedan_klijent_po_terminu, is_testing)')
       .eq('id', termId)
       .single(),
     getTermCategories(),
@@ -37,30 +51,43 @@ export default async function AdminTerminDetailPage({
     ? (term as { instructor: Array<{ id: string; ime: string; prezime: string }> }).instructor[0]
     : (term as { instructor?: { id: string; ime: string; prezime: string } | null }).instructor;
 
-  const { data: predavanja } = await adminSupabase
-    .from('predavanja')
-    .select('*, client:clients(id, ime, prezime)')
-    .eq('term_id', termId)
-    .order('created_at');
-
-  const maxCasova = await getMaxCasovaPoTerminu();
-  const currentCount = (predavanja ?? []).length;
   const tcRaw = (term as { term_categories?: unknown }).term_categories;
-  const jedanOnly = jedanKlijentIzJoina(
-    tcRaw as { jedan_klijent_po_terminu?: boolean } | { jedan_klijent_po_terminu?: boolean }[] | null
-  );
+  const isTesting = isTestingCategoryJoin(tcRaw as { is_testing?: boolean } | { is_testing?: boolean }[] | null);
+  const jedanOnly = jedanKlijentIzJoina(tcRaw as { jedan_klijent_po_terminu?: boolean } | { jedan_klijent_po_terminu?: boolean }[] | null);
   const categoryNaziv = nazivKategorijeIzJoina(tcRaw as { naziv?: string } | { naziv?: string }[] | null);
-  const effectiveMax = jedanOnly ? 1 : maxCasova;
-  const initialTermCategoryId =
-    (term as { term_category_id?: string }).term_category_id ?? termCategories[0]?.id ?? '';
-  const canAddMore = currentCount < effectiveMax;
+
   const slotLabel = TIME_SLOTS[term.slot_index] ?? '—';
   const dateLabel = new Date(term.date + 'T12:00:00').toLocaleDateString('sr-Latn-RS', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
+    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
   });
+  const initialTermCategoryId = (term as { term_category_id?: string }).term_category_id ?? termCategories[0]?.id ?? '';
+
+  // Testing term: fetch potential clients
+  let potentialClients: PotentialClientRow[] = [];
+  if (isTesting) {
+    const { data } = await adminSupabase
+      .from('potential_clients')
+      .select('*')
+      .eq('term_id', termId)
+      .order('created_at');
+    potentialClients = (data ?? []) as PotentialClientRow[];
+  }
+
+  // Normal term: fetch predavanja
+  let predavanja: (Predavanje & { client?: { id: string; ime: string; prezime: string } | null })[] = [];
+  let maxCasova = 0;
+  if (!isTesting) {
+    const [predRes, max] = await Promise.all([
+      adminSupabase.from('predavanja').select('*, client:clients(id, ime, prezime)').eq('term_id', termId).order('created_at'),
+      getMaxCasovaPoTerminu(),
+    ]);
+    predavanja = (predRes.data ?? []) as typeof predavanja;
+    maxCasova = max;
+  }
+
+  const currentCount = isTesting ? potentialClients.length : predavanja.length;
+  const effectiveMax = jedanOnly ? 1 : maxCasova;
+  const canAddMore = isTesting || currentCount < effectiveMax;
 
   return (
     <div className="max-w-2xl">
@@ -73,8 +100,12 @@ export default async function AdminTerminDetailPage({
           </p>
           <p className="text-sm text-stone-600 mt-1">
             <span className="font-medium">Kategorija:</span> {categoryNaziv}
-            <span className="text-stone-400 mx-2">·</span>
-            <span className="font-medium">Radionica:</span> {currentCount} / {effectiveMax}
+            {!isTesting && (
+              <>
+                <span className="text-stone-400 mx-2">·</span>
+                <span className="font-medium">Radionica:</span> {currentCount} / {effectiveMax}
+              </>
+            )}
           </p>
           {(term as { napomena?: string | null }).napomena ? (
             <p className="text-sm text-stone-500 mt-2 whitespace-pre-wrap border-l-2 border-amber-200 pl-3">
@@ -90,16 +121,11 @@ export default async function AdminTerminDetailPage({
             action={async () => {
               'use server';
               const res = await deleteTermAsAdmin(termId);
-              if (res.error) {
-                return;
-              }
+              if (res.error) return;
               redirect('/admin/kalendar');
             }}
           >
-            <button
-              type="submit"
-              className="text-sm text-red-600 hover:text-red-700 border border-red-200 rounded-lg px-3 py-1"
-            >
+            <button type="submit" className="text-sm text-red-600 hover:text-red-700 border border-red-200 rounded-lg px-3 py-1">
               Otkaži termin
             </button>
           </form>
@@ -113,33 +139,91 @@ export default async function AdminTerminDetailPage({
         initialNapomena={(term as { napomena?: string | null }).napomena ?? null}
       />
 
-      <div className="mb-6">
-        {canAddMore ? (
-          <Link
-            href={`/admin/termin/${termId}/predavanje/novi`}
-            className="inline-flex items-center rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700"
-          >
-            + Dodaj radionicu
-          </Link>
-        ) : (
-          <p className="text-sm text-amber-700 bg-amber-50 rounded-lg px-3 py-2 inline-block">
-            {jedanOnly
-              ? `Kategorija „${categoryNaziv}” – samo jedno dete. Za grupu promenite kategoriju iznad.`
-              : `Maksimalan broj radionica u ovom terminu (${maxCasova}) je dostignut.`}
-          </p>
-        )}
-        <span className="ml-2 text-stone-500 text-sm">{currentCount} / {effectiveMax} radionica</span>
-      </div>
-
-      <div className="rounded-xl border border-stone-200 bg-white divide-y divide-stone-100">
-        {(predavanja ?? []).length === 0 ? (
-          <div className="p-6 text-center text-stone-500">Nema radionica u ovom terminu.</div>
-        ) : (
-          (predavanja ?? []).map((p) => (
-            <AdminPredavanjeRow key={p.id} predavanje={p} termId={termId} />
-          ))
-        )}
-      </div>
+      {isTesting ? (
+        // ── Testiranje UI ─────────────────────────────────────────────────────
+        <div>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-base font-semibold text-stone-800">
+              Potencijalni klijenti
+              <span className="ml-2 text-stone-400 font-normal text-sm">({potentialClients.length})</span>
+            </h2>
+            <Link
+              href={`/admin/termin/${termId}/testiranje/novi`}
+              className="inline-flex items-center rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700"
+            >
+              + Dodaj
+            </Link>
+          </div>
+          <div className="rounded-xl border border-stone-200 bg-white divide-y divide-stone-100">
+            {potentialClients.length === 0 ? (
+              <div className="p-6 text-center text-stone-500">
+                Nema prijavljenih za ovaj termin. Dodaj prvog klijenta.
+              </div>
+            ) : (
+              potentialClients.map((pc) => (
+                <div key={pc.id} className="p-4 flex items-start justify-between gap-4">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-medium text-stone-800">{pc.ime}</span>
+                      {pc.razred && <span className="text-xs text-stone-500">{pc.razred}. razred</span>}
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_COLOR[pc.status as PotentialClientStatus]}`}>
+                        {STATUS_LABEL[pc.status as PotentialClientStatus]}
+                      </span>
+                      {pc.converted_client_id && (
+                        <Link href={`/admin/klijenti/${pc.converted_client_id}`} className="text-xs text-amber-600 hover:underline">
+                          → Profil klijenta
+                        </Link>
+                      )}
+                    </div>
+                    {pc.ime_roditelja && (
+                      <p className="text-sm text-stone-500 mt-0.5">Roditelj: {pc.ime_roditelja}{pc.mobilni_roditelja ? ` · ${pc.mobilni_roditelja}` : ''}</p>
+                    )}
+                    {pc.komentar && (
+                      <p className="mt-1 text-sm text-stone-600 italic whitespace-pre-wrap">{pc.komentar}</p>
+                    )}
+                  </div>
+                  <Link
+                    href={`/admin/termin/${termId}/testiranje/${pc.id}`}
+                    className="text-sm text-amber-600 hover:text-amber-700 shrink-0"
+                  >
+                    Izmeni
+                  </Link>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      ) : (
+        // ── Normalan termin UI ────────────────────────────────────────────────
+        <div>
+          <div className="mb-6">
+            {canAddMore ? (
+              <Link
+                href={`/admin/termin/${termId}/predavanje/novi`}
+                className="inline-flex items-center rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700"
+              >
+                + Dodaj radionicu
+              </Link>
+            ) : (
+              <p className="text-sm text-amber-700 bg-amber-50 rounded-lg px-3 py-2 inline-block">
+                {jedanOnly
+                  ? `Kategorija „${categoryNaziv}" – samo jedno dete.`
+                  : `Maksimalan broj radionica (${maxCasova}) je dostignut.`}
+              </p>
+            )}
+            <span className="ml-2 text-stone-500 text-sm">{currentCount} / {effectiveMax} radionica</span>
+          </div>
+          <div className="rounded-xl border border-stone-200 bg-white divide-y divide-stone-100">
+            {predavanja.length === 0 ? (
+              <div className="p-6 text-center text-stone-500">Nema radionica u ovom terminu.</div>
+            ) : (
+              predavanja.map((p) => (
+                <AdminPredavanjeRow key={p.id} predavanje={p} termId={termId} />
+              ))
+            )}
+          </div>
+        </div>
+      )}
 
       <p className="mt-4">
         <Link href="/admin/kalendar" className="text-sm text-amber-700 hover:underline">← Nazad na kalendar</Link>

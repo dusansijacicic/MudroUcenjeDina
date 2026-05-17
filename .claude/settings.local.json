@@ -1,7 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "Bash(npx tsc *)"
+      "Bash(npx tsc *)",
+      "Bash(mkdir -p \"c:\\\\Users\\\\korisnik\\\\Desktop\\\\Dina kalendar\\\\src\\\\app\\\\admin\\\\termin\\\\[id]\\\\testiranje\\\\novi\")",
+      "Bash(mkdir -p \"c:\\\\Users\\\\korisnik\\\\Desktop\\\\Dina kalendar\\\\src\\\\app\\\\admin\\\\termin\\\\[id]\\\\testiranje\\\\[pcId]\")"
     ]
   }
 }

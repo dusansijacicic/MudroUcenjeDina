@@ -13,6 +13,7 @@ const navLinks = [
   { href: '/admin/kategorije-termina', label: 'Kategorije termina' },
   { href: '/admin/ucionice', label: 'Učionice' },
   { href: '/admin/kalendar', label: 'Kalendar' },
+  { href: '/admin/testiranja', label: 'Testiranja' },
   { href: '/admin/podesavanja', label: 'Podešavanja' },
   { href: '/admin/uputstvo', label: 'Uputstvo (uloge)' },
 ];

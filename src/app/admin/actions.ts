@@ -544,7 +544,7 @@ export async function getTermCategories(): Promise<TermCategoryRow[]> {
   const admin = createAdminClient();
   const { data } = await admin
     .from('term_categories')
-    .select('id, naziv, opis, jedan_klijent_po_terminu')
+    .select('id, naziv, opis, jedan_klijent_po_terminu, is_testing')
     .order('naziv');
   return (data ?? []) as TermCategoryRow[];
 }
@@ -979,4 +979,85 @@ export async function createUplata(
   revalidatePath('/dashboard/uplate');
   revalidatePath('/dashboard/uplate/novi');
   return {};
+}
+
+// ─── Potencijalni klijenti (testiranje) ───────────────────────────────────────
+
+export type PotentialClientStatus = 'zakazan' | 'pojavio_se' | 'nije_se_pojavio' | 'prebacen_u_klijenta';
+
+export type PotentialClientRow = {
+  id: string;
+  term_id: string | null;
+  ime: string;
+  ime_roditelja: string | null;
+  mobilni_roditelja: string | null;
+  razred: string | null;
+  status: PotentialClientStatus;
+  komentar: string | null;
+  converted_client_id: string | null;
+  created_at: string;
+};
+
+export async function addPotentialClient(
+  termId: string,
+  payload: { ime: string; ime_roditelja: string | null; mobilni_roditelja: string | null; razred: string | null }
+): Promise<{ error?: string; id?: string }> {
+  const { admin, error: authErr } = await requireAdmin();
+  if (authErr || !admin) return { error: authErr ?? 'Samo admin.' };
+  const { data, error } = await admin
+    .from('potential_clients')
+    .insert({ term_id: termId, ...payload })
+    .select('id')
+    .single();
+  if (error || !data) return { error: error?.message ?? 'Greška.' };
+  revalidatePath(`/admin/termin/${termId}`);
+  return { id: data.id };
+}
+
+export async function updatePotentialClient(
+  id: string,
+  payload: { ime?: string; ime_roditelja?: string | null; mobilni_roditelja?: string | null; razred?: string | null; status?: PotentialClientStatus; komentar?: string | null }
+): Promise<{ error?: string }> {
+  const { admin, error: authErr } = await requireAdmin();
+  if (authErr || !admin) return { error: authErr ?? 'Samo admin.' };
+  const { data: pc } = await admin.from('potential_clients').select('term_id').eq('id', id).single();
+  const { error } = await admin.from('potential_clients').update(payload).eq('id', id);
+  if (error) return { error: error.message };
+  if (pc?.term_id) revalidatePath(`/admin/termin/${pc.term_id}`);
+  revalidatePath(`/admin/testiranja`);
+  return {};
+}
+
+export async function convertPotentialClientToClient(
+  pcId: string
+): Promise<{ error?: string; clientId?: string }> {
+  const { admin, error: authErr } = await requireAdmin();
+  if (authErr || !admin) return { error: authErr ?? 'Samo admin.' };
+
+  const { data: pc } = await admin.from('potential_clients').select('*').eq('id', pcId).single();
+  if (!pc) return { error: 'Potencijalni klijent nije pronađen.' };
+  if (pc.converted_client_id) return { error: 'Već je prebačen u klijenta.', clientId: pc.converted_client_id };
+
+  const { data: newClient, error: insErr } = await admin
+    .from('clients')
+    .insert({ ime: pc.ime, razred: pc.razred ?? null, roditelj: pc.ime_roditelja ?? null, kontakt_telefon: pc.mobilni_roditelja ?? null })
+    .select('id')
+    .single();
+  if (insErr || !newClient) return { error: insErr?.message ?? 'Greška pri kreiranju klijenta.' };
+
+  await admin.from('potential_clients').update({ status: 'prebacen_u_klijenta', converted_client_id: newClient.id }).eq('id', pcId);
+  if (pc.term_id) revalidatePath(`/admin/termin/${pc.term_id}`);
+  revalidatePath('/admin/klijenti');
+  revalidatePath('/admin/testiranja');
+  return { clientId: newClient.id };
+}
+
+export async function getAllPotentialClients(): Promise<PotentialClientRow[]> {
+  const { admin, error: authErr } = await requireAdmin();
+  if (authErr || !admin) return [];
+  const { data } = await admin
+    .from('potential_clients')
+    .select('*')
+    .order('created_at', { ascending: false });
+  return (data ?? []) as PotentialClientRow[];
 }

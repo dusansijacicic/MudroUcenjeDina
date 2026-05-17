@@ -102,7 +102,7 @@ CREATE TABLE terms (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   instructor_id UUID NOT NULL REFERENCES instructors(id) ON DELETE CASCADE,
   date DATE NOT NULL,
-  slot_index SMALLINT NOT NULL CHECK (slot_index >= 0 AND slot_index <= 12),
+  slot_index SMALLINT NOT NULL CHECK (slot_index >= 0 AND slot_index <= 15),
   classroom_id UUID REFERENCES classrooms(id) ON DELETE SET NULL,
   term_category_id UUID NOT NULL REFERENCES term_categories(id) ON DELETE RESTRICT DEFAULT 'e8b4c5d0-1111-4a2a-9c3d-000000000001'::uuid,
   napomena TEXT,
@@ -150,7 +150,7 @@ CREATE TABLE zahtevi_za_cas (
   client_id UUID NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
   instructor_id UUID REFERENCES instructors(id) ON DELETE SET NULL,
   requested_date DATE NOT NULL,
-  requested_slot_index SMALLINT NOT NULL CHECK (requested_slot_index >= 0 AND requested_slot_index <= 12),
+  requested_slot_index SMALLINT NOT NULL CHECK (requested_slot_index >= 0 AND requested_slot_index <= 15),
   status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'confirmed', 'changed', 'rejected')),
   resolved_at TIMESTAMPTZ,
   resolved_by UUID REFERENCES instructors(id) ON DELETE SET NULL,
@@ -178,7 +178,7 @@ CREATE TABLE instructor_weekly_availability (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   instructor_id UUID NOT NULL REFERENCES instructors(id) ON DELETE CASCADE,
   day_of_week SMALLINT NOT NULL CHECK (day_of_week >= 1 AND day_of_week <= 7),
-  slot_index SMALLINT NOT NULL CHECK (slot_index >= 0 AND slot_index <= 12),
+  slot_index SMALLINT NOT NULL CHECK (slot_index >= 0 AND slot_index <= 15),
   UNIQUE(instructor_id, day_of_week, slot_index)
 );
 
@@ -189,7 +189,7 @@ CREATE TABLE instructor_availability_periods (
   date_from DATE NOT NULL,
   date_to DATE NOT NULL CHECK (date_to >= date_from),
   day_of_week SMALLINT NOT NULL CHECK (day_of_week >= 1 AND day_of_week <= 7),
-  slot_index SMALLINT NOT NULL CHECK (slot_index >= 0 AND slot_index <= 12),
+  slot_index SMALLINT NOT NULL CHECK (slot_index >= 0 AND slot_index <= 15),
   UNIQUE(instructor_id, date_from, date_to, day_of_week, slot_index)
 );
 
