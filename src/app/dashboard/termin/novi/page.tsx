@@ -91,11 +91,12 @@ export default async function NoviTerminPage({
     (a.prezime ?? '').localeCompare(b.prezime ?? '', 'sr')
   );
 
-  const [termTypes, termCategories, classrooms] = await Promise.all([
+  const [termTypes, termCategoriesAll, classrooms] = await Promise.all([
     getTermTypes(),
     getTermCategories(),
     getClassrooms(),
   ]);
+  const termCategories = termCategoriesAll.filter((c) => !c.is_testing);
 
   return (
     <div className="max-w-lg">

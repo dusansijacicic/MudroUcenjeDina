@@ -138,12 +138,13 @@ export default async function EditPredavanjePage({
     (a, b) =>
       (a.ime ?? '').localeCompare(b.ime ?? '', 'sr') || (a.prezime ?? '').localeCompare(b.prezime ?? '', 'sr')
   );
-  const [termTypes, termCategories, classrooms, termsInSlotRes] = await Promise.all([
+  const [termTypes, termCategoriesAll, classrooms, termsInSlotRes] = await Promise.all([
     getTermTypes(),
     getTermCategories(),
     getClassrooms(),
     admin.from('terms').select('classroom_id').eq('date', term.date).eq('slot_index', term.slot_index).neq('id', term.id),
   ]);
+  const termCategories = termCategoriesAll.filter((c) => !c.is_testing);
   const termsInSlot = termsInSlotRes.data ?? [];
   const takenClassroomIds = termsInSlot.map((t: { classroom_id: string | null }) => t.classroom_id).filter((id: string | null): id is string => id != null);
   const clientStanjeList = await Promise.all(

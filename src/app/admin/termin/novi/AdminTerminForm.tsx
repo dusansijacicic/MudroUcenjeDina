@@ -9,7 +9,7 @@ type Instructor = { id: string; ime: string; prezime: string };
 type Client = { id: string; ime: string; prezime: string };
 type Classroom = { id: string; naziv: string };
 type TermTypeOption = { id: string; naziv: string; opis: string | null };
-type TermCategoryOption = { id: string; naziv: string; jedan_klijent_po_terminu: boolean };
+type TermCategoryOption = { id: string; naziv: string; jedan_klijent_po_terminu: boolean; is_testing?: boolean };
 
 export default function AdminTerminForm({
   instructors,
@@ -97,7 +97,8 @@ export default function AdminTerminForm({
   }, [date, slotIndex]);
 
   const selectedCat = termCategories.find((c) => c.id === termCategoryId);
-  const allowsMultipleClients = selectedCat ? !selectedCat.jedan_klijent_po_terminu : false;
+  const isTestingCat = selectedCat?.is_testing === true;
+  const allowsMultipleClients = !isTestingCat && selectedCat ? !selectedCat.jedan_klijent_po_terminu : false;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -112,24 +113,14 @@ export default function AdminTerminForm({
         setError('Izaberite kategoriju termina.');
         return;
       }
-      if (!allowsMultipleClients && !clientId) {
-        setError('Izaberite klijenta.');
-        return;
-      }
-      if (allowsMultipleClients && grupniIds.length === 0) {
-        setError('Za grupni termin označite bar jedno dete.');
-        return;
+      if (!isTestingCat) {
+        if (!allowsMultipleClients && !clientId) { setError('Izaberite klijenta.'); return; }
+        if (allowsMultipleClients && grupniIds.length === 0) { setError('Za grupni termin označite bar jedno dete.'); return; }
+        if (termTypes.length === 0) { setError('Prvo dodajte bar jednu vrstu termina u Admin → Vrste termina.'); return; }
+        if (!termTypeId) { setError('Izaberite vrstu termina.'); return; }
       }
       if (!classroomId) {
         setError('Izaberite učionicu.');
-        return;
-      }
-      if (termTypes.length > 0 && !termTypeId) {
-        setError('Izaberite vrstu termina.');
-        return;
-      }
-      if (termTypes.length === 0) {
-        setError('Prvo dodajte bar jednu vrstu termina u Admin → Vrste termina.');
         return;
       }
 
@@ -146,19 +137,21 @@ export default function AdminTerminForm({
         return;
       }
 
-      const idsToAdd = allowsMultipleClients ? grupniIds : [clientId];
-      for (const cid of idsToAdd) {
-        const predavanjeResult = await createPredavanjeAsAdmin(
-          termResult.termId,
-          cid,
-          false,
-          false,
-          null,
-          termTypeId || null
-        );
-        if (predavanjeResult.error) {
-          setError(predavanjeResult.error);
-          return;
+      if (!isTestingCat) {
+        const idsToAdd = allowsMultipleClients ? grupniIds : [clientId];
+        for (const cid of idsToAdd) {
+          const predavanjeResult = await createPredavanjeAsAdmin(
+            termResult.termId,
+            cid,
+            false,
+            false,
+            null,
+            termTypeId || null
+          );
+          if (predavanjeResult.error) {
+            setError(predavanjeResult.error);
+            return;
+          }
         }
       }
 
@@ -172,15 +165,15 @@ export default function AdminTerminForm({
   if (instructors.length === 0) {
     return (
       <p className="text-stone-500 text-sm">
-        Nema instruktora. Prvo dodajte instruktora preko „Novi instruktor”.
+        Nema instruktora. Prvo dodajte instruktora preko „Novi instruktor".
       </p>
     );
   }
 
-  if (clients.length === 0) {
+  if (clients.length === 0 && !isTestingCat) {
     return (
       <p className="text-stone-500 text-sm">
-        Nema klijenata. Prvo dodajte klijenta preko „Novi klijent”.
+        Nema klijenata. Prvo dodajte klijenta.
       </p>
     );
   }
@@ -188,12 +181,12 @@ export default function AdminTerminForm({
   if (classrooms.length === 0) {
     return (
       <p className="text-stone-500 text-sm">
-        Nema učionica. Dodajte učionice u sekciji „Učionice”, pa se vratite na zakazivanje.
+        Nema učionica. Dodajte učionice u sekciji „Učionice", pa se vratite na zakazivanje.
       </p>
     );
   }
 
-  if (termTypes.length === 0) {
+  if (termTypes.length === 0 && !isTestingCat) {
     return (
       <p className="text-stone-500 text-sm">
         Nema vrsta termina. Dodajte bar jednu vrstu u Admin → Vrste termina, pa se vratite na zakazivanje.
@@ -306,32 +299,39 @@ export default function AdminTerminForm({
           )}
         </div>
       </div>
-      <div>
-        <label className="block text-sm font-medium text-stone-700 mb-1">
-          1. Vrsta termina <span className="text-stone-500 font-normal">(tip časa, cena)</span>
-        </label>
-        <select
-          value={termTypeId}
-          onChange={(e) => setTermTypeId(e.target.value)}
-          required
-          className="w-full rounded-lg border border-stone-300 px-3 py-2 text-stone-800"
-        >
-          <option value="">Izaberite vrstu termina</option>
-          {termTypes.map((tt) => (
-            <option key={tt.id} value={tt.id}>
-              {tt.naziv}
-            </option>
-          ))}
-        </select>
-        <p className="text-xs text-stone-500 mt-1">Prvo izaberite vrstu časa; ista vrsta važi za sva deca u grupnom terminu.</p>
-      </div>
+      {!isTestingCat && (
+        <div>
+          <label className="block text-sm font-medium text-stone-700 mb-1">
+            1. Vrsta termina <span className="text-stone-500 font-normal">(tip časa, cena)</span>
+          </label>
+          <select
+            value={termTypeId}
+            onChange={(e) => setTermTypeId(e.target.value)}
+            required
+            className="w-full rounded-lg border border-stone-300 px-3 py-2 text-stone-800"
+          >
+            <option value="">Izaberite vrstu termina</option>
+            {termTypes.map((tt) => (
+              <option key={tt.id} value={tt.id}>
+                {tt.naziv}
+              </option>
+            ))}
+          </select>
+          <p className="text-xs text-stone-500 mt-1">Prvo izaberite vrstu časa; ista vrsta važi za sva deca u grupnom terminu.</p>
+        </div>
+      )}
       <div className="space-y-3 rounded-lg border border-stone-200 bg-stone-50/80 p-3">
         <p className="text-sm font-medium text-stone-800">
-          2. Kategorija termina <span className="text-stone-500 font-normal">(individualni ili grupni)</span>
+          {isTestingCat ? 'Tip termina' : '2. Kategorija termina'}{' '}
+          <span className="text-stone-500 font-normal">
+            {isTestingCat ? '' : '(individualni ili grupni)'}
+          </span>
         </p>
-        <p className="text-xs text-stone-600">
-          Grupni: više dece u istom terminu, jedan predavač, jedna učionica. Individualni: jedno dete u terminu.
-        </p>
+        {!isTestingCat && (
+          <p className="text-xs text-stone-600">
+            Grupni: više dece u istom terminu, jedan predavač, jedna učionica. Individualni: jedno dete u terminu.
+          </p>
+        )}
         {termCategories.length === 0 ? (
           <p className="text-sm text-amber-700">Dodajte kategorije u Admin → Kategorije termina.</p>
         ) : (
@@ -345,11 +345,16 @@ export default function AdminTerminForm({
               {termCategories.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.naziv}
-                  {c.jedan_klijent_po_terminu ? ' (jedno dete)' : ' (grupa)'}
+                  {c.is_testing ? ' (testiranje)' : c.jedan_klijent_po_terminu ? ' (jedno dete)' : ' (grupa)'}
                 </option>
               ))}
             </select>
           </div>
+        )}
+        {isTestingCat && (
+          <p className="text-xs text-stone-500">
+            Termin testiranja — posle kreiranja dodajte potencijalne klijente na stranici termina.
+          </p>
         )}
         <div>
           <label className="block text-xs font-medium text-stone-700 mb-1">Napomena za termin (opciono)</label>
@@ -361,37 +366,39 @@ export default function AdminTerminForm({
           />
         </div>
       </div>
-      <div>
-        <p className="text-sm font-medium text-stone-800 mb-1">3. Deca / klijent</p>
-        {allowsMultipleClients ? (
-          <div>
-            <p className="text-xs text-stone-500 mb-3">Pretraga i checkbox — označite jedno ili više dece.</p>
-            <GrupniKlijentiPicker
-              clients={clients}
-              selectedIds={grupniIds}
-              onSelectionChange={setGrupniIds}
-              disabled={loading}
-              inputId="admin-termin-grupni-search"
-            />
-          </div>
-        ) : (
-          <div>
-            <label className="block text-xs font-medium text-stone-700 mb-1">Klijent</label>
-            <select
-              value={clientId}
-              onChange={(e) => setClientId(e.target.value)}
-              required
-              className="w-full rounded-lg border border-stone-300 px-3 py-2 text-stone-800"
-            >
-              {clients.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.ime} {c.prezime}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
-      </div>
+      {!isTestingCat && (
+        <div>
+          <p className="text-sm font-medium text-stone-800 mb-1">3. Deca / klijent</p>
+          {allowsMultipleClients ? (
+            <div>
+              <p className="text-xs text-stone-500 mb-3">Pretraga i checkbox — označite jedno ili više dece.</p>
+              <GrupniKlijentiPicker
+                clients={clients}
+                selectedIds={grupniIds}
+                onSelectionChange={setGrupniIds}
+                disabled={loading}
+                inputId="admin-termin-grupni-search"
+              />
+            </div>
+          ) : (
+            <div>
+              <label className="block text-xs font-medium text-stone-700 mb-1">Klijent</label>
+              <select
+                value={clientId}
+                onChange={(e) => setClientId(e.target.value)}
+                required
+                className="w-full rounded-lg border border-stone-300 px-3 py-2 text-stone-800"
+              >
+                {clients.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.ime} {c.prezime}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+        </div>
+      )}
       {error && (
         <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>
       )}
@@ -400,7 +407,7 @@ export default function AdminTerminForm({
         disabled={loading || cannotSubmit}
         className="rounded-lg bg-amber-600 px-4 py-2 text-white font-medium hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed"
       >
-        {loading ? 'Kreiranje...' : slotFull ? `Slot pun (max ${maxTerminaPoSlotu})` : cannotSubmit ? 'Nema slobodnih instruktora ili učionica' : 'Zakaži termin i radionicu'}
+        {loading ? 'Kreiranje...' : slotFull ? `Slot pun (max ${maxTerminaPoSlotu})` : cannotSubmit ? 'Nema slobodnih instruktora ili učionica' : isTestingCat ? 'Zakaži termin testiranja' : 'Zakaži termin i radionicu'}
       </button>
     </form>
   );

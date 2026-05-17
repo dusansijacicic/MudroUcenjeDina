@@ -35,12 +35,13 @@ export default async function AdminEditPredavanjePage({
     .single();
   if (!predavanje) notFound();
 
-  const [termTypes, termCategories, classrooms, instructors] = await Promise.all([
+  const [termTypes, termCategoriesAll, classrooms, instructors] = await Promise.all([
     getTermTypes(),
     getTermCategories(),
     getClassrooms(),
     getAdminInstructorsList(),
   ]);
+  const termCategories = termCategoriesAll.filter((c) => !c.is_testing);
 
   const { data: allClients } = await admin
     .from('clients')

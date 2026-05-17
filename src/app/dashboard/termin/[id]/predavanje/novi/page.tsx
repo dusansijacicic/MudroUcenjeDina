@@ -26,7 +26,7 @@ export default async function NoviPredavanjePage({
 
   if (!term) notFound();
 
-  const [predRes, maxCasova, termTypes, termCategories, classrooms, termsInSlotRes, termWithCatRes] = await Promise.all([
+  const [predRes, maxCasova, termTypes, termCategoriesAll, classrooms, termsInSlotRes, termWithCatRes] = await Promise.all([
     admin.from('predavanja').select('*', { count: 'exact', head: true }).eq('term_id', termId),
     getMaxCasovaPoTerminu(),
     getTermTypes(),
@@ -35,6 +35,7 @@ export default async function NoviPredavanjePage({
     admin.from('terms').select('classroom_id').eq('date', term.date).eq('slot_index', term.slot_index).neq('id', termId),
     admin.from('terms').select('term_categories(jedan_klijent_po_terminu)').eq('id', termId).single(),
   ]);
+  const termCategories = termCategoriesAll.filter((c) => !c.is_testing);
   const currentCount = predRes.count ?? 0;
   const tc = termWithCatRes.data?.term_categories as
     | { jedan_klijent_po_terminu?: boolean }
