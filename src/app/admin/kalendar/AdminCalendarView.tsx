@@ -225,6 +225,66 @@ function AdminCellContent({
   );
 }
 
+function AdminWeekTable({
+  dates,
+  terms,
+  draggedTermId,
+  setDraggedTermId,
+  onDropCell,
+  maxTerminaPoSlotu,
+}: {
+  dates: string[];
+  terms: AdminTerm[];
+  draggedTermId: string | null;
+  setDraggedTermId: (id: string | null) => void;
+  onDropCell: (date: string, slot: number) => void | Promise<void>;
+  maxTerminaPoSlotu: number;
+}) {
+  return (
+    <div className="overflow-x-auto rounded-xl border border-stone-200 bg-white">
+      <table className="w-full min-w-[800px] text-sm">
+        <thead>
+          <tr className="border-b border-stone-200">
+            <th className="w-16 p-2 text-left text-stone-500 font-medium">Termin</th>
+            {dates.map((date) => {
+              const d = new Date(date + 'T12:00:00');
+              return (
+                <th key={date} className="p-2 text-center text-stone-600 font-medium min-w-[120px]">
+                  <div>{DAY_NAMES[d.getDay() === 0 ? 6 : d.getDay() - 1]}</div>
+                  <div className="text-stone-400">{d.getDate()}.{d.getMonth() + 1}.</div>
+                </th>
+              );
+            })}
+          </tr>
+        </thead>
+        <tbody>
+          {TIME_SLOTS.map((time, slotIndex) => (
+            <tr key={slotIndex} className="border-b border-stone-100">
+              <td className="p-2 text-stone-500 font-medium">{time}</td>
+              {dates.map((date) => {
+                const termsInSlot = termsByKey(terms, date, slotIndex);
+                return (
+                  <td key={date} className="p-1 align-top">
+                    <AdminCellContent
+                      termsInSlot={termsInSlot}
+                      emptyDate={date}
+                      emptySlot={slotIndex}
+                      draggedTermId={draggedTermId}
+                      setDraggedTermId={setDraggedTermId}
+                      onDropCell={onDropCell}
+                      maxTerminaPoSlotu={maxTerminaPoSlotu}
+                    />
+                  </td>
+                );
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function AdminWeekView({
   startOfWeek,
   terms,
@@ -244,7 +304,13 @@ function AdminWeekView({
   onDropCell: (date: string, slot: number) => void | Promise<void>;
   maxTerminaPoSlotu: number;
 }) {
-  const dates = getWeekDates(startOfWeek);
+  const week1Dates = getWeekDates(startOfWeek);
+  const week2Start = (() => {
+    const d = new Date(startOfWeek + 'T12:00:00');
+    d.setDate(d.getDate() + 7);
+    return d.toISOString().slice(0, 10);
+  })();
+  const week2Dates = getWeekDates(week2Start);
   const prevWeek = (() => {
     const d = new Date(startOfWeek + 'T12:00:00');
     d.setDate(d.getDate() - 7);
@@ -255,11 +321,18 @@ function AdminWeekView({
     d.setDate(d.getDate() + 7);
     return d.toISOString().slice(0, 10);
   })();
+  const rangeLabel = (() => {
+    const d1 = new Date(startOfWeek + 'T12:00:00');
+    const d2 = new Date(week2Start + 'T12:00:00');
+    const end2 = new Date(d2);
+    end2.setDate(d2.getDate() + 6);
+    return `${d1.getDate()}.${d1.getMonth() + 1}. – ${end2.getDate()}.${end2.getMonth() + 1}.${end2.getFullYear()}`;
+  })();
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <span className="font-medium text-stone-700">{formatWeekLabel(startOfWeek)}</span>
+        <span className="font-medium text-stone-700">{rangeLabel}</span>
         <div className="flex gap-2">
           <Link href={`${base}?view=nedelja&week=${prevWeek}${linkSuffix}`} className="px-3 py-1.5 rounded-lg bg-stone-200 text-stone-700 text-sm hover:bg-stone-300">
             ← Prethodna
@@ -269,46 +342,31 @@ function AdminWeekView({
           </Link>
         </div>
       </div>
-      <div className="overflow-x-auto rounded-xl border border-stone-200 bg-white">
-        <table className="w-full min-w-[800px] text-sm">
-          <thead>
-            <tr className="border-b border-stone-200">
-              <th className="w-16 p-2 text-left text-stone-500 font-medium">Termin</th>
-              {dates.map((date) => {
-                const d = new Date(date + 'T12:00:00');
-                return (
-                  <th key={date} className="p-2 text-center text-stone-600 font-medium min-w-[120px]">
-                    <div>{DAY_NAMES[d.getDay() === 0 ? 6 : d.getDay() - 1]}</div>
-                    <div className="text-stone-400">{d.getDate()}.{d.getMonth() + 1}.</div>
-                  </th>
-                );
-              })}
-            </tr>
-          </thead>
-          <tbody>
-            {TIME_SLOTS.map((time, slotIndex) => (
-              <tr key={slotIndex} className="border-b border-stone-100">
-                <td className="p-2 text-stone-500 font-medium">{time}</td>
-                {dates.map((date) => {
-                  const termsInSlot = termsByKey(terms, date, slotIndex);
-                  return (
-                    <td key={date} className="p-1 align-top">
-                      <AdminCellContent
-                        termsInSlot={termsInSlot}
-                        emptyDate={date}
-                        emptySlot={slotIndex}
-                        draggedTermId={draggedTermId}
-                        setDraggedTermId={setDraggedTermId}
-                        onDropCell={onDropCell}
-                        maxTerminaPoSlotu={maxTerminaPoSlotu}
-                      />
-                    </td>
-                  );
-                })}
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div>
+        <p className="text-xs font-semibold text-stone-500 mb-1.5 uppercase tracking-wide">
+          Ova nedelja — {formatWeekLabel(startOfWeek)}
+        </p>
+        <AdminWeekTable
+          dates={week1Dates}
+          terms={terms}
+          draggedTermId={draggedTermId}
+          setDraggedTermId={setDraggedTermId}
+          onDropCell={onDropCell}
+          maxTerminaPoSlotu={maxTerminaPoSlotu}
+        />
+      </div>
+      <div>
+        <p className="text-xs font-semibold text-stone-500 mb-1.5 uppercase tracking-wide">
+          Sledeća nedelja — {formatWeekLabel(week2Start)}
+        </p>
+        <AdminWeekTable
+          dates={week2Dates}
+          terms={terms}
+          draggedTermId={draggedTermId}
+          setDraggedTermId={setDraggedTermId}
+          onDropCell={onDropCell}
+          maxTerminaPoSlotu={maxTerminaPoSlotu}
+        />
       </div>
     </div>
   );

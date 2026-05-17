@@ -68,7 +68,7 @@ export default async function DashboardPage({
     startOfWeek = params.week ? params.week.slice(0, 10) : getMonday(today);
     const start = new Date(startOfWeek + 'T12:00:00');
     const end = new Date(start);
-    end.setDate(end.getDate() + 6);
+    end.setDate(end.getDate() + 13);
     dateFrom = startOfWeek;
     dateTo = end.toISOString().slice(0, 10);
   }

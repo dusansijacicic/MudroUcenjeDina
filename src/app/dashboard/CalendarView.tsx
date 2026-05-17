@@ -297,6 +297,73 @@ function CellContent({
   );
 }
 
+function WeekTable({
+  dates,
+  terms,
+  otherTerms,
+  instructorId,
+  instructorColor,
+  draggedTermId,
+  setDraggedTermId,
+  onDropCell,
+}: {
+  dates: string[];
+  terms: RawTerm[];
+  otherTerms: OtherTerm[];
+  instructorId: string;
+  instructorColor: string;
+  draggedTermId: string | null;
+  setDraggedTermId: (id: string | null) => void;
+  onDropCell: (date: string, slot: number) => void | Promise<void>;
+}) {
+  return (
+    <div className="overflow-x-auto rounded-xl border border-stone-200 bg-white">
+      <table className="w-full min-w-[800px] text-sm">
+        <thead>
+          <tr className="border-b border-stone-200">
+            <th className="w-16 p-2 text-left text-stone-500 font-medium">Termin</th>
+            {dates.map((date) => {
+              const d = new Date(date + 'T12:00:00');
+              return (
+                <th key={date} className="p-2 text-center text-stone-600 font-medium min-w-[120px]">
+                  <div>{DAY_NAMES[d.getDay() === 0 ? 6 : d.getDay() - 1]}</div>
+                  <div className="text-stone-400">{d.getDate()}.{d.getMonth() + 1}.</div>
+                </th>
+              );
+            })}
+          </tr>
+        </thead>
+        <tbody>
+          {TIME_SLOTS.map((time, slotIndex) => (
+            <tr key={slotIndex} className="border-b border-stone-200 last:border-b-0">
+              <td className="p-2 text-stone-600 font-semibold bg-stone-50/70">{time}</td>
+              {dates.map((date) => {
+                const term = termByKey(terms, date, slotIndex);
+                const otherTermsInSlot = otherTermsByKey(otherTerms, date, slotIndex);
+                return (
+                  <td key={date} className="p-1 align-top">
+                    <CellContent
+                      term={term}
+                      otherTermsInSlot={otherTermsInSlot}
+                      instructorId={instructorId}
+                      instructorColor={instructorColor}
+                      emptyDate={date}
+                      emptySlot={slotIndex}
+                      draggedTermId={draggedTermId}
+                      setDraggedTermId={setDraggedTermId}
+                      onDropCell={onDropCell}
+                    />
+                  </td>
+                );
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function CalendarWeek({
   startOfWeek,
   terms,
@@ -318,7 +385,13 @@ function CalendarWeek({
   setDraggedTermId: (id: string | null) => void;
   onDropCell: (date: string, slot: number) => void | Promise<void>;
 }) {
-  const dates = getWeekDates(startOfWeek);
+  const week1Dates = getWeekDates(startOfWeek);
+  const week2Start = (() => {
+    const d = new Date(startOfWeek + 'T12:00:00');
+    d.setDate(d.getDate() + 7);
+    return d.toISOString().slice(0, 10);
+  })();
+  const week2Dates = getWeekDates(week2Start);
   const prevWeek = (() => {
     const d = new Date(startOfWeek + 'T12:00:00');
     d.setDate(d.getDate() - 7);
@@ -329,13 +402,18 @@ function CalendarWeek({
     d.setDate(d.getDate() + 7);
     return d.toISOString().slice(0, 10);
   })();
+  const rangeLabel = (() => {
+    const d1 = new Date(startOfWeek + 'T12:00:00');
+    const d2 = new Date(week2Start + 'T12:00:00');
+    const end2 = new Date(d2);
+    end2.setDate(d2.getDate() + 6);
+    return `${d1.getDate()}.${d1.getMonth() + 1}. – ${end2.getDate()}.${end2.getMonth() + 1}.${end2.getFullYear()}`;
+  })();
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <span className="font-medium text-stone-700">
-          {formatWeekLabel(startOfWeek)}
-        </span>
+        <span className="font-medium text-stone-700">{rangeLabel}</span>
         <div className="flex gap-2">
           <Link
             href={`/dashboard?week=${prevWeek}${linkSuffix}`}
@@ -351,59 +429,35 @@ function CalendarWeek({
           </Link>
         </div>
       </div>
-      <div className="overflow-x-auto rounded-xl border border-stone-200 bg-white">
-        <table className="w-full min-w-[800px] text-sm">
-          <thead>
-            <tr className="border-b border-stone-200">
-              <th className="w-16 p-2 text-left text-stone-500 font-medium">
-                Termin
-              </th>
-              {dates.map((date) => {
-                const d = new Date(date + 'T12:00:00');
-                const dayNum = d.getDate();
-                const month = d.getMonth() + 1;
-                return (
-                  <th
-                    key={date}
-                    className="p-2 text-center text-stone-600 font-medium min-w-[120px]"
-                  >
-                    <div>{DAY_NAMES[d.getDay() === 0 ? 6 : d.getDay() - 1]}</div>
-                    <div className="text-stone-400">{dayNum}.{month}.</div>
-                  </th>
-                );
-              })}
-            </tr>
-          </thead>
-          <tbody>
-            {TIME_SLOTS.map((time, slotIndex) => (
-              <tr
-                key={slotIndex}
-                className="border-b border-stone-200 last:border-b-0"
-              >
-                <td className="p-2 text-stone-600 font-semibold bg-stone-50/70">{time}</td>
-                {dates.map((date) => {
-                  const term = termByKey(terms, date, slotIndex);
-                  const otherTermsInSlot = otherTermsByKey(otherTerms, date, slotIndex);
-                  return (
-                    <td key={date} className="p-1 align-top">
-                      <CellContent
-                        term={term}
-                        otherTermsInSlot={otherTermsInSlot}
-                        instructorId={instructorId}
-                        instructorColor={instructorColor}
-                        emptyDate={date}
-                        emptySlot={slotIndex}
-                        draggedTermId={draggedTermId}
-                        setDraggedTermId={setDraggedTermId}
-                        onDropCell={onDropCell}
-                      />
-                    </td>
-                  );
-                })}
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div>
+        <p className="text-xs font-semibold text-stone-500 mb-1.5 uppercase tracking-wide">
+          Ova nedelja — {formatWeekLabel(startOfWeek)}
+        </p>
+        <WeekTable
+          dates={week1Dates}
+          terms={terms}
+          otherTerms={otherTerms}
+          instructorId={instructorId}
+          instructorColor={instructorColor}
+          draggedTermId={draggedTermId}
+          setDraggedTermId={setDraggedTermId}
+          onDropCell={onDropCell}
+        />
+      </div>
+      <div>
+        <p className="text-xs font-semibold text-stone-500 mb-1.5 uppercase tracking-wide">
+          Sledeća nedelja — {formatWeekLabel(week2Start)}
+        </p>
+        <WeekTable
+          dates={week2Dates}
+          terms={terms}
+          otherTerms={otherTerms}
+          instructorId={instructorId}
+          instructorColor={instructorColor}
+          draggedTermId={draggedTermId}
+          setDraggedTermId={setDraggedTermId}
+          onDropCell={onDropCell}
+        />
       </div>
     </div>
   );
