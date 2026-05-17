@@ -24,7 +24,7 @@ export default async function AdminLayout({
   return (
     <div className="min-h-screen bg-stone-50">
       <AdminNav />
-      <main className="max-w-screen-2xl mx-auto px-4 py-6 animate-fade-in">{children}</main>
+      <main className="w-full px-4 py-6 animate-fade-in">{children}</main>
     </div>
   );
 }

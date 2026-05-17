@@ -35,7 +35,7 @@ export default async function DashboardLayout({
   return (
     <div className="min-h-screen bg-stone-50">
       <DashboardNav instructor={instructor} isAdminView={isAdminView} />
-      <main className="max-w-screen-2xl mx-auto px-4 py-6 animate-fade-in">{children}</main>
+      <main className="w-full px-4 py-6 animate-fade-in">{children}</main>
     </div>
   );
 }
