@@ -26,7 +26,7 @@ export default async function PotencijalniKlijentPage({
       <Link href={`/admin/termin/${termId}`} className="text-sm text-stone-500 hover:text-amber-600 inline-block mb-4">
         ← Nazad na termin
       </Link>
-      <h1 className="text-xl font-semibold text-stone-800 mb-1">{pc.ime}</h1>
+      <h1 className="text-xl font-semibold text-stone-800 mb-1">{pc.ime}{pc.prezime ? ` ${pc.prezime}` : ''}</h1>
       <p className="text-stone-500 text-sm mb-6">Izmena podataka i statusa potencijalnog klijenta.</p>
       <PotencijalniKlijentEditForm termId={termId} pc={pc as PotentialClientRow} />
     </div>

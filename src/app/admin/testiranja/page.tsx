@@ -31,7 +31,7 @@ export default async function TestiranjaPage() {
     .order('created_at', { ascending: false });
 
   const list = (rows ?? []) as Array<{
-    id: string; term_id: string | null; ime: string; ime_roditelja: string | null;
+    id: string; term_id: string | null; ime: string; prezime: string | null; ime_roditelja: string | null;
     mobilni_roditelja: string | null; razred: string | null; status: string;
     komentar: string | null; converted_client_id: string | null; created_at: string;
     term: { id: string; date: string; slot_index: number } | { id: string; date: string; slot_index: number }[] | null;
@@ -61,7 +61,7 @@ export default async function TestiranjaPage() {
               <div key={pc.id} className="p-4 flex items-start justify-between gap-4">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-medium text-stone-800">{pc.ime}</span>
+                    <span className="font-medium text-stone-800">{pc.ime}{pc.prezime ? ` ${pc.prezime}` : ''}</span>
                     {pc.razred && <span className="text-xs text-stone-500">{pc.razred}. razred</span>}
                     <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_COLOR[pc.status as PotentialClientStatus]}`}>
                       {STATUS_LABEL[pc.status as PotentialClientStatus] ?? pc.status}

@@ -23,6 +23,7 @@ export type RawTerm = {
     placeno: boolean;
     komentar: string | null;
     client?: { id: string; ime: string; prezime: string } | null;
+    term_type?: { naziv: string } | { naziv: string }[] | null;
   }>;
 };
 
@@ -234,6 +235,11 @@ function CellContent({
           {term.classroom && (
             <span className="text-xs block mb-0.5 text-stone-500">{term.classroom.naziv}</span>
           )}
+          {(() => {
+            const tt = term.predavanja?.[0]?.term_type;
+            const naziv = Array.isArray(tt) ? tt[0]?.naziv : tt?.naziv;
+            return naziv ? <span className="text-xs block mb-1 font-semibold" style={{ color: textColor }}>{naziv}</span> : null;
+          })()}
           {(term.predavanja ?? []).length === 0 ? (
             <span className="text-sm" style={{ color: textColor }}>+ Dodaj radionicu</span>
           ) : (

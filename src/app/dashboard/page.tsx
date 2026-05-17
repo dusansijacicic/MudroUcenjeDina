@@ -91,7 +91,7 @@ export default async function DashboardPage({
     const admin = createAdminClient();
     serviceRoleUsed = true;
     const [termsRes, classRes] = await Promise.all([
-      admin.from('terms').select('id, instructor_id, date, slot_index, classroom_id, instructor:instructors(id, ime, prezime, color), classroom:classrooms(id, naziv, color), predavanja(*, client:clients(id, ime, prezime))').gte('date', dateFrom).lte('date', dateTo).order('date').order('slot_index'),
+      admin.from('terms').select('id, instructor_id, date, slot_index, classroom_id, instructor:instructors(id, ime, prezime, color), classroom:classrooms(id, naziv, color), predavanja(*, client:clients(id, ime, prezime), term_type:term_types(naziv))').gte('date', dateFrom).lte('date', dateTo).order('date').order('slot_index'),
       admin.from('classrooms').select('id, naziv, color').order('naziv'),
     ]);
     console.log('[dashboard] admin termsRes.error:', termsRes.error);
@@ -102,7 +102,7 @@ export default async function DashboardPage({
     console.error('[dashboard] createAdminClient or terms fetch failed – using fallback (samo vaši termini). Postavite SUPABASE_SERVICE_ROLE_KEY na Vercel.', err);
     const supabase = await createClient();
     const [termsRes, classRes] = await Promise.all([
-      supabase.from('terms').select('id, instructor_id, date, slot_index, classroom_id, instructor:instructors(id, ime, prezime, color), classroom:classrooms(id, naziv, color), predavanja(*, client:clients(id, ime, prezime))').eq('instructor_id', instructorId).gte('date', dateFrom).lte('date', dateTo).order('date').order('slot_index'),
+      supabase.from('terms').select('id, instructor_id, date, slot_index, classroom_id, instructor:instructors(id, ime, prezime, color), classroom:classrooms(id, naziv, color), predavanja(*, client:clients(id, ime, prezime), term_type:term_types(naziv))').eq('instructor_id', instructorId).gte('date', dateFrom).lte('date', dateTo).order('date').order('slot_index'),
       supabase.from('classrooms').select('id, naziv, color').order('naziv'),
     ]);
     console.log('[dashboard] fallback termsRes.error:', termsRes.error);

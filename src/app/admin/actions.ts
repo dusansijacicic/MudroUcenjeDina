@@ -989,6 +989,7 @@ export type PotentialClientRow = {
   id: string;
   term_id: string | null;
   ime: string;
+  prezime: string | null;
   ime_roditelja: string | null;
   mobilni_roditelja: string | null;
   razred: string | null;
@@ -1000,7 +1001,7 @@ export type PotentialClientRow = {
 
 export async function addPotentialClient(
   termId: string,
-  payload: { ime: string; ime_roditelja: string | null; mobilni_roditelja: string | null; razred: string | null }
+  payload: { ime: string; prezime: string | null; ime_roditelja: string | null; mobilni_roditelja: string | null; razred: string | null }
 ): Promise<{ error?: string; id?: string }> {
   const { admin, error: authErr } = await requireAdmin();
   if (authErr || !admin) return { error: authErr ?? 'Samo admin.' };
@@ -1016,7 +1017,7 @@ export async function addPotentialClient(
 
 export async function updatePotentialClient(
   id: string,
-  payload: { ime?: string; ime_roditelja?: string | null; mobilni_roditelja?: string | null; razred?: string | null; status?: PotentialClientStatus; komentar?: string | null }
+  payload: { ime?: string; prezime?: string | null; ime_roditelja?: string | null; mobilni_roditelja?: string | null; razred?: string | null; status?: PotentialClientStatus; komentar?: string | null }
 ): Promise<{ error?: string }> {
   const { admin, error: authErr } = await requireAdmin();
   if (authErr || !admin) return { error: authErr ?? 'Samo admin.' };
@@ -1040,7 +1041,7 @@ export async function convertPotentialClientToClient(
 
   const { data: newClient, error: insErr } = await admin
     .from('clients')
-    .insert({ ime: pc.ime, razred: pc.razred ?? null, roditelj: pc.ime_roditelja ?? null, kontakt_telefon: pc.mobilni_roditelja ?? null })
+    .insert({ ime: pc.ime, prezime: pc.prezime ?? '', razred: pc.razred ?? null, roditelj: pc.ime_roditelja ?? null, kontakt_telefon: pc.mobilni_roditelja ?? null })
     .select('id')
     .single();
   if (insErr || !newClient) return { error: insErr?.message ?? 'Greška pri kreiranju klijenta.' };

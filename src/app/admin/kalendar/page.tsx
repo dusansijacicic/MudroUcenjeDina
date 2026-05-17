@@ -68,7 +68,7 @@ export default async function AdminKalendarPage({
   const [{ data: termsRaw }, { data: instructorsList }, { data: classroomsList }, { data: clientsList }, maxTerminaPoSlotu] = await Promise.all([
     adminSupabase
       .from('terms')
-      .select('*, instructor:instructors(id, ime, prezime, color), classroom:classrooms(id, naziv, color), predavanja(*, client:clients(id, ime, prezime))')
+      .select('*, instructor:instructors(id, ime, prezime, color), classroom:classrooms(id, naziv, color), predavanja(*, client:clients(id, ime, prezime), term_type:term_types(naziv))')
       .gte('date', dateFrom)
       .lte('date', dateTo)
       .order('date')

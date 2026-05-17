@@ -12,6 +12,7 @@ export default function NoviPotencijalniKlijentPage() {
   const router = useRouter();
 
   const [ime, setIme] = useState('');
+  const [prezime, setPrezime] = useState('');
   const [imeRoditelja, setImeRoditelja] = useState('');
   const [mobilni, setMobilni] = useState('');
   const [razred, setRazred] = useState('');
@@ -26,6 +27,7 @@ export default function NoviPotencijalniKlijentPage() {
     try {
       const result = await addPotentialClient(termId, {
         ime: ime.trim(),
+        prezime: prezime.trim() || null,
         ime_roditelja: imeRoditelja.trim() || null,
         mobilni_roditelja: mobilni.trim() || null,
         razred: razred.trim() || null,
@@ -51,18 +53,30 @@ export default function NoviPotencijalniKlijentPage() {
       <p className="text-stone-500 text-sm mb-6">Osnovni podaci za termin testiranja.</p>
 
       <form onSubmit={handleSubmit} className="space-y-4">
-        <div>
-          <label className="block text-sm font-medium text-stone-700 mb-1">
-            Ime deteta <span className="text-red-600">*</span>
-          </label>
-          <input
-            type="text"
-            value={ime}
-            onChange={(e) => setIme(e.target.value)}
-            required
-            placeholder="npr. Marko Petrović"
-            className="w-full rounded-lg border border-stone-300 px-3 py-2 text-stone-800"
-          />
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-stone-700 mb-1">
+              Ime deteta <span className="text-red-600">*</span>
+            </label>
+            <input
+              type="text"
+              value={ime}
+              onChange={(e) => setIme(e.target.value)}
+              required
+              placeholder="npr. Marko"
+              className="w-full rounded-lg border border-stone-300 px-3 py-2 text-stone-800"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-stone-700 mb-1">Prezime deteta</label>
+            <input
+              type="text"
+              value={prezime}
+              onChange={(e) => setPrezime(e.target.value)}
+              placeholder="npr. Petrović"
+              className="w-full rounded-lg border border-stone-300 px-3 py-2 text-stone-800"
+            />
+          </div>
         </div>
         <div>
           <label className="block text-sm font-medium text-stone-700 mb-1">Ime roditelja</label>

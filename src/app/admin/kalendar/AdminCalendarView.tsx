@@ -18,6 +18,7 @@ export type AdminTerm = {
   predavanja?: Array<{
     id: string;
     client?: { id: string; ime: string; prezime: string } | null;
+    term_type?: { naziv: string } | { naziv: string }[] | null;
   }>;
 };
 
@@ -183,6 +184,11 @@ function AdminCellContent({
             <span className="ml-1 text-[0.7rem] uppercase tracking-wide opacity-80">
               ({classroomName})
             </span>
+            {(() => {
+              const tt = predavanja[0]?.term_type;
+              const naziv = Array.isArray(tt) ? tt[0]?.naziv : tt?.naziv;
+              return naziv ? <span className="block text-[11px] font-semibold mt-0.5 opacity-90">{naziv}</span> : null;
+            })()}
             {predavanja.length > 0 && (
               <ul className="mt-1.5 space-y-1 pl-0 list-none border-t border-stone-200/80 pt-1.5">
                 {predavanja.map((p) => (
