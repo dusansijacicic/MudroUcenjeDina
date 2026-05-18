@@ -111,19 +111,22 @@ export default function AdminTerminForm({
     return () => { cancelled = true; };
   }, [date, slotIndex]);
 
-  // Load nastavak terms when NASTAVAK category is selected
+  // Load nastavak terms when NASTAVAK category is selected or date/slot changes
   useEffect(() => {
     if (!isNastavakCat) {
       setNastavakOfTermId('');
       setGrupniIds([]);
+      setNastavakTerms([]);
       return;
     }
+    setNastavakOfTermId('');
+    setGrupniIds([]);
     setNastavakLoading(true);
-    getTermsForNastavak().then((terms) => {
+    getTermsForNastavak(date, slotIndex).then((terms) => {
       setNastavakTerms(terms);
       setNastavakLoading(false);
     });
-  }, [isNastavakCat]);
+  }, [isNastavakCat, date, slotIndex]);
 
   // When parent term is selected: lock instructor+classroom, pre-populate clients
   useEffect(() => {
@@ -295,9 +298,13 @@ export default function AdminTerminForm({
             <label className="block text-xs font-medium text-stone-700 mb-1">Roditeljski termin (čiji je ovo nastavak)</label>
             {nastavakLoading ? (
               <p className="text-xs text-stone-500">Učitavanje termina...</p>
+            ) : slotIndex === 0 ? (
+              <p className="text-xs text-amber-700 bg-amber-50 rounded px-2 py-1">
+                Izabrani slot je prvi u danu — nema prethodnog slota.
+              </p>
             ) : nastavakTerms.length === 0 ? (
               <p className="text-xs text-amber-700 bg-amber-50 rounded px-2 py-1">
-                Nema termina sa zakazanim klijentima u poslednjih 60 dana.
+                Nema termina sa zakazanim klijentima u prethodnom slotu ({TIME_SLOTS[slotIndex - 1]}) na izabrani datum.
               </p>
             ) : (
               <select

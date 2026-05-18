@@ -218,19 +218,15 @@ export type TermForNastavak = {
   client_names: string[];
 };
 
-export async function getTermsForNastavak(): Promise<TermForNastavak[]> {
+export async function getTermsForNastavak(date: string, slotIndex: number): Promise<TermForNastavak[]> {
+  if (slotIndex <= 0) return [];
   const admin = createAdminClient();
-  const sixtyDaysAgo = new Date();
-  sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
-  const fromDate = sixtyDaysAgo.toISOString().slice(0, 10);
 
   const { data } = await admin
     .from('terms')
     .select('id, date, slot_index, instructor_id, instructor:instructors(ime, prezime), classroom_id, classroom:classrooms(naziv), predavanja(client_id, client:clients(ime, prezime))')
-    .gte('date', fromDate)
-    .order('date', { ascending: false })
-    .order('slot_index', { ascending: false })
-    .limit(300);
+    .eq('date', date.slice(0, 10))
+    .eq('slot_index', slotIndex - 1);
 
   return (data ?? [])
     .filter((t) => ((t as { predavanja?: unknown[] }).predavanja ?? []).length > 0)
