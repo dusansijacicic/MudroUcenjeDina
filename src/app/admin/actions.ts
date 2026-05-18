@@ -111,7 +111,8 @@ export async function createTermAsAdmin(
   slotIndex: number,
   classroomId: string | null,
   termCategoryId: string,
-  napomena: string | null = null
+  napomena: string | null = null,
+  nastavakOfTermId: string | null = null
 ): Promise<{ termId?: string; instructorId?: string; error?: string }> {
   const supabase = await createClient();
   const {
@@ -183,6 +184,7 @@ export async function createTermAsAdmin(
       classroom_id: classroomId,
       term_category_id: termCategoryId.trim(),
       napomena: napomena?.trim() || null,
+      nastavak_of_term_id: nastavakOfTermId ?? null,
     })
     .select('id')
     .single();
@@ -201,6 +203,60 @@ export async function getAdminInstructorsList(): Promise<{ id: string; ime: stri
   const adminSupabase = createAdminClient();
   const { data } = await adminSupabase.from('instructors').select('id, ime, prezime').order('prezime').order('ime');
   return data ?? [];
+}
+
+export type TermForNastavak = {
+  id: string;
+  date: string;
+  slot_index: number;
+  instructor_id: string | null;
+  instructor_ime: string | null;
+  instructor_prezime: string | null;
+  classroom_id: string | null;
+  classroom_naziv: string | null;
+  client_ids: string[];
+  client_names: string[];
+};
+
+export async function getTermsForNastavak(): Promise<TermForNastavak[]> {
+  const admin = createAdminClient();
+  const sixtyDaysAgo = new Date();
+  sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
+  const fromDate = sixtyDaysAgo.toISOString().slice(0, 10);
+
+  const { data } = await admin
+    .from('terms')
+    .select('id, date, slot_index, instructor_id, instructor:instructors(ime, prezime), classroom_id, classroom:classrooms(naziv), predavanja(client_id, client:clients(ime, prezime))')
+    .gte('date', fromDate)
+    .order('date', { ascending: false })
+    .order('slot_index', { ascending: false })
+    .limit(300);
+
+  return (data ?? [])
+    .filter((t) => ((t as { predavanja?: unknown[] }).predavanja ?? []).length > 0)
+    .map((t) => {
+      const instrRaw = (t as { instructor?: unknown }).instructor;
+      const instr = Array.isArray(instrRaw) ? instrRaw[0] : instrRaw;
+      const clRaw = (t as { classroom?: unknown }).classroom;
+      const cl = Array.isArray(clRaw) ? clRaw[0] : clRaw;
+      type PredRow = { client_id: string; client: { ime?: string; prezime?: string } | { ime?: string; prezime?: string }[] | null };
+      const preds = ((t as { predavanja?: PredRow[] }).predavanja ?? []);
+      return {
+        id: t.id,
+        date: t.date,
+        slot_index: t.slot_index,
+        instructor_id: t.instructor_id ?? null,
+        instructor_ime: (instr as { ime?: string } | null)?.ime ?? null,
+        instructor_prezime: (instr as { prezime?: string } | null)?.prezime ?? null,
+        classroom_id: (t as { classroom_id?: string | null }).classroom_id ?? null,
+        classroom_naziv: (cl as { naziv?: string } | null)?.naziv ?? null,
+        client_ids: preds.map((p) => p.client_id),
+        client_names: preds.map((p) => {
+          const c = Array.isArray(p.client) ? p.client[0] : p.client;
+          return `${(c as { ime?: string } | null)?.ime ?? ''} ${(c as { prezime?: string } | null)?.prezime ?? ''}`.trim();
+        }),
+      };
+    });
 }
 
 export async function updateInstructorAsAdmin(
@@ -592,7 +648,7 @@ export async function getTermCategories(): Promise<TermCategoryRow[]> {
   const admin = createAdminClient();
   const { data } = await admin
     .from('term_categories')
-    .select('id, naziv, opis, jedan_klijent_po_terminu, is_testing')
+    .select('id, naziv, opis, jedan_klijent_po_terminu, is_testing, is_nastavak')
     .order('naziv');
   return (data ?? []) as TermCategoryRow[];
 }
@@ -868,7 +924,7 @@ export async function getStanjePoVrstamaZaKlijenteBatch(
 
   const [uplateRes, predavanjaRes, termTypesRes] = await Promise.all([
     admin.from('uplate').select('client_id, term_type_id, broj_casova').in('client_id', ids),
-    admin.from('predavanja').select('client_id, term_type_id, odrzano').in('client_id', ids).eq('odrzano', true),
+    admin.from('predavanja').select('client_id, term_type_id, odrzano, term:terms(category:term_categories(is_nastavak))').in('client_id', ids).eq('odrzano', true),
     admin.from('term_types').select('id, naziv').order('naziv'),
   ]);
 
@@ -894,6 +950,11 @@ export async function getStanjePoVrstamaZaKlijenteBatch(
     const cid = p.client_id;
     const map = odrzanoByClient.get(cid);
     if (!map) continue;
+    const termRaw = (p as { term?: unknown }).term;
+    const term = Array.isArray(termRaw) ? termRaw[0] : termRaw;
+    const catRaw = (term as { category?: unknown } | null)?.category;
+    const cat = Array.isArray(catRaw) ? catRaw[0] : catRaw;
+    if ((cat as { is_nastavak?: boolean } | null)?.is_nastavak) continue;
     const tid = p.term_type_id ?? '__bez_vrste__';
     map.set(tid, (map.get(tid) ?? 0) + 1);
   }
@@ -922,7 +983,7 @@ export async function getStanjePoVrstamaZaKlijenta(
   }
   const { data: predRows } = await admin
     .from('predavanja')
-    .select('term_type_id, odrzano, term:terms(instructor_id)')
+    .select('term_type_id, odrzano, term:terms(instructor_id, category:term_categories(is_nastavak))')
     .eq('client_id', clientId);
   const uplateByType = new Map<string, number>();
   for (const u of uplateRows) {
@@ -934,6 +995,9 @@ export async function getStanjePoVrstamaZaKlijenta(
     const term = Array.isArray(p.term) ? p.term[0] : p.term;
     if (instructorId && (term as { instructor_id?: string })?.instructor_id !== instructorId) continue;
     if (!p.odrzano) continue;
+    const catRaw = (term as { category?: unknown } | null)?.category;
+    const cat = Array.isArray(catRaw) ? catRaw[0] : catRaw;
+    if ((cat as { is_nastavak?: boolean } | null)?.is_nastavak) continue;
     const tid = p.term_type_id ?? '__bez_vrste__';
     odrzanoByType.set(tid, (odrzanoByType.get(tid) ?? 0) + 1);
   }

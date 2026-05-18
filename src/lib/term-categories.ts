@@ -9,6 +9,7 @@ export type TermCategoryRow = {
   opis: string | null;
   jedan_klijent_po_terminu: boolean;
   is_testing?: boolean;
+  is_nastavak?: boolean;
 };
 
 export function effectiveMaxRadionica(
@@ -52,6 +53,14 @@ export function isTestingCategoryJoin(
   if (tc == null) return false;
   if (Array.isArray(tc)) return tc[0]?.is_testing === true;
   return tc.is_testing === true;
+}
+
+export function isNastavakCategoryJoin(
+  tc: { is_nastavak?: boolean } | { is_nastavak?: boolean }[] | null | undefined
+): boolean {
+  if (tc == null) return false;
+  if (Array.isArray(tc)) return tc[0]?.is_nastavak === true;
+  return tc.is_nastavak === true;
 }
 
 export function nazivKategorijeIzJoina(
