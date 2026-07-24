@@ -29,6 +29,7 @@ export default function AdminUputstvoPage() {
           'Podešavanja: maks. broj radionica po terminu, maks. broj termina u istom vremenskom slotu.',
           'Može otkazati termine, menjati meta podatke termina (kategorija, napomena) i radionice u admin prikazu.',
           'Pregled „kao instruktor“ (view) ako koristite te linkove – i dalje admin nalog.',
+          'Kad se u kodu doda nova SQL migracija (npr. nova kolona ili indeks za brzinu), treba je ručno pokrenuti u Supabase SQL Editoru – koraci su u fajlu KAKO_POKRENUTI_SQL.md u repozitorijumu.',
         ]}
       />
 

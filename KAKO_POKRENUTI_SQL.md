@@ -82,6 +82,10 @@ SQL fajlovi iz projekta **ne pokreću se automatski**. Morate ih ručno izvršit
    - **026** `026_clients_pol.sql` – kolona `clients.pol` (`muski` / `zenski`, opciono).
    - **027** `027_link_client_pol_ucenik_profil.sql` – `link_client_to_user(datum, pol)` i funkcija `ucenik_update_own_profile` za stranicu „Moj profil” učenika.
 
+   ### Trideset treća migracija (033) – indeksi za brzinu kalendara
+   - Kopiraj i pokreni `supabase/migrations/033_perf_indexes.sql`.
+   - Dodaje indekse na `terms(date)` i `otkazani_termini(term_date)` – ubrzava učitavanje kalendara (admin i predavač) koji filtrira po datumskom opsegu. Bez rizika, samo `CREATE INDEX IF NOT EXISTS` – ne menja podatke.
+
 4. **Provera**  
    U levom meniju otvori **Table Editor**. Trebalo bi da vidiš tabele: `instructors`, `clients`, `terms`, `predavanja`, `admin_users`, `instructor_clients`. Ako ih nema, vrati se na korak 3 i pokreni migracije redom.
 

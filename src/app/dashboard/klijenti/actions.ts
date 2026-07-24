@@ -5,6 +5,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { getDashboardInstructor } from '@/lib/dashboard';
 import { revalidatePath } from 'next/cache';
 import { normalizeClientPol } from '@/lib/client-pol';
+import { saveClientTermTypeStatuses, type ClientProgramStatus } from '@/app/admin/actions';
 
 type ClientPayload = {
   ime: string;
@@ -21,6 +22,8 @@ type ClientPayload = {
   datum_testiranja: string | null;
   /** Vrste termina kojima učenik ima pristup; prazan niz = sve */
   accessible_term_type_ids?: string[];
+  /** Programi (vrste termina) koje dete pohađa + status završeno/u toku */
+  program_statuses?: ClientProgramStatus[];
 };
 
 /**
@@ -63,7 +66,8 @@ export async function createClientAsInstructor(
     effectiveInstructorId = instructor.id;
   }
 
-  const row = { ...payload, pol: normalizeClientPol(payload.pol) };
+  const { program_statuses, ...payloadRest } = payload;
+  const row = { ...payloadRest, pol: normalizeClientPol(payloadRest.pol) };
   const { data: newClient, error: insertErr } = await admin
     .from('clients')
     .insert(row)
@@ -72,6 +76,9 @@ export async function createClientAsInstructor(
   if (insertErr || !newClient) {
     console.error('[klijenti] clients insert', insertErr?.message);
     return { error: insertErr?.message ?? 'Klijent nije kreiran.' };
+  }
+  if (program_statuses && program_statuses.length > 0) {
+    await saveClientTermTypeStatuses(admin, newClient.id, program_statuses);
   }
   // Veza predavač–klijent: bilo koji klijent može kasnije dobiti bilo kog predavača u terminu.
   // Ovde odmah dodeljujemo ovog predavača da klijent uđe u "Moji klijenti" (paket = placeno_casova).
@@ -129,12 +136,14 @@ export async function updateClientAsInstructor(
     return { error: 'Kontakt telefon je obavezan.' };
   }
 
-  const row = { ...payload, pol: normalizeClientPol(payload.pol) };
+  const { program_statuses, ...payloadRest } = payload;
+  const row = { ...payloadRest, pol: normalizeClientPol(payloadRest.pol) };
   const { error: updateErr } = await admin.from('clients').update(row).eq('id', clientId);
   if (updateErr) {
     console.error('[klijenti] clients update', updateErr.message);
     return { error: updateErr.message };
   }
+  if (program_statuses) await saveClientTermTypeStatuses(admin, clientId, program_statuses);
   revalidatePath('/dashboard/klijenti');
   revalidatePath(`/dashboard/klijenti/${clientId}`);
   revalidatePath('/admin/klijenti');

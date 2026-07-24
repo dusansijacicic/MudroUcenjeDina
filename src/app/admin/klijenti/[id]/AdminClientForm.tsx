@@ -9,15 +9,18 @@ import type { Client } from '@/types/database';
 import ClientPolSelect from '@/components/ClientPolSelect';
 
 type TermTypeOption = { id: string; naziv: string };
+type ProgramStatus = { term_type_id: string; zavrseno: boolean };
 
 export default function AdminClientForm({
   client,
   redirectAfterSave,
   termTypes = [],
+  initialProgramStatuses = [],
 }: {
   client: Client;
   redirectAfterSave: string;
   termTypes?: TermTypeOption[];
+  initialProgramStatuses?: ProgramStatus[];
 }) {
   const router = useRouter();
   const [ime, setIme] = useState(client.ime ?? '');
@@ -38,6 +41,7 @@ export default function AdminClientForm({
   const [accessibleTermTypeIds, setAccessibleTermTypeIds] = useState<string[]>(
     (client as { accessible_term_type_ids?: string[] }).accessible_term_type_ids ?? []
   );
+  const [programStatuses, setProgramStatuses] = useState<ProgramStatus[]>(initialProgramStatuses);
   const [napomena, setNapomena] = useState(client.napomena ?? '');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -74,6 +78,7 @@ export default function AdminClientForm({
       popust_percent: popustNum,
       datum_testiranja: datum_testiranja.trim() || null,
       accessible_term_type_ids: accessibleTermTypeIds,
+      program_statuses: programStatuses,
     };
     try {
       const result = await updateClientAsAdmin(client.id, payload);
@@ -175,6 +180,57 @@ export default function AdminClientForm({
                   />
                   <span className="text-sm text-stone-800">{tt.naziv}</span>
                 </label>
+              );
+            })}
+          </div>
+        </div>
+      )}
+      {termTypes.length > 0 && (
+        <div className="rounded-lg border border-stone-200 bg-stone-50/80 p-3 space-y-2">
+          <label className="block text-sm font-medium text-stone-700">
+            Programi koje dete pohađa <span className="text-stone-400 font-normal">(opciono)</span>
+          </label>
+          <p className="text-xs text-stone-500">
+            Označite koje programe dete pohađa. Kad dete završi program, čekirajte „Završeno“ – ostaje u istoriji.
+          </p>
+          <div className="space-y-1.5">
+            {termTypes.map((tt) => {
+              const status = programStatuses.find((p) => p.term_type_id === tt.id);
+              return (
+                <div key={tt.id} className="flex items-center justify-between gap-2">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={!!status}
+                      onChange={() =>
+                        setProgramStatuses(
+                          status
+                            ? programStatuses.filter((p) => p.term_type_id !== tt.id)
+                            : [...programStatuses, { term_type_id: tt.id, zavrseno: false }]
+                        )
+                      }
+                      className="rounded border-stone-300 text-amber-600"
+                    />
+                    <span className="text-sm text-stone-800">{tt.naziv}</span>
+                  </label>
+                  {status && (
+                    <label className="flex items-center gap-1.5 cursor-pointer text-xs text-stone-500">
+                      <input
+                        type="checkbox"
+                        checked={status.zavrseno}
+                        onChange={() =>
+                          setProgramStatuses(
+                            programStatuses.map((p) =>
+                              p.term_type_id === tt.id ? { ...p, zavrseno: !p.zavrseno } : p
+                            )
+                          )
+                        }
+                        className="rounded border-stone-300 text-emerald-600"
+                      />
+                      Završeno
+                    </label>
+                  )}
+                </div>
               );
             })}
           </div>

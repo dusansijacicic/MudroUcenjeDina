@@ -759,6 +759,33 @@ export async function updateAppSetting(key: string, value: string): Promise<{ er
   return {};
 }
 
+/** Koji programi (vrste termina) dete pohađa + da li je svaki od njih završen. */
+export type ClientProgramStatus = { term_type_id: string; zavrseno: boolean };
+
+/** Vrati trenutne programe klijenta (za prefill u formi). */
+export async function getClientTermTypeStatuses(clientId: string): Promise<ClientProgramStatus[]> {
+  const admin = createAdminClient();
+  const { data } = await admin
+    .from('client_term_type_status')
+    .select('term_type_id, zavrseno')
+    .eq('client_id', clientId);
+  return (data ?? []) as ClientProgramStatus[];
+}
+
+/** Zameni čitavu listu programa klijenta novom (potpuna zamena – brisanje pa upis). */
+export async function saveClientTermTypeStatuses(
+  admin: ReturnType<typeof createAdminClient>,
+  clientId: string,
+  statuses: ClientProgramStatus[]
+): Promise<void> {
+  await admin.from('client_term_type_status').delete().eq('client_id', clientId);
+  if (statuses.length > 0) {
+    await admin.from('client_term_type_status').insert(
+      statuses.map((s) => ({ client_id: clientId, term_type_id: s.term_type_id, zavrseno: s.zavrseno }))
+    );
+  }
+}
+
 /** Izmena klijenta (samo podaci iz tabele clients). Samo admin. */
 export async function updateClientAsAdmin(
   clientId: string,
@@ -776,6 +803,7 @@ export async function updateClientAsAdmin(
     popust_percent: number | null;
     datum_testiranja: string | null;
     accessible_term_type_ids?: string[];
+    program_statuses?: ClientProgramStatus[];
   }
 ): Promise<{ error?: string }> {
   const { admin, error: authErr } = await requireAdmin();
@@ -783,9 +811,11 @@ export async function updateClientAsAdmin(
   if (!payload.kontakt_telefon?.trim()) {
     return { error: 'Kontakt telefon je obavezan.' };
   }
-  const row = { ...payload, pol: normalizeClientPol(payload.pol) };
+  const { program_statuses, ...rest } = payload;
+  const row = { ...rest, pol: normalizeClientPol(rest.pol) };
   const { error } = await admin.from('clients').update(row).eq('id', clientId);
   if (error) return { error: error.message };
+  if (program_statuses) await saveClientTermTypeStatuses(admin, clientId, program_statuses);
   revalidatePath('/admin/klijenti');
   revalidatePath(`/admin/klijenti/${clientId}`);
   return {};
@@ -807,13 +837,14 @@ export async function createClientAsAdminDirect(payload: {
   napomena: string | null;
   datum_testiranja: string | null;
   accessible_term_type_ids?: string[];
+  program_statuses?: ClientProgramStatus[];
   instructorId?: string | null;
 }): Promise<{ error?: string; clientId?: string }> {
   const { admin, error: authErr } = await requireAdmin();
   if (authErr || !admin) return { error: authErr ?? 'Samo admin.' };
   if (!payload.kontakt_telefon?.trim()) return { error: 'Kontakt telefon je obavezan.' };
 
-  const { instructorId, ...rest } = payload;
+  const { instructorId, program_statuses, ...rest } = payload;
   const row = {
     ...rest,
     pol: normalizeClientPol(rest.pol),
@@ -825,6 +856,10 @@ export async function createClientAsAdminDirect(payload: {
     .select('id')
     .single();
   if (insErr || !newClient) return { error: insErr?.message ?? 'Klijent nije kreiran.' };
+
+  if (program_statuses && program_statuses.length > 0) {
+    await saveClientTermTypeStatuses(admin, newClient.id, program_statuses);
+  }
 
   if (instructorId) {
     const { error: linkErr } = await admin.from('instructor_clients').insert({

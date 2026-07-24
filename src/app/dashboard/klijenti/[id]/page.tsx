@@ -2,7 +2,7 @@ import { redirect, notFound } from 'next/navigation';
 import Link from 'next/link';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getDashboardInstructor } from '@/lib/dashboard';
-import { getStanjePoVrstamaZaKlijenta, markPastPredavanjaAsOdrzano, getTermTypes } from '@/app/admin/actions';
+import { getStanjePoVrstamaZaKlijenta, markPastPredavanjaAsOdrzano, getTermTypes, getClientTermTypeStatuses } from '@/app/admin/actions';
 import ClientForm from '../ClientForm';
 import type { Client, Predavanje } from '@/types/database';
 import { TIME_SLOTS, isTermInPast } from '@/lib/constants';
@@ -72,9 +72,10 @@ export default async function KlijentPage({
   const preostaloUkupno = placenoUkupno - odrzanoUkupno;
   const duguje = preostaloUkupno < 0 ? Math.abs(preostaloUkupno) : 0;
 
-  const [stanjePoVrstamaRaw, termTypes] = await Promise.all([
+  const [stanjePoVrstamaRaw, termTypes, initialProgramStatuses] = await Promise.all([
     getStanjePoVrstamaZaKlijenta(id),
     getTermTypes(),
+    getClientTermTypeStatuses(id),
   ]);
   const stanjePoVrstama = stanjePoVrstamaRaw.filter((s) => s.uplaceno >= 1);
 
@@ -161,7 +162,7 @@ export default async function KlijentPage({
         </section>
       )}
 
-      <ClientForm instructorId={instructor.id} client={client} termTypes={termTypes} />
+      <ClientForm instructorId={instructor.id} client={client} termTypes={termTypes} initialProgramStatuses={initialProgramStatuses} />
 
       <p className="text-stone-500 text-sm">
         „Plaćeno časova (škola)” dobija se sabiranjem plaćenih paketa kod svih instruktora. U formi ispod i dalje menjate paket za vašu vezu sa klijentom.

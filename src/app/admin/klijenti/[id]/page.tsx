@@ -4,7 +4,7 @@ import { redirect, notFound } from 'next/navigation';
 import Link from 'next/link';
 import AdminClientForm from './AdminClientForm';
 import AdminDeleteClientButton from './AdminDeleteClientButton';
-import { getStanjePoVrstamaZaKlijenta, markPastPredavanjaAsOdrzano, getTermTypes, getOtkazaneTermineZaKlijenta } from '@/app/admin/actions';
+import { getStanjePoVrstamaZaKlijenta, markPastPredavanjaAsOdrzano, getTermTypes, getOtkazaneTermineZaKlijenta, getClientTermTypeStatuses } from '@/app/admin/actions';
 import { TIME_SLOTS, isTermInPast } from '@/lib/constants';
 import type { Client } from '@/types/database';
 import OtkazaniTerminiSection from './OtkazaniTerminiSection';
@@ -24,7 +24,7 @@ export default async function AdminKlijentEditPage({
   await markPastPredavanjaAsOdrzano(clientId);
 
   const adminSupabase = createAdminClient();
-  const [{ data: client, error }, stanjePoVrstama, { data: predavanjaRaw }, termTypes, otkazani] = await Promise.all([
+  const [{ data: client, error }, stanjePoVrstama, { data: predavanjaRaw }, termTypes, otkazani, programStatuses] = await Promise.all([
     adminSupabase.from('clients').select('*, popust_percent, napomena, accessible_term_type_ids').eq('id', clientId).single(),
     getStanjePoVrstamaZaKlijenta(clientId),
     adminSupabase
@@ -33,6 +33,7 @@ export default async function AdminKlijentEditPage({
       .eq('client_id', clientId),
     getTermTypes(),
     getOtkazaneTermineZaKlijenta(clientId),
+    getClientTermTypeStatuses(clientId),
   ]);
 
   if (error || !client) notFound();
@@ -196,7 +197,7 @@ export default async function AdminKlijentEditPage({
       <section className="rounded-2xl border border-stone-200 bg-white shadow-sm p-5 animate-in-delay-4">
         <h2 className="text-base font-semibold text-stone-800 mb-1">Izmena podataka klijenta</h2>
         <p className="text-xs text-stone-500 mb-4">Plaćeno časova po instruktoru se vodi kroz Evidenciju uplata.</p>
-        <AdminClientForm client={client as Client} redirectAfterSave="/admin/klijenti" termTypes={termTypes} />
+        <AdminClientForm client={client as Client} redirectAfterSave="/admin/klijenti" termTypes={termTypes} initialProgramStatuses={programStatuses} />
       </section>
 
       {/* Brisanje – samo super admin (ulogovan kao admin_users) */}

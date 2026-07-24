@@ -6,8 +6,10 @@ import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { createClientAsAdminDirect } from '../../actions';
 import ClientPolSelect from '@/components/ClientPolSelect';
+import { findDefaultCitanjeTermTypeId } from '@/lib/term-types';
 
 type TermTypeOption = { id: string; naziv: string };
+type ProgramStatus = { term_type_id: string; zavrseno: boolean };
 
 export default function AdminNoviKlijentForm({ termTypes }: { termTypes: TermTypeOption[] }) {
   const router = useRouter();
@@ -23,12 +25,28 @@ export default function AdminNoviKlijentForm({ termTypes }: { termTypes: TermTyp
   const [datumTestiranja, setDatumTestiranja] = useState('');
   const [napomena, setNapomena] = useState('');
   const [accessibleTermTypeIds, setAccessibleTermTypeIds] = useState<string[]>([]);
+  const [programStatuses, setProgramStatuses] = useState<ProgramStatus[]>(() => {
+    const defaultId = findDefaultCitanjeTermTypeId(termTypes);
+    return defaultId ? [{ term_type_id: defaultId, zavrseno: false }] : [];
+  });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
   const toggleTermType = (id: string) =>
     setAccessibleTermTypeIds((prev) =>
       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+
+  const toggleProgram = (id: string) =>
+    setProgramStatuses((prev) =>
+      prev.some((p) => p.term_type_id === id)
+        ? prev.filter((p) => p.term_type_id !== id)
+        : [...prev, { term_type_id: id, zavrseno: false }]
+    );
+
+  const toggleProgramZavrseno = (id: string) =>
+    setProgramStatuses((prev) =>
+      prev.map((p) => (p.term_type_id === id ? { ...p, zavrseno: !p.zavrseno } : p))
     );
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -53,6 +71,7 @@ export default function AdminNoviKlijentForm({ termTypes }: { termTypes: TermTyp
         napomena: napomena.trim() || null,
         datum_testiranja: datumTestiranja.trim() || null,
         accessible_term_type_ids: accessibleTermTypeIds,
+        program_statuses: programStatuses,
       });
       if (result.error) {
         setError(result.error);
@@ -183,6 +202,46 @@ export default function AdminNoviKlijentForm({ termTypes }: { termTypes: TermTyp
                 <span className="text-sm text-stone-800">{tt.naziv}</span>
               </label>
             ))}
+          </div>
+        </div>
+      )}
+
+      {termTypes.length > 0 && (
+        <div className="rounded-lg border border-stone-200 bg-stone-50/80 p-3 space-y-2">
+          <label className="block text-sm font-medium text-stone-700">
+            Programi koje dete pohađa <span className="text-stone-400 font-normal">(opciono)</span>
+          </label>
+          <p className="text-xs text-stone-500">
+            Označite koje programe dete pohađa. Kad dete završi program, čekirajte „Završeno“ – ostaje u istoriji.
+          </p>
+          <div className="space-y-1.5">
+            {termTypes.map((tt) => {
+              const status = programStatuses.find((p) => p.term_type_id === tt.id);
+              return (
+                <div key={tt.id} className="flex items-center justify-between gap-2">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={!!status}
+                      onChange={() => toggleProgram(tt.id)}
+                      className="rounded border-stone-300 text-amber-600"
+                    />
+                    <span className="text-sm text-stone-800">{tt.naziv}</span>
+                  </label>
+                  {status && (
+                    <label className="flex items-center gap-1.5 cursor-pointer text-xs text-stone-500">
+                      <input
+                        type="checkbox"
+                        checked={status.zavrseno}
+                        onChange={() => toggleProgramZavrseno(tt.id)}
+                        className="rounded border-stone-300 text-emerald-600"
+                      />
+                      Završeno
+                    </label>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
