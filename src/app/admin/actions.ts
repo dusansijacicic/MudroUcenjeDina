@@ -908,9 +908,14 @@ function buildStanjeFromMaps(
   return result;
 }
 
-/** Stanje po vrstama za više klijenata odjednom (1 round-trip umesto N). Vraća Map<clientId, stanje[]>. */
+/**
+ * Stanje po vrstama za više klijenata odjednom (3 round-trip-a umesto 3*N). Vraća Map<clientId, stanje[]>.
+ * Ako je instructorId dat, uplate i održana predavanja se filtriraju samo za tog predavača
+ * (isto ponašanje kao getStanjePoVrstamaZaKlijenta po jednom klijentu).
+ */
 export async function getStanjePoVrstamaZaKlijenteBatch(
-  clientIds: string[]
+  clientIds: string[],
+  instructorId?: string
 ): Promise<Map<string, StanjeVrstaRow[]>> {
   const out = new Map<string, StanjeVrstaRow[]>();
   if (clientIds.length === 0) return out;
@@ -918,9 +923,12 @@ export async function getStanjePoVrstamaZaKlijenteBatch(
   const admin = createAdminClient();
   const ids = [...new Set(clientIds)];
 
+  let uplateQuery = admin.from('uplate').select('client_id, term_type_id, broj_casova').in('client_id', ids);
+  if (instructorId) uplateQuery = uplateQuery.eq('instructor_id', instructorId);
+
   const [uplateRes, predavanjaRes, termTypesRes] = await Promise.all([
-    admin.from('uplate').select('client_id, term_type_id, broj_casova').in('client_id', ids),
-    admin.from('predavanja').select('client_id, term_type_id, odrzano, term:terms(category:term_categories(is_nastavak))').in('client_id', ids).eq('odrzano', true),
+    uplateQuery,
+    admin.from('predavanja').select('client_id, term_type_id, odrzano, term:terms(instructor_id, category:term_categories(is_nastavak))').in('client_id', ids).eq('odrzano', true),
     admin.from('term_types').select('id, naziv').order('naziv'),
   ]);
 
@@ -948,6 +956,7 @@ export async function getStanjePoVrstamaZaKlijenteBatch(
     if (!map) continue;
     const termRaw = (p as { term?: unknown }).term;
     const term = Array.isArray(termRaw) ? termRaw[0] : termRaw;
+    if (instructorId && (term as { instructor_id?: string } | null)?.instructor_id !== instructorId) continue;
     const catRaw = (term as { category?: unknown } | null)?.category;
     const cat = Array.isArray(catRaw) ? catRaw[0] : catRaw;
     if ((cat as { is_nastavak?: boolean } | null)?.is_nastavak) continue;
@@ -1028,20 +1037,19 @@ export async function getOdrzanoPoVrstamaZaPredavaca(
   instructorId: string
 ): Promise<{ term_type_id: string | null; term_type_naziv: string; count: number }[]> {
   const admin = createAdminClient();
-  const { data: termIds } = await admin.from('terms').select('id').eq('instructor_id', instructorId);
-  const ids = (termIds ?? []).map((t) => t.id);
-  if (ids.length === 0) return [];
-  const { data: predavanja } = await admin
-    .from('predavanja')
-    .select('term_type_id')
-    .in('term_id', ids)
-    .eq('odrzano', true);
+  const [{ data: predavanja }, { data: termTypes }] = await Promise.all([
+    admin
+      .from('predavanja')
+      .select('term_type_id, term:terms!inner(instructor_id)')
+      .eq('odrzano', true)
+      .eq('term.instructor_id', instructorId),
+    admin.from('term_types').select('id, naziv').order('naziv'),
+  ]);
   const countByType = new Map<string, number>();
   for (const p of predavanja ?? []) {
     const tid = p.term_type_id ?? '__bez_vrste__';
     countByType.set(tid, (countByType.get(tid) ?? 0) + 1);
   }
-  const { data: termTypes } = await admin.from('term_types').select('id, naziv').order('naziv');
   const result: { term_type_id: string | null; term_type_naziv: string; count: number }[] = [];
   for (const tt of termTypes ?? []) {
     const count = countByType.get(tt.id) ?? 0;

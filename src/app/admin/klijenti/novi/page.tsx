@@ -1,15 +1,14 @@
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
-import { createClient } from '@/lib/supabase/server';
+import { getAuthedUser, getIsAdmin } from '@/lib/auth';
 import { getTermTypes } from '@/app/admin/actions';
 import AdminNoviKlijentForm from './AdminNoviKlijentForm';
 
 export default async function AdminNoviKlijentPage() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const { user } = await getAuthedUser();
   if (!user) redirect('/login');
-  const { data: adminRow } = await supabase.from('admin_users').select('user_id').eq('user_id', user.id).single();
-  if (!adminRow) redirect('/login');
+  const isAdmin = await getIsAdmin();
+  if (!isAdmin) redirect('/login');
 
   const termTypes = await getTermTypes();
 

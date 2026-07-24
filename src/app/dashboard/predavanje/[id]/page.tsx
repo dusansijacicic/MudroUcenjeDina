@@ -2,7 +2,7 @@ import { redirect, notFound } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getDashboardInstructor } from '@/lib/dashboard';
-import { getTermTypes, getClassrooms, getStanjePoVrstamaZaKlijenta, getTermCategories } from '@/app/admin/actions';
+import { getTermTypes, getClassrooms, getStanjePoVrstamaZaKlijenteBatch, getTermCategories } from '@/app/admin/actions';
 import { termMozeNovoPredavanje } from '@/lib/settings';
 import PredavanjeForm from '@/app/dashboard/termin/PredavanjeForm';
 import { TIME_SLOTS } from '@/lib/constants';
@@ -147,9 +147,8 @@ export default async function EditPredavanjePage({
   const termCategories = termCategoriesAll.filter((c) => !c.is_testing);
   const termsInSlot = termsInSlotRes.data ?? [];
   const takenClassroomIds = termsInSlot.map((t: { classroom_id: string | null }) => t.classroom_id).filter((id: string | null): id is string => id != null);
-  const clientStanjeList = await Promise.all(
-    clients.map(async (c) => ({ clientId: c.id, stanje: await getStanjePoVrstamaZaKlijenta(c.id, instructor.id) }))
-  );
+  const stanjeMap = await getStanjePoVrstamaZaKlijenteBatch(clients.map((c) => c.id), instructor.id);
+  const clientStanjeList = clients.map((c) => ({ clientId: c.id, stanje: stanjeMap.get(c.id) ?? [] }));
 
   return (
     <div className="max-w-lg space-y-6">

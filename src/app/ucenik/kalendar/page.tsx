@@ -1,5 +1,5 @@
-import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { getAuthedUser } from '@/lib/auth';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import UcenikCalendarView from './UcenikCalendarView';
@@ -17,8 +17,7 @@ export default async function UcenikKalendarPage({
 }: {
   searchParams: Promise<{ week?: string; day?: string; view?: string }>;
 }) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const { user } = await getAuthedUser();
   if (!user) redirect('/login');
 
   const admin = createAdminClient();

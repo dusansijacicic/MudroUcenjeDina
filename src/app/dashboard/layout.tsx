@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server';
+import { getAuthedUser, getIsAdmin } from '@/lib/auth';
 import { redirect } from 'next/navigation';
 import type { Instructor } from '@/types/database';
 import DashboardNav from './DashboardNav';
@@ -9,24 +9,16 @@ export default async function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { user } = await getAuthedUser();
   if (!user) {
     redirect('/login?reason=no_session');
   }
 
-  const { data: admin } = await supabase
-    .from('admin_users')
-    .select('user_id')
-    .eq('user_id', user.id)
-    .single();
-
   const { instructor, isAdminView } = await getDashboardInstructor();
 
   if (!instructor) {
-    if (admin) {
+    const isAdmin = await getIsAdmin();
+    if (isAdmin) {
       redirect('/admin?from=dashboard');
     }
     redirect('/login?reason=no_instructor');

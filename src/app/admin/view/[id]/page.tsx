@@ -1,5 +1,5 @@
 import { createAdminClient } from '@/lib/supabase/admin';
-import { createClient } from '@/lib/supabase/server';
+import { getAuthedUser, getIsAdmin } from '@/lib/auth';
 import { redirect, notFound } from 'next/navigation';
 
 export default async function AdminViewPage({
@@ -9,18 +9,11 @@ export default async function AdminViewPage({
 }) {
   const { id } = await params;
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { user } = await getAuthedUser();
   if (!user) redirect('/login');
 
-  const { data: admin } = await supabase
-    .from('admin_users')
-    .select('user_id')
-    .eq('user_id', user.id)
-    .single();
-  if (!admin) redirect('/login');
+  const isAdmin = await getIsAdmin();
+  if (!isAdmin) redirect('/login');
 
   const adminSupabase = createAdminClient();
 

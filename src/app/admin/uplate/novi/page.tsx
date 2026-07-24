@@ -1,21 +1,16 @@
-import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { getAuthedUser, getIsAdmin } from '@/lib/auth';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import UplataForm from './UplataForm';
 import { getTermTypes } from '@/app/admin/actions';
 
 export default async function AdminUplateNoviPage() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const { user } = await getAuthedUser();
   if (!user) redirect('/login');
 
-  const { data: admin } = await supabase
-    .from('admin_users')
-    .select('user_id')
-    .eq('user_id', user.id)
-    .single();
-  if (!admin) redirect('/login');
+  const isAdmin = await getIsAdmin();
+  if (!isAdmin) redirect('/login');
 
   const adminSupabase = createAdminClient();
   const [{ data: instructors }, { data: clients }, termTypes] = await Promise.all([

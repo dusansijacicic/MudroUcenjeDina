@@ -1,11 +1,11 @@
 import { cache } from 'react';
-import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { cookies } from 'next/headers';
 import type { Instructor } from '@/types/database';
+import { getAuthedUser, getIsAdmin } from '@/lib/auth';
 
 /** Vrati predavača iz baze (običan klijent ili, ako padne, service role – samo za user_id). */
-async function fetchInstructorByUserId(supabase: Awaited<ReturnType<typeof createClient>>, adminSupabase: ReturnType<typeof createAdminClient> | null, userId: string): Promise<Instructor | null> {
+async function fetchInstructorByUserId(supabase: Awaited<ReturnType<typeof getAuthedUser>>['supabase'], adminSupabase: ReturnType<typeof createAdminClient> | null, userId: string): Promise<Instructor | null> {
   const { data, error } = await supabase
     .from('instructors')
     .select('*')
@@ -34,10 +34,7 @@ export const getDashboardInstructor = cache(async function getDashboardInstructo
   instructor: Instructor | null;
   isAdminView: boolean;
 }> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { supabase, user } = await getAuthedUser();
   if (!user) {
     return { instructor: null, isAdminView: false };
   }
@@ -45,11 +42,7 @@ export const getDashboardInstructor = cache(async function getDashboardInstructo
   const cookieStore = await cookies();
   const viewAsId = cookieStore.get('view_as_instructor')?.value;
 
-  const { data: admin } = await supabase
-    .from('admin_users')
-    .select('user_id')
-    .eq('user_id', user.id)
-    .single();
+  const admin = viewAsId ? await getIsAdmin() : false;
 
   if (admin && viewAsId) {
     const { data } = await supabase

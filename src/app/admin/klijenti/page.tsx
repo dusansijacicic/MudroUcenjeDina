@@ -1,5 +1,5 @@
-import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { getAuthedUser, getIsAdmin } from '@/lib/auth';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { getStanjePoVrstamaZaKlijenteBatch } from '@/app/admin/actions';
@@ -11,24 +11,18 @@ function polLabel(pol: string | null | undefined): string {
 }
 
 export default async function AdminSviKlijentiPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { user } = await getAuthedUser();
   if (!user) redirect('/login');
 
-  const { data: admin } = await supabase
-    .from('admin_users')
-    .select('user_id')
-    .eq('user_id', user.id)
-    .single();
-  if (!admin) redirect('/login');
+  const isAdmin = await getIsAdmin();
+  if (!isAdmin) redirect('/login');
 
   const adminSupabase = createAdminClient();
   const { data: links } = await adminSupabase
     .from('instructor_clients')
     .select('instructor_id, client_id, placeno_casova, client:clients(id, ime, prezime, login_email, godiste, razred, skola, kontakt_telefon, datum_testiranja), instructor:instructors(id, ime, prezime)')
-    .order('client_id');
+    .order('client_id')
+    .limit(1000);
 
   const byClient = new Map<
     string,

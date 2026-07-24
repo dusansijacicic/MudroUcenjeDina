@@ -1,10 +1,10 @@
-import { createClient } from '@/lib/supabase/server';
+import { getAuthedUser, getIsAdmin } from '@/lib/auth';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { redirect, notFound } from 'next/navigation';
 import Link from 'next/link';
 import { getMaxCasovaPoTerminu } from '@/lib/settings';
 import { TIME_SLOTS } from '@/lib/constants';
-import { getTermTypes, getClassrooms, getStanjePoVrstamaZaKlijenta } from '@/app/admin/actions';
+import { getTermTypes, getClassrooms, getStanjePoVrstamaZaKlijenteBatch, type StanjeVrstaRow } from '@/app/admin/actions';
 import AdminPredavanjeForm from '@/app/admin/termin/AdminPredavanjeForm';
 
 export default async function AdminNoviPredavanjePage({
@@ -13,11 +13,10 @@ export default async function AdminNoviPredavanjePage({
   params: Promise<{ id: string }>;
 }) {
   const { id: termId } = await params;
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const { user } = await getAuthedUser();
   if (!user) redirect('/login');
-  const { data: adminRow } = await supabase.from('admin_users').select('user_id').eq('user_id', user.id).single();
-  if (!adminRow) redirect('/login');
+  const isAdmin = await getIsAdmin();
+  if (!isAdmin) redirect('/login');
 
   const admin = createAdminClient();
   const { data: term } = await admin.from('terms').select('*, classroom_id').eq('id', termId).single();
@@ -39,9 +38,10 @@ export default async function AdminNoviPredavanjePage({
   }));
 
   const instructorId = (term as { instructor_id?: string }).instructor_id;
-  const clientStanjeList = instructorId
-    ? await Promise.all(clients.map(async (c) => ({ clientId: c.id, stanje: await getStanjePoVrstamaZaKlijenta(c.id, instructorId) })))
-    : [];
+  const stanjeMap = instructorId
+    ? await getStanjePoVrstamaZaKlijenteBatch(clients.map((c) => c.id), instructorId)
+    : new Map<string, StanjeVrstaRow[]>();
+  const clientStanjeList = clients.map((c) => ({ clientId: c.id, stanje: stanjeMap.get(c.id) ?? [] }));
 
   const slotLabel = TIME_SLOTS[term.slot_index] ?? '—';
   const termWithClassroom = term as { classroom_id?: string | null };

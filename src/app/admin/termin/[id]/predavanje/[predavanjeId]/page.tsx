@@ -1,9 +1,9 @@
-import { createClient } from '@/lib/supabase/server';
+import { getAuthedUser, getIsAdmin } from '@/lib/auth';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { redirect, notFound } from 'next/navigation';
 import Link from 'next/link';
 import { TIME_SLOTS } from '@/lib/constants';
-import { getTermTypes, getClassrooms, getStanjePoVrstamaZaKlijenta, getTermCategories, getAdminInstructorsList } from '@/app/admin/actions';
+import { getTermTypes, getClassrooms, getStanjePoVrstamaZaKlijenteBatch, getTermCategories, getAdminInstructorsList, type StanjeVrstaRow } from '@/app/admin/actions';
 import AdminPredavanjeForm from '@/app/admin/termin/AdminPredavanjeForm';
 import { SEEDED_TERM_CATEGORY_INDIVIDUAL_ID } from '@/lib/term-categories';
 
@@ -13,11 +13,10 @@ export default async function AdminEditPredavanjePage({
   params: Promise<{ id: string; predavanjeId: string }>;
 }) {
   const { id: termId, predavanjeId } = await params;
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const { user } = await getAuthedUser();
   if (!user) redirect('/login');
-  const { data: adminRow } = await supabase.from('admin_users').select('user_id').eq('user_id', user.id).single();
-  if (!adminRow) redirect('/login');
+  const isAdmin = await getIsAdmin();
+  if (!isAdmin) redirect('/login');
 
   const admin = createAdminClient();
   const { data: term } = await admin
@@ -55,12 +54,10 @@ export default async function AdminEditPredavanjePage({
   }));
 
   const instructorId = (term as { instructor_id?: string }).instructor_id ?? '';
-  const clientStanjeList = instructorId
-    ? await Promise.all(clients.map(async (c) => ({
-        clientId: c.id,
-        stanje: await getStanjePoVrstamaZaKlijenta(c.id, instructorId),
-      })))
-    : [];
+  const stanjeMap = instructorId
+    ? await getStanjePoVrstamaZaKlijenteBatch(clients.map((c) => c.id), instructorId)
+    : new Map<string, StanjeVrstaRow[]>();
+  const clientStanjeList = clients.map((c) => ({ clientId: c.id, stanje: stanjeMap.get(c.id) ?? [] }));
 
   const termsInSlot = await admin
     .from('terms')

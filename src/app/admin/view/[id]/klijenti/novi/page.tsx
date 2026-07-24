@@ -1,5 +1,5 @@
-import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { getAuthedUser, getIsAdmin } from '@/lib/auth';
 import { redirect, notFound } from 'next/navigation';
 import Link from 'next/link';
 import ClientForm from '@/app/dashboard/klijenti/ClientForm';
@@ -11,18 +11,11 @@ export default async function AdminViewNoviKlijentPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { user } = await getAuthedUser();
   if (!user) redirect('/login?reason=no_session');
 
-  const { data: admin } = await supabase
-    .from('admin_users')
-    .select('user_id')
-    .eq('user_id', user.id)
-    .single();
-  if (!admin) redirect('/login?reason=not_authorized');
+  const isAdmin = await getIsAdmin();
+  if (!isAdmin) redirect('/login?reason=not_authorized');
 
   const adminSupabase = createAdminClient();
   const { data: instructor } = await adminSupabase

@@ -1,21 +1,14 @@
-import { createClient } from '@/lib/supabase/server';
+import { getAuthedUser, getIsAdmin } from '@/lib/auth';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import NoviPredavacForm from './NoviPredavacForm';
 
 export default async function AdminNoviPredavacPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { user } = await getAuthedUser();
   if (!user) redirect('/login?reason=no_session');
 
-  const { data: admin } = await supabase
-    .from('admin_users')
-    .select('user_id')
-    .eq('user_id', user.id)
-    .single();
-  if (!admin) redirect('/login?reason=not_authorized');
+  const isAdmin = await getIsAdmin();
+  if (!isAdmin) redirect('/login?reason=not_authorized');
 
   return (
     <div className="max-w-lg">

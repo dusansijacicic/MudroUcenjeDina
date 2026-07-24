@@ -1,14 +1,11 @@
-import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { getAuthedUser } from '@/lib/auth';
 import { redirect } from 'next/navigation';
 import type { Client } from '@/types/database';
 import UcenikProfilForm from './UcenikProfilForm';
 
 export default async function UcenikProfilPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { user } = await getAuthedUser();
   if (!user) redirect('/login');
 
   const admin = createAdminClient();

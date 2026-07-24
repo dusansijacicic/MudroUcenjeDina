@@ -96,8 +96,6 @@ export default async function DashboardPage({
       admin.from('terms').select('id, instructor_id, date, slot_index, classroom_id, instructor:instructors(id, ime, prezime, color), classroom:classrooms(id, naziv, color), term_category:term_categories(id, naziv, is_testing), predavanja(*, client:clients(id, ime, prezime), term_type:term_types(naziv)), potential_clients(id, ime, prezime, ime_roditelja, mobilni_roditelja, status)').gte('date', dateFrom).lte('date', dateTo).order('date').order('slot_index'),
       admin.from('classrooms').select('id, naziv, color').order('naziv'),
     ]);
-    console.log('[dashboard] admin termsRes.error:', termsRes.error);
-    console.log('[dashboard] admin termsRes.data length:', termsRes.data?.length ?? 0);
     allTermsRaw = (termsRes.data ?? []) as TermRow[];
     classroomsRaw = (classRes.data ?? []);
   } catch (err) {
@@ -107,8 +105,6 @@ export default async function DashboardPage({
       supabase.from('terms').select('id, instructor_id, date, slot_index, classroom_id, instructor:instructors(id, ime, prezime, color), classroom:classrooms(id, naziv, color), term_category:term_categories(id, naziv, is_testing), predavanja(*, client:clients(id, ime, prezime), term_type:term_types(naziv)), potential_clients(id, ime, prezime, ime_roditelja, mobilni_roditelja, status)').eq('instructor_id', instructorId).gte('date', dateFrom).lte('date', dateTo).order('date').order('slot_index'),
       supabase.from('classrooms').select('id, naziv, color').order('naziv'),
     ]);
-    console.log('[dashboard] fallback termsRes.error:', termsRes.error);
-    console.log('[dashboard] fallback termsRes.data length:', termsRes.data?.length ?? 0);
     allTermsRaw = (termsRes.data ?? []) as TermRow[];
     classroomsRaw = (classRes.data ?? []);
   }
