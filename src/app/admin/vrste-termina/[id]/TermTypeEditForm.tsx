@@ -4,23 +4,28 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
-import { updateTermTypeAsAdmin } from '@/app/admin/actions';
+import { updateTermTypeAsAdmin, type ProgramRow } from '@/app/admin/actions';
 
 export default function TermTypeEditForm({
   id,
   initialNaziv,
   initialOpis,
   initialCenaPoCasu,
+  initialProgramId,
+  programs = [],
 }: {
   id: string;
   initialNaziv: string;
   initialOpis: string;
   initialCenaPoCasu: string;
+  initialProgramId?: string;
+  programs?: ProgramRow[];
 }) {
   const router = useRouter();
   const [naziv, setNaziv] = useState(initialNaziv);
   const [opis, setOpis] = useState(initialOpis);
   const [cenaPoCasu, setCenaPoCasu] = useState(initialCenaPoCasu);
+  const [programId, setProgramId] = useState(initialProgramId ?? '');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -38,7 +43,7 @@ export default function TermTypeEditForm({
       return;
     }
     setLoading(true);
-    const result = await updateTermTypeAsAdmin(id, naziv.trim(), opis.trim() || null, cena);
+    const result = await updateTermTypeAsAdmin(id, naziv.trim(), opis.trim() || null, cena, programId || null);
     setLoading(false);
     if (result.error) {
       setError(result.error);
@@ -63,6 +68,21 @@ export default function TermTypeEditForm({
       <div>
         <label className="block text-sm font-medium text-stone-700 mb-1">Cena po času (RSD)</label>
         <input type="text" value={cenaPoCasu} onChange={(e) => setCenaPoCasu(e.target.value)} placeholder="npr. 1500" className="w-full rounded-lg border border-stone-300 px-3 py-2 text-stone-800 max-w-[140px]" />
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-stone-700 mb-1">Program (opciono)</label>
+        <select
+          value={programId}
+          onChange={(e) => setProgramId(e.target.value)}
+          className="w-full max-w-xs rounded-lg border border-stone-300 px-3 py-2 text-stone-800 bg-white"
+        >
+          <option value="">— bez programa —</option>
+          {programs.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.naziv}
+            </option>
+          ))}
+        </select>
       </div>
       {error && <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>}
       <div className="flex gap-3">

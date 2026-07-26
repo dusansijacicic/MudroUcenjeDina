@@ -3,6 +3,7 @@ import { getAuthedUser, getIsAdmin } from '@/lib/auth';
 import { redirect, notFound } from 'next/navigation';
 import Link from 'next/link';
 import TermTypeEditForm from './TermTypeEditForm';
+import { getPrograms } from '@/app/admin/actions';
 
 export default async function AdminVrstaTerminaEditPage({
   params,
@@ -16,11 +17,10 @@ export default async function AdminVrstaTerminaEditPage({
   if (!isAdmin) redirect('/login');
 
   const adminSupabase = createAdminClient();
-  const { data: row, error } = await adminSupabase
-    .from('term_types')
-    .select('id, naziv, opis, cena_po_casu')
-    .eq('id', id)
-    .single();
+  const [{ data: row, error }, programs] = await Promise.all([
+    adminSupabase.from('term_types').select('id, naziv, opis, cena_po_casu, program_id').eq('id', id).single(),
+    getPrograms(),
+  ]);
 
   if (error || !row) notFound();
 
@@ -32,6 +32,8 @@ export default async function AdminVrstaTerminaEditPage({
         initialNaziv={row.naziv ?? ''}
         initialOpis={row.opis ?? ''}
         initialCenaPoCasu={row.cena_po_casu != null ? String(row.cena_po_casu) : ''}
+        initialProgramId={row.program_id ?? ''}
+        programs={programs}
       />
       <p className="mt-4">
         <Link href="/admin/vrste-termina" className="text-sm text-amber-700 hover:underline">← Nazad na vrste termina</Link>

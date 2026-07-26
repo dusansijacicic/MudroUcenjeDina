@@ -14,6 +14,7 @@ import {
 } from '@/app/dashboard/termin/actions';
 import type { Predavanje } from '@/types/database';
 import type { TermCategoryRow } from '@/lib/term-categories';
+import { findDefaultCitanjeTermTypeId } from '@/lib/term-types';
 import GrupniKlijentiPicker from '@/components/GrupniKlijentiPicker';
 import SingleKlijentPicker from '@/components/SingleKlijentPicker';
 
@@ -65,7 +66,9 @@ export default function PredavanjeForm({
   const router = useRouter();
   const [clientId, setClientId] = useState(predavanje?.client_id ?? '');
   const selectedStanje = clientStanjeList.find((s) => s.clientId === clientId)?.stanje ?? [];
-  const [termTypeId, setTermTypeId] = useState<string>(predavanje?.term_type_id ?? '');
+  const [termTypeId, setTermTypeId] = useState<string>(
+    predavanje?.term_type_id ?? findDefaultCitanjeTermTypeId(termTypes) ?? ''
+  );
   const [odrzano, setOdrzano] = useState(predavanje?.odrzano ?? false);
   const [placeno, setPlaceno] = useState(predavanje?.placeno ?? false);
   const [komentar, setKomentar] = useState(predavanje?.komentar ?? '');

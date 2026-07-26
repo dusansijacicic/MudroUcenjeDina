@@ -9,10 +9,16 @@ function normalizeNaziv(s: string): string {
 }
 
 /**
- * Id vrste termina „11-Čitanje“ (najčešći prvi program) ako postoji u listi – za default-čekiranje
- * pri unosu novog klijenta. Vraća null ako takva vrsta ne postoji (admin je nije uneo / drugačije nazvana).
+ * Id vrste termina „12-Čitanje“ (čitanje po paketskoj ceni, najčešći prvi izbor) ako postoji u listi –
+ * za default-čekiranje pri unosu novog klijenta. Ako ta konkretna (12-) varijanta ne postoji, vraća
+ * bilo koju vrstu sa „čitanje“ u nazivu; vraća null ako ni to ne postoji.
  */
 export function findDefaultCitanjeTermTypeId(termTypes: { id: string; naziv: string }[]): string | null {
-  const match = termTypes.find((tt) => normalizeNaziv(tt.naziv).includes('citanje'));
-  return match?.id ?? null;
+  const paketska = termTypes.find((tt) => {
+    const n = normalizeNaziv(tt.naziv);
+    return n.startsWith('12') && n.includes('citanje');
+  });
+  if (paketska) return paketska.id;
+  const anyCitanje = termTypes.find((tt) => normalizeNaziv(tt.naziv).includes('citanje'));
+  return anyCitanje?.id ?? null;
 }

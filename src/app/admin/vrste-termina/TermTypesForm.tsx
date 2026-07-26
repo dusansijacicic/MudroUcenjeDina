@@ -2,13 +2,14 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { createTermTypeAsAdmin } from '@/app/admin/actions';
+import { createTermTypeAsAdmin, type ProgramRow } from '@/app/admin/actions';
 
-export default function TermTypesForm() {
+export default function TermTypesForm({ programs = [] }: { programs?: ProgramRow[] }) {
   const router = useRouter();
   const [naziv, setNaziv] = useState('');
   const [opis, setOpis] = useState('');
   const [cenaPoCasu, setCenaPoCasu] = useState('');
+  const [programId, setProgramId] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -27,7 +28,7 @@ export default function TermTypesForm() {
       setLoading(false);
       return;
     }
-    const result = await createTermTypeAsAdmin(naziv.trim(), opis.trim() || null, cena);
+    const result = await createTermTypeAsAdmin(naziv.trim(), opis.trim() || null, cena, programId || null);
     if (result.error) {
       setError(result.error);
       setLoading(false);
@@ -36,6 +37,7 @@ export default function TermTypesForm() {
     setNaziv('');
     setOpis('');
     setCenaPoCasu('');
+    setProgramId('');
     router.refresh();
     setLoading(false);
   };
@@ -71,6 +73,21 @@ export default function TermTypesForm() {
           className="rounded-lg border border-stone-300 px-3 py-2 text-stone-800 w-28"
           placeholder="npr. 1500"
         />
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-stone-700 mb-1">Program (opciono)</label>
+        <select
+          value={programId}
+          onChange={(e) => setProgramId(e.target.value)}
+          className="rounded-lg border border-stone-300 px-3 py-2 text-stone-800 bg-white w-48"
+        >
+          <option value="">— bez programa —</option>
+          {programs.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.naziv}
+            </option>
+          ))}
+        </select>
       </div>
       <button
         type="submit"

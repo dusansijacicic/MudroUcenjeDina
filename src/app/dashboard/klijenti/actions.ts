@@ -5,7 +5,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { getDashboardInstructor } from '@/lib/dashboard';
 import { revalidatePath } from 'next/cache';
 import { normalizeClientPol } from '@/lib/client-pol';
-import { saveClientTermTypeStatuses, type ClientProgramStatus } from '@/app/admin/actions';
+import { saveClientTermTypeStatuses, saveClientProgrami, type ClientProgramStatus, type ClientProgramSelection } from '@/app/admin/actions';
 
 type ClientPayload = {
   ime: string;
@@ -22,8 +22,10 @@ type ClientPayload = {
   datum_testiranja: string | null;
   /** Vrste termina kojima učenik ima pristup; prazan niz = sve */
   accessible_term_type_ids?: string[];
-  /** Programi (vrste termina) koje dete pohađa + status završeno/u toku */
+  /** Vrste termina (konkretne, sa cenom) koje dete pohađa + status završeno/u toku */
   program_statuses?: ClientProgramStatus[];
+  /** Programi (npr. Čitanje, Matematika) koje dete pohađa + status završeno/u toku */
+  programi?: ClientProgramSelection[];
 };
 
 /**
@@ -66,7 +68,7 @@ export async function createClientAsInstructor(
     effectiveInstructorId = instructor.id;
   }
 
-  const { program_statuses, ...payloadRest } = payload;
+  const { program_statuses, programi, ...payloadRest } = payload;
   const row = { ...payloadRest, pol: normalizeClientPol(payloadRest.pol) };
   const { data: newClient, error: insertErr } = await admin
     .from('clients')
@@ -79,6 +81,9 @@ export async function createClientAsInstructor(
   }
   if (program_statuses && program_statuses.length > 0) {
     await saveClientTermTypeStatuses(admin, newClient.id, program_statuses);
+  }
+  if (programi && programi.length > 0) {
+    await saveClientProgrami(admin, newClient.id, programi);
   }
   // Veza predavač–klijent: bilo koji klijent može kasnije dobiti bilo kog predavača u terminu.
   // Ovde odmah dodeljujemo ovog predavača da klijent uđe u "Moji klijenti" (paket = placeno_casova).
@@ -136,7 +141,7 @@ export async function updateClientAsInstructor(
     return { error: 'Kontakt telefon je obavezan.' };
   }
 
-  const { program_statuses, ...payloadRest } = payload;
+  const { program_statuses, programi, ...payloadRest } = payload;
   const row = { ...payloadRest, pol: normalizeClientPol(payloadRest.pol) };
   const { error: updateErr } = await admin.from('clients').update(row).eq('id', clientId);
   if (updateErr) {
@@ -144,6 +149,7 @@ export async function updateClientAsInstructor(
     return { error: updateErr.message };
   }
   if (program_statuses) await saveClientTermTypeStatuses(admin, clientId, program_statuses);
+  if (programi) await saveClientProgrami(admin, clientId, programi);
   revalidatePath('/dashboard/klijenti');
   revalidatePath(`/dashboard/klijenti/${clientId}`);
   revalidatePath('/admin/klijenti');

@@ -597,34 +597,47 @@ export async function updateTermClassroomAsAdmin(termId: string, classroomId: st
   return {};
 }
 
-export type TermTypeRow = { id: string; naziv: string; opis: string | null; cena_po_casu: number | null };
+export type TermTypeRow = { id: string; naziv: string; opis: string | null; cena_po_casu: number | null; program_id: string | null };
 
 export async function getTermTypes(): Promise<TermTypeRow[]> {
   const admin = createAdminClient();
-  const { data } = await admin.from('term_types').select('id, naziv, opis, cena_po_casu').order('naziv');
+  const { data } = await admin.from('term_types').select('id, naziv, opis, cena_po_casu, program_id').order('naziv');
   return (data ?? []) as TermTypeRow[];
 }
 
-export async function createTermTypeAsAdmin(naziv: string, opis: string | null, cena_po_casu: number | null): Promise<{ error?: string }> {
+export async function createTermTypeAsAdmin(
+  naziv: string,
+  opis: string | null,
+  cena_po_casu: number | null,
+  program_id: string | null
+): Promise<{ error?: string }> {
   const { admin, error: authErr } = await requireAdmin();
   if (authErr || !admin) return { error: authErr ?? 'Samo admin.' };
   const { error } = await admin.from('term_types').insert({
     naziv: naziv.trim(),
     opis: opis?.trim() || null,
     cena_po_casu: cena_po_casu != null && Number.isFinite(cena_po_casu) ? cena_po_casu : null,
+    program_id: program_id || null,
   });
   if (error) return { error: error.message };
   revalidatePath('/admin/vrste-termina');
   return {};
 }
 
-export async function updateTermTypeAsAdmin(id: string, naziv: string, opis: string | null, cena_po_casu: number | null): Promise<{ error?: string }> {
+export async function updateTermTypeAsAdmin(
+  id: string,
+  naziv: string,
+  opis: string | null,
+  cena_po_casu: number | null,
+  program_id: string | null
+): Promise<{ error?: string }> {
   const { admin, error: authErr } = await requireAdmin();
   if (authErr || !admin) return { error: authErr ?? 'Samo admin.' };
   const { error } = await admin.from('term_types').update({
     naziv: naziv.trim(),
     opis: opis?.trim() || null,
     cena_po_casu: cena_po_casu != null && Number.isFinite(cena_po_casu) ? cena_po_casu : null,
+    program_id: program_id || null,
   }).eq('id', id);
   if (error) return { error: error.message };
   revalidatePath('/admin/vrste-termina');
@@ -638,6 +651,76 @@ export async function deleteTermTypeAsAdmin(id: string): Promise<{ error?: strin
   if (error) return { error: error.message };
   revalidatePath('/admin/vrste-termina');
   return {};
+}
+
+export type ProgramRow = { id: string; naziv: string; opis: string | null };
+
+export async function getPrograms(): Promise<ProgramRow[]> {
+  const admin = createAdminClient();
+  const { data } = await admin.from('programi').select('id, naziv, opis').order('naziv');
+  return (data ?? []) as ProgramRow[];
+}
+
+export async function createProgramAsAdmin(naziv: string, opis: string | null): Promise<{ error?: string }> {
+  const { admin, error: authErr } = await requireAdmin();
+  if (authErr || !admin) return { error: authErr ?? 'Samo admin.' };
+  const { error } = await admin.from('programi').insert({
+    naziv: naziv.trim(),
+    opis: opis?.trim() || null,
+  });
+  if (error) return { error: error.message };
+  revalidatePath('/admin/programi');
+  return {};
+}
+
+export async function updateProgramAsAdmin(id: string, naziv: string, opis: string | null): Promise<{ error?: string }> {
+  const { admin, error: authErr } = await requireAdmin();
+  if (authErr || !admin) return { error: authErr ?? 'Samo admin.' };
+  const { error } = await admin.from('programi').update({
+    naziv: naziv.trim(),
+    opis: opis?.trim() || null,
+  }).eq('id', id);
+  if (error) return { error: error.message };
+  revalidatePath('/admin/programi');
+  return {};
+}
+
+export async function deleteProgramAsAdmin(id: string): Promise<{ error?: string }> {
+  const { admin, error: authErr } = await requireAdmin();
+  if (authErr || !admin) return { error: authErr ?? 'Samo admin.' };
+  const { count } = await admin.from('term_types').select('*', { count: 'exact', head: true }).eq('program_id', id);
+  if ((count ?? 0) > 0) {
+    return { error: 'Program se koristi u vrstama termina; dodelite drugi program tim vrstama pre brisanja.' };
+  }
+  const { error } = await admin.from('programi').delete().eq('id', id);
+  if (error) return { error: error.message };
+  revalidatePath('/admin/programi');
+  return {};
+}
+
+/** Koje programe (npr. Čitanje, Matematika) dete pohađa – nezavisno od konkretnih vrsta termina + status. */
+export type ClientProgramSelection = { program_id: string; zavrseno: boolean };
+
+export async function getClientProgrami(clientId: string): Promise<ClientProgramSelection[]> {
+  const admin = createAdminClient();
+  const { data } = await admin
+    .from('client_programi')
+    .select('program_id, zavrseno')
+    .eq('client_id', clientId);
+  return (data ?? []) as ClientProgramSelection[];
+}
+
+export async function saveClientProgrami(
+  admin: ReturnType<typeof createAdminClient>,
+  clientId: string,
+  selections: ClientProgramSelection[]
+): Promise<void> {
+  await admin.from('client_programi').delete().eq('client_id', clientId);
+  if (selections.length > 0) {
+    await admin.from('client_programi').insert(
+      selections.map((s) => ({ client_id: clientId, program_id: s.program_id, zavrseno: s.zavrseno }))
+    );
+  }
 }
 
 export async function getTermCategories(): Promise<TermCategoryRow[]> {
@@ -759,10 +842,10 @@ export async function updateAppSetting(key: string, value: string): Promise<{ er
   return {};
 }
 
-/** Koji programi (vrste termina) dete pohađa + da li je svaki od njih završen. */
+/** Koje vrste termina (konkretne, sa cenom) dete pohađa + da li je svaka od njih završena. */
 export type ClientProgramStatus = { term_type_id: string; zavrseno: boolean };
 
-/** Vrati trenutne programe klijenta (za prefill u formi). */
+/** Vrati trenutne vrste termina klijenta (za prefill u formi). */
 export async function getClientTermTypeStatuses(clientId: string): Promise<ClientProgramStatus[]> {
   const admin = createAdminClient();
   const { data } = await admin
@@ -804,6 +887,7 @@ export async function updateClientAsAdmin(
     datum_testiranja: string | null;
     accessible_term_type_ids?: string[];
     program_statuses?: ClientProgramStatus[];
+    programi?: ClientProgramSelection[];
   }
 ): Promise<{ error?: string }> {
   const { admin, error: authErr } = await requireAdmin();
@@ -811,11 +895,12 @@ export async function updateClientAsAdmin(
   if (!payload.kontakt_telefon?.trim()) {
     return { error: 'Kontakt telefon je obavezan.' };
   }
-  const { program_statuses, ...rest } = payload;
+  const { program_statuses, programi, ...rest } = payload;
   const row = { ...rest, pol: normalizeClientPol(rest.pol) };
   const { error } = await admin.from('clients').update(row).eq('id', clientId);
   if (error) return { error: error.message };
   if (program_statuses) await saveClientTermTypeStatuses(admin, clientId, program_statuses);
+  if (programi) await saveClientProgrami(admin, clientId, programi);
   revalidatePath('/admin/klijenti');
   revalidatePath(`/admin/klijenti/${clientId}`);
   return {};
@@ -838,13 +923,14 @@ export async function createClientAsAdminDirect(payload: {
   datum_testiranja: string | null;
   accessible_term_type_ids?: string[];
   program_statuses?: ClientProgramStatus[];
+  programi?: ClientProgramSelection[];
   instructorId?: string | null;
 }): Promise<{ error?: string; clientId?: string }> {
   const { admin, error: authErr } = await requireAdmin();
   if (authErr || !admin) return { error: authErr ?? 'Samo admin.' };
   if (!payload.kontakt_telefon?.trim()) return { error: 'Kontakt telefon je obavezan.' };
 
-  const { instructorId, program_statuses, ...rest } = payload;
+  const { instructorId, program_statuses, programi, ...rest } = payload;
   const row = {
     ...rest,
     pol: normalizeClientPol(rest.pol),
@@ -859,6 +945,9 @@ export async function createClientAsAdminDirect(payload: {
 
   if (program_statuses && program_statuses.length > 0) {
     await saveClientTermTypeStatuses(admin, newClient.id, program_statuses);
+  }
+  if (programi && programi.length > 0) {
+    await saveClientProgrami(admin, newClient.id, programi);
   }
 
   if (instructorId) {

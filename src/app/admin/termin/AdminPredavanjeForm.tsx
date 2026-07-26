@@ -14,6 +14,7 @@ import {
 } from '@/app/admin/actions';
 import SingleKlijentPicker from '@/components/SingleKlijentPicker';
 import type { TermCategoryRow } from '@/lib/term-categories';
+import { findDefaultCitanjeTermTypeId } from '@/lib/term-types';
 
 type ClientOption = { id: string; ime: string; prezime: string };
 type TermTypeOption = { id: string; naziv: string; opis: string | null };
@@ -72,7 +73,9 @@ export default function AdminPredavanjeForm({
 
   const [clientId, setClientId] = useState(predavanje?.client_id ?? '');
   const selectedStanje = clientStanjeList.find((s) => s.clientId === clientId)?.stanje ?? [];
-  const [termTypeId, setTermTypeId] = useState(predavanje?.term_type_id ?? '');
+  const [termTypeId, setTermTypeId] = useState(
+    predavanje?.term_type_id ?? findDefaultCitanjeTermTypeId(termTypes) ?? ''
+  );
   const [classroomId, setClassroomId] = useState(initialClassroomId ?? '');
   const [odrzano, setOdrzano] = useState(predavanje?.odrzano ?? false);
   const [placeno, setPlaceno] = useState(predavanje?.placeno ?? false);

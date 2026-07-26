@@ -6,12 +6,19 @@ import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { createClientAsAdminDirect } from '../../actions';
 import ClientPolSelect from '@/components/ClientPolSelect';
-import { findDefaultCitanjeTermTypeId } from '@/lib/term-types';
 
 type TermTypeOption = { id: string; naziv: string };
 type ProgramStatus = { term_type_id: string; zavrseno: boolean };
+type ProgramOption = { id: string; naziv: string };
+type ProgramSelection = { program_id: string; zavrseno: boolean };
 
-export default function AdminNoviKlijentForm({ termTypes }: { termTypes: TermTypeOption[] }) {
+export default function AdminNoviKlijentForm({
+  termTypes,
+  programs = [],
+}: {
+  termTypes: TermTypeOption[];
+  programs?: ProgramOption[];
+}) {
   const router = useRouter();
   const [ime, setIme] = useState('');
   const [prezime, setPrezime] = useState('');
@@ -25,10 +32,8 @@ export default function AdminNoviKlijentForm({ termTypes }: { termTypes: TermTyp
   const [datumTestiranja, setDatumTestiranja] = useState('');
   const [napomena, setNapomena] = useState('');
   const [accessibleTermTypeIds, setAccessibleTermTypeIds] = useState<string[]>([]);
-  const [programStatuses, setProgramStatuses] = useState<ProgramStatus[]>(() => {
-    const defaultId = findDefaultCitanjeTermTypeId(termTypes);
-    return defaultId ? [{ term_type_id: defaultId, zavrseno: false }] : [];
-  });
+  const [programStatuses, setProgramStatuses] = useState<ProgramStatus[]>([]);
+  const [programiSelections, setProgramiSelections] = useState<ProgramSelection[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -47,6 +52,18 @@ export default function AdminNoviKlijentForm({ termTypes }: { termTypes: TermTyp
   const toggleProgramZavrseno = (id: string) =>
     setProgramStatuses((prev) =>
       prev.map((p) => (p.term_type_id === id ? { ...p, zavrseno: !p.zavrseno } : p))
+    );
+
+  const toggleProgramSelection = (id: string) =>
+    setProgramiSelections((prev) =>
+      prev.some((p) => p.program_id === id)
+        ? prev.filter((p) => p.program_id !== id)
+        : [...prev, { program_id: id, zavrseno: false }]
+    );
+
+  const toggleProgramSelectionZavrseno = (id: string) =>
+    setProgramiSelections((prev) =>
+      prev.map((p) => (p.program_id === id ? { ...p, zavrseno: !p.zavrseno } : p))
     );
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -72,6 +89,7 @@ export default function AdminNoviKlijentForm({ termTypes }: { termTypes: TermTyp
         datum_testiranja: datumTestiranja.trim() || null,
         accessible_term_type_ids: accessibleTermTypeIds,
         program_statuses: programStatuses,
+        programi: programiSelections,
       });
       if (result.error) {
         setError(result.error);
@@ -234,6 +252,46 @@ export default function AdminNoviKlijentForm({ termTypes }: { termTypes: TermTyp
                         type="checkbox"
                         checked={status.zavrseno}
                         onChange={() => toggleProgramZavrseno(tt.id)}
+                        className="rounded border-stone-300 text-emerald-600"
+                      />
+                      Završeno
+                    </label>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {programs.length > 0 && (
+        <div className="rounded-lg border border-stone-200 bg-stone-50/80 p-3 space-y-2">
+          <label className="block text-sm font-medium text-stone-700">
+            Program <span className="text-stone-400 font-normal">(opciono)</span>
+          </label>
+          <p className="text-xs text-stone-500">
+            Opšta oblast koju dete pohađa (Čitanje, Matematika, Logoped, Učenje, Defektološki...). Nezavisno od Vrsta časova iznad.
+          </p>
+          <div className="space-y-1.5">
+            {programs.map((p) => {
+              const sel = programiSelections.find((x) => x.program_id === p.id);
+              return (
+                <div key={p.id} className="flex items-center justify-between gap-2">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={!!sel}
+                      onChange={() => toggleProgramSelection(p.id)}
+                      className="rounded border-stone-300 text-amber-600"
+                    />
+                    <span className="text-sm text-stone-800">{p.naziv}</span>
+                  </label>
+                  {sel && (
+                    <label className="flex items-center gap-1.5 cursor-pointer text-xs text-stone-500">
+                      <input
+                        type="checkbox"
+                        checked={sel.zavrseno}
+                        onChange={() => toggleProgramSelectionZavrseno(p.id)}
                         className="rounded border-stone-300 text-emerald-600"
                       />
                       Završeno

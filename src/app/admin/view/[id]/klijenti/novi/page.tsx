@@ -3,7 +3,7 @@ import { getAuthedUser, getIsAdmin } from '@/lib/auth';
 import { redirect, notFound } from 'next/navigation';
 import Link from 'next/link';
 import ClientForm from '@/app/dashboard/klijenti/ClientForm';
-import { getTermTypes } from '@/app/admin/actions';
+import { getTermTypes, getPrograms } from '@/app/admin/actions';
 
 export default async function AdminViewNoviKlijentPage({
   params,
@@ -25,7 +25,8 @@ export default async function AdminViewNoviKlijentPage({
     .single();
   if (!instructor) notFound();
 
-  const [termTypes, listHref] = [await getTermTypes(), `/admin/view/${id}/klijenti`];
+  const [termTypes, programs] = await Promise.all([getTermTypes(), getPrograms()]);
+  const listHref = `/admin/view/${id}/klijenti`;
 
   return (
     <div className="max-w-lg">
@@ -38,6 +39,7 @@ export default async function AdminViewNoviKlijentPage({
       <ClientForm
         instructorId={instructor.id}
         termTypes={termTypes}
+        programs={programs}
         redirectAfterSave={listHref}
         cancelLabel="Nazad na klijente"
       />

@@ -11,6 +11,7 @@ const navLinks = [
   { href: '/admin/uplate', label: 'Evidencija uplata' },
   { href: '/admin/vrste-termina', label: 'Vrste časova' },
   { href: '/admin/kategorije-termina', label: 'Kategorije termina' },
+  { href: '/admin/programi', label: 'Programi' },
   { href: '/admin/ucionice', label: 'Učionice' },
   { href: '/admin/kalendar', label: 'Kalendar' },
   { href: '/admin/testiranja', label: 'Testiranja' },

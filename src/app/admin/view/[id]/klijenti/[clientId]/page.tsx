@@ -3,7 +3,7 @@ import { getAuthedUser, getIsAdmin } from '@/lib/auth';
 import { redirect, notFound } from 'next/navigation';
 import Link from 'next/link';
 import ClientForm from '@/app/dashboard/klijenti/ClientForm';
-import { getTermTypes, getClientTermTypeStatuses } from '@/app/admin/actions';
+import { getTermTypes, getClientTermTypeStatuses, getPrograms, getClientProgrami } from '@/app/admin/actions';
 import type { Client } from '@/types/database';
 
 export default async function AdminViewKlijentEditPage({
@@ -37,9 +37,11 @@ export default async function AdminViewKlijentEditPage({
   const client = { ...(link.client as unknown as Client), placeno_casova: link.placeno_casova };
   const listHref = `/admin/view/${instructorId}/klijenti`;
 
-  const [termTypes, initialProgramStatuses] = await Promise.all([
+  const [termTypes, initialProgramStatuses, programs, initialProgrami] = await Promise.all([
     getTermTypes(),
     getClientTermTypeStatuses(clientId),
+    getPrograms(),
+    getClientProgrami(clientId),
   ]);
 
   return (
@@ -55,6 +57,8 @@ export default async function AdminViewKlijentEditPage({
         client={client}
         termTypes={termTypes}
         initialProgramStatuses={initialProgramStatuses}
+        programs={programs}
+        initialProgrami={initialProgrami}
         redirectAfterSave={listHref}
         cancelLabel="Nazad na listu"
       />

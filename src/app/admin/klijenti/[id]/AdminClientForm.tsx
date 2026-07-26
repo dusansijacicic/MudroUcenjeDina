@@ -10,17 +10,23 @@ import ClientPolSelect from '@/components/ClientPolSelect';
 
 type TermTypeOption = { id: string; naziv: string };
 type ProgramStatus = { term_type_id: string; zavrseno: boolean };
+type ProgramOption = { id: string; naziv: string };
+type ProgramSelection = { program_id: string; zavrseno: boolean };
 
 export default function AdminClientForm({
   client,
   redirectAfterSave,
   termTypes = [],
   initialProgramStatuses = [],
+  programs = [],
+  initialProgrami = [],
 }: {
   client: Client;
   redirectAfterSave: string;
   termTypes?: TermTypeOption[];
   initialProgramStatuses?: ProgramStatus[];
+  programs?: ProgramOption[];
+  initialProgrami?: ProgramSelection[];
 }) {
   const router = useRouter();
   const [ime, setIme] = useState(client.ime ?? '');
@@ -42,6 +48,7 @@ export default function AdminClientForm({
     (client as { accessible_term_type_ids?: string[] }).accessible_term_type_ids ?? []
   );
   const [programStatuses, setProgramStatuses] = useState<ProgramStatus[]>(initialProgramStatuses);
+  const [programiSelections, setProgramiSelections] = useState<ProgramSelection[]>(initialProgrami);
   const [napomena, setNapomena] = useState(client.napomena ?? '');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -79,6 +86,7 @@ export default function AdminClientForm({
       datum_testiranja: datum_testiranja.trim() || null,
       accessible_term_type_ids: accessibleTermTypeIds,
       program_statuses: programStatuses,
+      programi: programiSelections,
     };
     try {
       const result = await updateClientAsAdmin(client.id, payload);
@@ -222,6 +230,57 @@ export default function AdminClientForm({
                           setProgramStatuses(
                             programStatuses.map((p) =>
                               p.term_type_id === tt.id ? { ...p, zavrseno: !p.zavrseno } : p
+                            )
+                          )
+                        }
+                        className="rounded border-stone-300 text-emerald-600"
+                      />
+                      Završeno
+                    </label>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+      {programs.length > 0 && (
+        <div className="rounded-lg border border-stone-200 bg-stone-50/80 p-3 space-y-2">
+          <label className="block text-sm font-medium text-stone-700">
+            Program <span className="text-stone-400 font-normal">(opciono)</span>
+          </label>
+          <p className="text-xs text-stone-500">
+            Opšta oblast koju dete pohađa (Čitanje, Matematika, Logoped, Učenje, Defektološki...). Nezavisno od Vrsta časova iznad.
+          </p>
+          <div className="space-y-1.5">
+            {programs.map((p) => {
+              const sel = programiSelections.find((x) => x.program_id === p.id);
+              return (
+                <div key={p.id} className="flex items-center justify-between gap-2">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={!!sel}
+                      onChange={() =>
+                        setProgramiSelections(
+                          sel
+                            ? programiSelections.filter((x) => x.program_id !== p.id)
+                            : [...programiSelections, { program_id: p.id, zavrseno: false }]
+                        )
+                      }
+                      className="rounded border-stone-300 text-amber-600"
+                    />
+                    <span className="text-sm text-stone-800">{p.naziv}</span>
+                  </label>
+                  {sel && (
+                    <label className="flex items-center gap-1.5 cursor-pointer text-xs text-stone-500">
+                      <input
+                        type="checkbox"
+                        checked={sel.zavrseno}
+                        onChange={() =>
+                          setProgramiSelections(
+                            programiSelections.map((x) =>
+                              x.program_id === p.id ? { ...x, zavrseno: !x.zavrseno } : x
                             )
                           )
                         }
