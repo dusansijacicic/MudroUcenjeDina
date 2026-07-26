@@ -18,7 +18,7 @@ export default async function AdminNoviPredavacPage() {
       </p>
       <NoviPredavacForm />
       <p className="mt-4">
-        <Link href="/admin" className="text-sm text-amber-700 hover:underline">
+        <Link href="/admin/predavaci" className="text-sm text-amber-700 hover:underline">
           ← Nazad na listu instruktora
         </Link>
       </p>

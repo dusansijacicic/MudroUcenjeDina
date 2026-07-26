@@ -26,7 +26,7 @@ export default async function AdminPredavacEditPage({
 
   return (
     <div className="max-w-lg">
-      <Link href="/admin" className="text-sm text-stone-500 hover:text-amber-600 inline-block mb-4">
+      <Link href="/admin/predavaci" className="text-sm text-stone-500 hover:text-amber-600 inline-block mb-4">
         ← Svi instruktori
       </Link>
       <h1 className="text-xl font-semibold text-stone-800 mb-1">

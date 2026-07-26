@@ -35,7 +35,7 @@ export default function AdminPredavacEditForm({ instructor }: { instructor: Inst
         return;
       }
       toast.success('Instruktor sačuvan.');
-      router.push('/admin');
+      router.push('/admin/predavaci');
       router.refresh();
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Greška pri čuvanju.';
@@ -129,7 +129,7 @@ export default function AdminPredavacEditForm({ instructor }: { instructor: Inst
           {loading ? 'Čuvanje...' : 'Sačuvaj'}
         </button>
         <Link
-          href="/admin"
+          href="/admin/predavaci"
           className="rounded-lg border border-stone-300 px-4 py-2 text-stone-700 hover:bg-stone-100"
         >
           Odustani

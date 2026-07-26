@@ -10,7 +10,7 @@ export default function AdminFromDashboardToast({
 }) {
   useEffect(() => {
     if (from === 'dashboard') {
-      toast('Kao admin prvo izaberite instruktora da biste videli kalendar.', {
+      toast('Prijavljeni ste kao admin — ovo je kalendar svih instruktora.', {
         icon: '👤',
         id: 'admin-from-dashboard',
       });

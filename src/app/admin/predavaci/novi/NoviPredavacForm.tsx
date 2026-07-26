@@ -27,7 +27,7 @@ export default function NoviPredavacForm() {
       }
       if (result?.success) {
         toast.success('Instruktor je dodat.');
-        router.push('/admin');
+        router.push('/admin/predavaci');
         router.refresh();
         return;
       }

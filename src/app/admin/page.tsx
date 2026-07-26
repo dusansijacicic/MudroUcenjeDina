@@ -1,93 +1,18 @@
 import { getAuthedUser, getIsAdmin } from '@/lib/auth';
-import { createAdminClient } from '@/lib/supabase/admin';
 import { redirect } from 'next/navigation';
-import Link from 'next/link';
-import AdminFromDashboardToast from '@/components/AdminFromDashboardToast';
 
+/** Početna admin stranica je kalendar. Instruktori su premešteni na /admin/predavaci. */
 export default async function AdminPage({
   searchParams,
 }: {
   searchParams: Promise<{ from?: string }>;
 }) {
-  const params = await searchParams;
-  const { supabase, user } = await getAuthedUser();
+  const { user } = await getAuthedUser();
   if (!user) redirect('/login');
 
   const isAdmin = await getIsAdmin();
   if (!isAdmin) redirect('/login');
 
-  let instructors: { id: string; ime: string; prezime: string; email: string; color: string | null }[] | null = null;
-  try {
-    const adminSupabase = createAdminClient();
-    const { data } = await adminSupabase
-      .from('instructors')
-      .select('id, ime, prezime, email, color')
-      .order('prezime');
-    instructors = data;
-  } catch {
-    const { data } = await supabase
-      .from('instructors')
-      .select('id, ime, prezime, email, color')
-      .order('prezime');
-    instructors = data;
-  }
-
-  return (
-    <div className="animate-in">
-      <AdminFromDashboardToast from={params?.from} />
-      <div className="flex flex-wrap items-center justify-between gap-4 mb-6 animate-in-delay-1">
-        <div>
-          <h1 className="text-xl font-semibold text-stone-800">Instruktori</h1>
-          <p className="text-stone-500 text-sm mt-0.5">
-            Klik na instruktora otvara pregled: kalendar i klijente.
-          </p>
-        </div>
-        <Link
-          href="/admin/predavaci/novi"
-          className="inline-flex items-center rounded-xl bg-amber-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-amber-500 ui-hover-lift shadow-md focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-offset-2"
-        >
-          + Novi instruktor
-        </Link>
-      </div>
-
-      <div className="rounded-2xl border border-stone-200 bg-white divide-y divide-stone-100 shadow-sm overflow-hidden animate-in-delay-2">
-        {(instructors ?? []).length === 0 ? (
-          <div className="p-8 text-center text-stone-500">
-            Nema instruktora u bazi. Dodaj instruktora preko „Novi instruktor” ili registracije na /login.
-          </div>
-        ) : (
-          <ul className="stagger-children">
-            {(instructors ?? []).map((inst) => (
-              <li key={inst.id}>
-                <div className="flex items-center gap-4 p-4 border-b border-stone-100 last:border-0">
-                  <div
-                    className="w-3 h-3 rounded-full shrink-0"
-                    style={{ backgroundColor: inst.color ?? '#EAB308' }}
-                  />
-                  <div className="flex-1 min-w-0">
-                    <div className="font-medium text-stone-800 truncate">
-                      {inst.ime} {inst.prezime}
-                    </div>
-                    <div className="text-sm text-stone-500 truncate">{inst.email}</div>
-                  </div>
-                  <Link
-                    href={`/admin/predavaci/${inst.id}`}
-                    className="text-sm text-stone-500 hover:text-amber-700 shrink-0 ui-transition"
-                  >
-                    Uredi
-                  </Link>
-                  <Link
-                    href={`/admin/view/${inst.id}`}
-                    className="text-sm text-amber-600 hover:text-amber-700 shrink-0 font-medium ui-transition"
-                  >
-                    Pregled →
-                  </Link>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-    </div>
-  );
+  const params = await searchParams;
+  redirect(params?.from ? `/admin/kalendar?from=${encodeURIComponent(params.from)}` : '/admin/kalendar');
 }

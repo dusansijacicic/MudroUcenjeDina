@@ -4,12 +4,13 @@ import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import AdminCalendarView, { type AdminTerm, type OtkazaniTerminCalendar } from './AdminCalendarView';
 import AdminCalendarFilters from './AdminCalendarFilters';
+import AdminFromDashboardToast from '@/components/AdminFromDashboardToast';
 import { getMaxTerminaPoSlotu } from '@/lib/settings';
 
 export default async function AdminKalendarPage({
   searchParams,
 }: {
-  searchParams: Promise<{ week?: string; day?: string; month?: string; view?: string; instructor?: string; classroom?: string; client?: string }>;
+  searchParams: Promise<{ week?: string; day?: string; month?: string; view?: string; instructor?: string; classroom?: string; client?: string; from?: string }>;
 }) {
   const { user } = await getAuthedUser();
   if (!user) redirect('/login');
@@ -117,6 +118,7 @@ export default async function AdminKalendarPage({
 
   return (
     <div>
+      <AdminFromDashboardToast from={params.from} />
       <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
         <h1 className="text-xl font-semibold text-stone-800">Kalendar (svi instruktori)</h1>
         <div className="flex items-center gap-2 flex-wrap">
@@ -170,9 +172,6 @@ export default async function AdminKalendarPage({
         monthStart={monthStart}
         maxTerminaPoSlotu={maxTerminaPoSlotu}
       />
-      <p className="mt-4">
-        <Link href="/admin" className="text-sm text-amber-700 hover:underline">← Nazad na admin</Link>
-      </p>
     </div>
   );
 }
