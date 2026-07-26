@@ -5,7 +5,8 @@
       "Bash(mkdir -p \"c:\\\\Users\\\\korisnik\\\\Desktop\\\\Dina kalendar\\\\src\\\\app\\\\admin\\\\termin\\\\[id]\\\\testiranje\\\\novi\")",
       "Bash(mkdir -p \"c:\\\\Users\\\\korisnik\\\\Desktop\\\\Dina kalendar\\\\src\\\\app\\\\admin\\\\termin\\\\[id]\\\\testiranje\\\\[pcId]\")",
       "Bash(python -c ' *)",
-      "Bash(npx eslint *)"
+      "Bash(npx eslint *)",
+      "Bash(git fetch *)"
     ]
   }
 }
