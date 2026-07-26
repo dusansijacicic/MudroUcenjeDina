@@ -5,19 +5,30 @@ import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import { useRouter, usePathname } from 'next/navigation';
 
-const navLinks = [
-  { href: '/admin', label: 'Instruktori' },
+/** U prvom planu: najčešće korišćeno. */
+const primaryLinks = [
+  { href: '/admin/kalendar', label: 'Kalendar' },
   { href: '/admin/klijenti', label: 'Klijenti' },
+  { href: '/admin', label: 'Instruktori' },
   { href: '/admin/uplate', label: 'Evidencija uplata' },
+];
+
+/** Entiteti koji se dodaju/uređuju (podešavanja sistema). */
+const entityLinks = [
   { href: '/admin/vrste-termina', label: 'Vrste časova' },
   { href: '/admin/kategorije-termina', label: 'Kategorije termina' },
   { href: '/admin/programi', label: 'Programi' },
   { href: '/admin/ucionice', label: 'Učionice' },
-  { href: '/admin/kalendar', label: 'Kalendar' },
   { href: '/admin/testiranja', label: 'Testiranja' },
+];
+
+/** Ostalo. */
+const otherLinks = [
   { href: '/admin/podesavanja', label: 'Podešavanja' },
   { href: '/admin/uputstvo', label: 'Uputstvo (uloge)' },
 ];
+
+const navLinks = [...primaryLinks, ...entityLinks, ...otherLinks];
 
 export default function AdminNav() {
   const router = useRouter();
@@ -31,42 +42,20 @@ export default function AdminNav() {
     router.refresh();
   };
 
+  const linkClass = (href: string) => {
+    const active = href === '/admin' ? pathname === '/admin' : pathname.startsWith(href);
+    return `px-3 py-2 rounded-lg text-sm font-medium ui-transition focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-800 ${
+      active ? 'bg-amber-500 text-white' : 'text-stone-300 hover:bg-stone-700 hover:text-white'
+    }`;
+  };
   return (
     <header className="bg-stone-800 text-white border-b border-stone-700 shadow-lg animate-fade-in sticky top-0 z-20">
-      <div className="max-w-5xl mx-auto px-4 flex items-center justify-between gap-2 min-h-14 py-2">
-        <Link
-          href="/admin"
-          className="font-semibold text-white shrink-0 ui-transition hover:text-amber-200 focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-800 rounded-md truncate"
-        >
-          Dina Kalendar – Admin
-        </Link>
-        <nav className="hidden md:flex flex-wrap items-center gap-1" aria-label="Admin navigacija">
-          {navLinks.map(({ href, label }) => {
-            const active = href === '/admin' ? pathname === '/admin' : pathname.startsWith(href);
-            return (
-              <Link
-                key={href}
-                href={href}
-                className={`px-3 py-2 rounded-lg text-sm font-medium ui-transition focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-800 ${
-                  active ? 'bg-amber-500 text-white' : 'text-stone-300 hover:bg-stone-700 hover:text-white'
-                }`}
-              >
-                {label}
-              </Link>
-            );
-          })}
-          <Link href="/admin/termin/novi" className="px-3 py-2 rounded-lg text-sm font-medium bg-amber-600 text-white hover:bg-amber-500 ui-transition shadow-md">
-            + Zakaži termin
-          </Link>
-          <Link href="/admin/uplate/novi" className="px-3 py-2 rounded-lg text-sm font-medium border border-stone-500 text-stone-200 hover:bg-stone-700 hover:border-stone-500 ui-transition">
-            + Unesi uplatu
-          </Link>
-        </nav>
-        <div className="flex items-center gap-1">
+      <div className="w-[90%] mx-auto px-4">
+        <div className="flex items-center justify-end py-2 md:hidden">
           <button
             type="button"
             onClick={() => setMobileOpen((o) => !o)}
-            className="md:hidden p-2 rounded-lg text-stone-300 hover:bg-stone-700 min-h-[44px] min-w-[44px] flex items-center justify-center"
+            className="p-2 rounded-lg text-stone-300 hover:bg-stone-700 min-h-[44px] min-w-[44px] flex items-center justify-center"
             aria-expanded={mobileOpen}
             aria-label="Meni"
           >
@@ -76,16 +65,41 @@ export default function AdminNav() {
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg>
             )}
           </button>
-          <Link href="/promena-sifre" className="hidden md:inline text-sm text-stone-400 hover:text-white ui-transition rounded-md px-3 py-2 hover:bg-stone-700/80 min-h-[44px] flex items-center">
+        </div>
+        <nav className="hidden md:flex flex-wrap items-center gap-2 py-3" aria-label="Admin navigacija">
+          {primaryLinks.map(({ href, label }) => (
+            <Link key={href} href={href} className={linkClass(href)}>
+              {label}
+            </Link>
+          ))}
+          <Link href="/admin/termin/novi" className="px-3 py-2 rounded-lg text-sm font-medium bg-amber-600 text-white hover:bg-amber-500 ui-transition shadow-md">
+            + Zakaži termin
+          </Link>
+          <Link href="/admin/uplate/novi" className="px-3 py-2 rounded-lg text-sm font-medium border border-stone-500 text-stone-200 hover:bg-stone-700 hover:border-stone-500 ui-transition">
+            + Unesi uplatu
+          </Link>
+          <span className="w-px self-stretch bg-stone-700 mx-1" aria-hidden />
+          {entityLinks.map(({ href, label }) => (
+            <Link key={href} href={href} className={linkClass(href)}>
+              {label}
+            </Link>
+          ))}
+          <span className="w-px self-stretch bg-stone-700 mx-1" aria-hidden />
+          {otherLinks.map(({ href, label }) => (
+            <Link key={href} href={href} className={linkClass(href)}>
+              {label}
+            </Link>
+          ))}
+          <Link href="/promena-sifre" className="px-3 py-2 rounded-lg text-sm font-medium text-stone-400 hover:text-white hover:bg-stone-700/80 ui-transition">
             Lozinka
           </Link>
           <button
             onClick={signOut}
-            className="text-sm text-stone-400 hover:text-white shrink-0 ui-transition rounded-md px-3 py-2 hover:bg-stone-700/80 min-h-[44px] focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-800"
+            className="px-3 py-2 rounded-lg text-sm font-medium text-stone-400 hover:text-white hover:bg-stone-700/80 ui-transition focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-800"
           >
             Odjava
           </button>
-        </div>
+        </nav>
       </div>
       {mobileOpen && (
         <div className="md:hidden border-t border-stone-700 bg-stone-800 px-4 py-3 flex flex-col gap-1 max-h-[70vh] overflow-y-auto">
