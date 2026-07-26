@@ -44,9 +44,6 @@ export default function AdminClientForm({
   const [datum_testiranja, setDatumTestiranja] = useState(
     client.datum_testiranja?.slice(0, 10) ?? ''
   );
-  const [accessibleTermTypeIds, setAccessibleTermTypeIds] = useState<string[]>(
-    (client as { accessible_term_type_ids?: string[] }).accessible_term_type_ids ?? []
-  );
   const [programStatuses, setProgramStatuses] = useState<ProgramStatus[]>(initialProgramStatuses);
   const [programiSelections, setProgramiSelections] = useState<ProgramSelection[]>(initialProgrami);
   const [napomena, setNapomena] = useState(client.napomena ?? '');
@@ -84,7 +81,6 @@ export default function AdminClientForm({
       napomena: napomena.trim() || null,
       popust_percent: popustNum,
       datum_testiranja: datum_testiranja.trim() || null,
-      accessible_term_type_ids: accessibleTermTypeIds,
       program_statuses: programStatuses,
       programi: programiSelections,
     };
@@ -161,38 +157,6 @@ export default function AdminClientForm({
         />
         <p className="mt-1 text-xs text-stone-500">Opciono. Lista klijenata sortira se po ovom datumu (noviji prvi).</p>
       </div>
-      {termTypes.length > 0 && (
-        <div className="rounded-lg border border-stone-200 bg-stone-50/80 p-3 space-y-2">
-          <label className="block text-sm font-medium text-stone-700">
-            Vrste časova <span className="text-stone-400 font-normal">(opciono)</span>
-          </label>
-          <p className="text-xs text-stone-500">
-            Označite kojim vrstama časova ovaj učenik ima pristup. Prazno = sve vrste.
-          </p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {termTypes.map((tt) => {
-              const checked = accessibleTermTypeIds.includes(tt.id);
-              return (
-                <label key={tt.id} className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={checked}
-                    onChange={() =>
-                      setAccessibleTermTypeIds(
-                        checked
-                          ? accessibleTermTypeIds.filter((id) => id !== tt.id)
-                          : [...accessibleTermTypeIds, tt.id]
-                      )
-                    }
-                    className="rounded border-stone-300 text-amber-600"
-                  />
-                  <span className="text-sm text-stone-800">{tt.naziv}</span>
-                </label>
-              );
-            })}
-          </div>
-        </div>
-      )}
       {termTypes.length > 0 && (
         <div className="rounded-lg border border-stone-200 bg-stone-50/80 p-3 space-y-2">
           <label className="block text-sm font-medium text-stone-700">

@@ -70,7 +70,7 @@ export default async function AdminKalendarPage({
       .order('slot_index'),
     adminSupabase.from('instructors').select('id, ime, prezime, color').order('prezime').order('ime'),
     adminSupabase.from('classrooms').select('id, naziv').order('naziv'),
-    adminSupabase.from('clients').select('id, ime, prezime').order('prezime').order('ime'),
+    adminSupabase.from('clients').select('id, ime, prezime').order('ime').order('prezime'),
     adminSupabase.from('otkazani_termini').select('id, client_ime, client_prezime, instructor_id, instructor_ime, instructor_prezime, term_date, slot_index, term_type_naziv, placeno').gte('term_date', dateFrom).lte('term_date', dateTo),
     getMaxTerminaPoSlotu(),
   ]);

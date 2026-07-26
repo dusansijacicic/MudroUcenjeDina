@@ -18,7 +18,7 @@ export default async function KlijentiPage() {
   try {
     const admin = createAdminClient();
     const [{ data: clients }, { data: icRows }] = await Promise.all([
-      admin.from('clients').select('*').order('prezime').order('ime'),
+      admin.from('clients').select('*').order('ime').order('prezime'),
       admin.from('instructor_clients').select('client_id, placeno_casova').eq('instructor_id', instructor.id),
     ]);
     const placenoMap = new Map((icRows ?? []).map((r) => [r.client_id, r.placeno_casova ?? 0]));

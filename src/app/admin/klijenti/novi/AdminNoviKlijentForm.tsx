@@ -6,6 +6,7 @@ import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { createClientAsAdminDirect } from '../../actions';
 import ClientPolSelect from '@/components/ClientPolSelect';
+import { findDefaultCitanjeProgramId } from '@/lib/programi';
 
 type TermTypeOption = { id: string; naziv: string };
 type ProgramStatus = { term_type_id: string; zavrseno: boolean };
@@ -31,16 +32,13 @@ export default function AdminNoviKlijentForm({
   const [loginEmail, setLoginEmail] = useState('');
   const [datumTestiranja, setDatumTestiranja] = useState('');
   const [napomena, setNapomena] = useState('');
-  const [accessibleTermTypeIds, setAccessibleTermTypeIds] = useState<string[]>([]);
   const [programStatuses, setProgramStatuses] = useState<ProgramStatus[]>([]);
-  const [programiSelections, setProgramiSelections] = useState<ProgramSelection[]>([]);
+  const [programiSelections, setProgramiSelections] = useState<ProgramSelection[]>(() => {
+    const defaultId = findDefaultCitanjeProgramId(programs);
+    return defaultId ? [{ program_id: defaultId, zavrseno: false }] : [];
+  });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-
-  const toggleTermType = (id: string) =>
-    setAccessibleTermTypeIds((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
-    );
 
   const toggleProgram = (id: string) =>
     setProgramStatuses((prev) =>
@@ -87,7 +85,6 @@ export default function AdminNoviKlijentForm({
         login_email: loginEmail.trim() || null,
         napomena: napomena.trim() || null,
         datum_testiranja: datumTestiranja.trim() || null,
-        accessible_term_type_ids: accessibleTermTypeIds,
         program_statuses: programStatuses,
         programi: programiSelections,
       });
@@ -203,30 +200,6 @@ export default function AdminNoviKlijentForm({
       {termTypes.length > 0 && (
         <div className="rounded-lg border border-stone-200 bg-stone-50/80 p-3 space-y-2">
           <label className="block text-sm font-medium text-stone-700">
-            Vrste časova <span className="text-stone-400 font-normal">(opciono)</span>
-          </label>
-          <p className="text-xs text-stone-500">
-            Označite kojim vrstama časova ovaj učenik ima pristup. Prazno = sve vrste.
-          </p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {termTypes.map((tt) => (
-              <label key={tt.id} className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={accessibleTermTypeIds.includes(tt.id)}
-                  onChange={() => toggleTermType(tt.id)}
-                  className="rounded border-stone-300 text-amber-600"
-                />
-                <span className="text-sm text-stone-800">{tt.naziv}</span>
-              </label>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {termTypes.length > 0 && (
-        <div className="rounded-lg border border-stone-200 bg-stone-50/80 p-3 space-y-2">
-          <label className="block text-sm font-medium text-stone-700">
             Programi koje dete pohađa <span className="text-stone-400 font-normal">(opciono)</span>
           </label>
           <p className="text-xs text-stone-500">
@@ -270,7 +243,7 @@ export default function AdminNoviKlijentForm({
             Program <span className="text-stone-400 font-normal">(opciono)</span>
           </label>
           <p className="text-xs text-stone-500">
-            Opšta oblast koju dete pohađa (Čitanje, Matematika, Logoped, Učenje, Defektološki...). Nezavisno od Vrsta časova iznad.
+            Opšta oblast koju dete pohađa (Čitanje, Matematika, Logoped, Učenje, Defektološki...).
           </p>
           <div className="space-y-1.5">
             {programs.map((p) => {

@@ -7,6 +7,7 @@ import toast from 'react-hot-toast';
 import { createClientAsInstructor, updateClientAsInstructor } from './actions';
 import type { Client } from '@/types/database';
 import ClientPolSelect from '@/components/ClientPolSelect';
+import { findDefaultCitanjeProgramId } from '@/lib/programi';
 
 type TermTypeOption = { id: string; naziv: string };
 type ProgramStatus = { term_type_id: string; zavrseno: boolean };
@@ -60,11 +61,12 @@ export default function ClientForm({
     (client as { datum_testiranja?: string | null })?.datum_testiranja?.slice(0, 10) ?? ''
   );
   const [napomena, setNapomena] = useState(client?.napomena ?? '');
-  const [accessibleTermTypeIds, setAccessibleTermTypeIds] = useState<string[]>(
-    (client as { accessible_term_type_ids?: string[] })?.accessible_term_type_ids ?? []
-  );
   const [programStatuses, setProgramStatuses] = useState<ProgramStatus[]>(initialProgramStatuses ?? []);
-  const [programiSelections, setProgramiSelections] = useState<ProgramSelection[]>(initialProgrami ?? []);
+  const [programiSelections, setProgramiSelections] = useState<ProgramSelection[]>(() => {
+    if (client) return initialProgrami ?? [];
+    const defaultId = findDefaultCitanjeProgramId(programs);
+    return defaultId ? [{ program_id: defaultId, zavrseno: false }] : [];
+  });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -89,7 +91,6 @@ export default function ClientForm({
       login_email: login_email.trim() || null,
       napomena: napomena.trim() || null,
       datum_testiranja: datum_testiranja.trim() || null,
-      accessible_term_type_ids: accessibleTermTypeIds,
       program_statuses: programStatuses,
       programi: programiSelections,
     };
@@ -229,38 +230,6 @@ export default function ClientForm({
           className="w-full max-w-[220px] rounded-lg border border-stone-300 px-3 py-2 text-stone-800"
         />
       </div>
-      {termTypes.length > 0 && (
-        <div className="rounded-lg border border-stone-200 bg-stone-50/80 p-3 space-y-2">
-          <label className="block text-sm font-medium text-stone-700">
-            Vrste časova <span className="text-stone-400 font-normal">(opciono)</span>
-          </label>
-          <p className="text-xs text-stone-500">
-            Označite kojim vrstama časova ovaj učenik ima pristup. Ako ništa nije označeno, dostupne su sve vrste.
-          </p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {termTypes.map((tt) => {
-              const checked = accessibleTermTypeIds.includes(tt.id);
-              return (
-                <label key={tt.id} className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={checked}
-                    onChange={() =>
-                      setAccessibleTermTypeIds(
-                        checked
-                          ? accessibleTermTypeIds.filter((id) => id !== tt.id)
-                          : [...accessibleTermTypeIds, tt.id]
-                      )
-                    }
-                    className="rounded border-stone-300 text-amber-600"
-                  />
-                  <span className="text-sm text-stone-800">{tt.naziv}</span>
-                </label>
-              );
-            })}
-          </div>
-        </div>
-      )}
       {termTypes.length > 0 && (
         <div className="rounded-lg border border-stone-200 bg-stone-50/80 p-3 space-y-2">
           <label className="block text-sm font-medium text-stone-700">
