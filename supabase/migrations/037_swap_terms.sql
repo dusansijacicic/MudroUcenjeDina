@@ -30,7 +30,14 @@ BEGIN
     RAISE EXCEPTION 'Nije pronađeno UNIQUE ograničenje terms(instructor_id, date, slot_index).';
   END IF;
 
-  EXECUTE format('ALTER TABLE terms ALTER CONSTRAINT %I DEFERRABLE INITIALLY IMMEDIATE', v_cname);
+  -- Postgres dozvoljava ALTER TABLE ... ALTER CONSTRAINT ... DEFERRABLE samo za FOREIGN KEY
+  -- ograničenja, ne i za UNIQUE ("is not a foreign key constraint") – mora se ukloniti i ponovo
+  -- dodati pod istim imenom, ovog puta sa DEFERRABLE INITIALLY IMMEDIATE.
+  EXECUTE format('ALTER TABLE terms DROP CONSTRAINT %I', v_cname);
+  EXECUTE format(
+    'ALTER TABLE terms ADD CONSTRAINT %I UNIQUE (instructor_id, date, slot_index) DEFERRABLE INITIALLY IMMEDIATE',
+    v_cname
+  );
 END $$;
 
 CREATE OR REPLACE FUNCTION public.swap_terms(
