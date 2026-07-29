@@ -141,8 +141,32 @@ export async function createTermAsAdmin(
     return { error: `Maksimalan broj termina u ovom slotu je ${maxTerminaPoSlotu}. Podešavanje u Admin → Podešavanja.` };
   }
 
-  // Napomena: instruktor/učionica koji su već zauzeti u ovom slotu se NE blokiraju ovde –
-  // forma ih prikazuje sa oznakom "(zauzeto)" i dozvoljava svestan izbor (swap/paralelno zakazivanje).
+  // Novi termin nema "svoj" resurs koji bi mogao da ponudi u zamenu, pa se ovde – za razliku od
+  // izmene postojećeg termina (updateTermClassroomAsAdmin, reassignPredavanjeInstructorAsAdmin) –
+  // zauzet instruktor/učionica i dalje odbijaju, samo sa jasnom porukom umesto sirove DB greške
+  // (terms ima UNIQUE(instructor_id, date, slot_index) i UNIQUE(classroom_id, date, slot_index)).
+  const { data: existingSameInstructor } = await adminSupabase
+    .from('terms')
+    .select('id')
+    .eq('instructor_id', instructorId)
+    .eq('date', dateStr)
+    .eq('slot_index', slot)
+    .maybeSingle();
+  if (existingSameInstructor) {
+    return { error: 'Ovaj instruktor već ima termin u ovom slotu. Dodajte radionicu u taj postojeći termin umesto novog.' };
+  }
+  if (classroomId) {
+    const { data: existingSameClassroom } = await adminSupabase
+      .from('terms')
+      .select('id')
+      .eq('date', dateStr)
+      .eq('slot_index', slot)
+      .eq('classroom_id', classroomId)
+      .maybeSingle();
+    if (existingSameClassroom) {
+      return { error: 'Ova učionica je već zauzeta u ovom slotu. Zamena mesta je moguća samo kod izmene postojećeg termina, ne pri kreiranju novog.' };
+    }
+  }
 
   if (!termCategoryId?.trim()) {
     return { error: 'Izaberite kategoriju termina.' };
@@ -298,7 +322,7 @@ export async function syncSpilloverSlots(
 
   for (const slotIdx of desiredSlots) {
     if (existingBySlot.has(slotIdx)) continue;
-    await admin.from('terms').insert({
+    const { error: spilloverErr } = await admin.from('terms').insert({
       instructor_id: origin.instructor_id,
       classroom_id: origin.classroom_id,
       date: origin.date,
@@ -307,6 +331,11 @@ export async function syncSpilloverSlots(
       nastavak_of_term_id: originTermId,
       napomena: AUTO_SPILLOVER_NAPOMENA,
     });
+    if (spilloverErr) {
+      // Instruktor ili učionica su već genuinely zauzeti u tom slotu nečim drugim – ne rušimo
+      // čuvanje radionice zbog ovoga, samo beležimo da automatska blokada nije uspela.
+      console.warn('[dvočas] spillover insert failed for slot', slotIdx, spilloverErr.message);
+    }
   }
 }
 
@@ -651,9 +680,37 @@ export async function deleteTermAsAdmin(termId: string): Promise<{ error?: strin
   return {};
 }
 
+/**
+ * Menja učionicu termina. Ako je izabrana učionica već zauzeta DRUGIM terminom u istom datumu/slotu
+ * (baza ima UNIQUE ograničenje na (classroom_id, date, slot_index)), radi se prava zamena mesta:
+ * onaj drugi termin dobija učionicu koju je ovaj termin do sad imao (privremeno se prolazi kroz NULL
+ * da se ne prekrši ograničenje usred operacije).
+ */
 export async function updateTermClassroomAsAdmin(termId: string, classroomId: string): Promise<{ error?: string }> {
   const { admin, error: authErr } = await requireAdmin();
   if (authErr || !admin) return { error: authErr ?? 'Niste ovlašćeni.' };
+
+  const { data: term } = await admin.from('terms').select('classroom_id, date, slot_index').eq('id', termId).single();
+  if (!term) return { error: 'Termin nije pronađen.' };
+  if (term.classroom_id === classroomId) return {};
+
+  const { data: conflict } = await admin
+    .from('terms')
+    .select('id')
+    .eq('classroom_id', classroomId)
+    .eq('date', term.date)
+    .eq('slot_index', term.slot_index)
+    .neq('id', termId)
+    .maybeSingle();
+
+  if (conflict) {
+    const { error: freeErr } = await admin.from('terms').update({ classroom_id: null }).eq('id', termId);
+    if (freeErr) return { error: freeErr.message };
+    const { error: swapErr } = await admin.from('terms').update({ classroom_id: term.classroom_id }).eq('id', conflict.id);
+    if (swapErr) return { error: swapErr.message };
+    revalidatePath(`/admin/termin/${conflict.id}`);
+  }
+
   const { error } = await admin.from('terms').update({ classroom_id: classroomId }).eq('id', termId);
   if (error) return { error: error.message };
   revalidatePath('/admin/kalendar');

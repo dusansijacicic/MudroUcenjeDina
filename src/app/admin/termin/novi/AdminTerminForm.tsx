@@ -447,13 +447,13 @@ export default function AdminTerminForm({
             >
               <option value="">Izaberite instruktora</option>
               {instructors.map((i) => (
-                <option key={i.id} value={i.id}>
+                <option key={i.id} value={i.id} disabled={takenInstructorIds.includes(i.id)}>
                   {i.ime} {i.prezime}{takenInstructorIds.includes(i.id) ? ' (zauzeto)' : ''}
                 </option>
               ))}
             </select>
             {takenInstructorIds.length > 0 && (
-              <p className="text-xs text-stone-500 mt-0.5">{takenInstructorIds.length} instruktor(a) već ima termin u ovom slotu — i dalje se mogu izabrati.</p>
+              <p className="text-xs text-stone-500 mt-0.5">{takenInstructorIds.length} instruktor(a) već ima termin u ovom slotu — za NOVI termin se ne mogu izabrati (fizički nemoguće); zamena mesta je moguća samo kod izmene postojećeg termina.</p>
             )}
           </div>
           <div>
@@ -467,13 +467,13 @@ export default function AdminTerminForm({
             >
               <option value="">Izaberite učionicu</option>
               {classrooms.map((c) => (
-                <option key={c.id} value={c.id}>
+                <option key={c.id} value={c.id} disabled={takenClassroomIds.includes(c.id)}>
                   {c.naziv}{takenClassroomIds.includes(c.id) ? ' (zauzeto)' : ''}
                 </option>
               ))}
             </select>
             {takenClassroomIds.length > 0 && (
-              <p className="text-xs text-stone-500 mt-0.5">{takenClassroomIds.length} učionica je zauzeta u ovom slotu — i dalje se mogu izabrati.</p>
+              <p className="text-xs text-stone-500 mt-0.5">{takenClassroomIds.length} učionica je zauzeta u ovom slotu — za NOVI termin se ne može izabrati; zamena mesta je moguća samo kod izmene postojećeg termina.</p>
             )}
           </div>
         </div>

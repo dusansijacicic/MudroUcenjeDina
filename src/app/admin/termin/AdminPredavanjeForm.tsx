@@ -352,6 +352,11 @@ export default function AdminPredavanjeForm({
               </option>
             ))}
           </select>
+          {takenClassroomIds.some((id) => id !== initialClassroomId) && (
+            <p className="text-xs text-stone-500 mt-1">
+              Ako izaberete zauzetu učionicu, zamenićete mesto s terminom koji je trenutno koristi (on dobija ovu učionicu).
+            </p>
+          )}
         </div>
       )}
 
