@@ -173,6 +173,7 @@ export default function AdminCalendarView({
       return;
     }
     resetSwapSelection();
+    setSwapMode(false);
     router.refresh();
   };
 
