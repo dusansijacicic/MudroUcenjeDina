@@ -3,7 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { redirect, notFound } from 'next/navigation';
 import Link from 'next/link';
 import { TIME_SLOTS } from '@/lib/constants';
-import { getTermTypes, getClassrooms, getStanjePoVrstamaZaKlijenteBatch, getTermCategories, getAdminInstructorsList, type StanjeVrstaRow } from '@/app/admin/actions';
+import { getTermTypes, getClassrooms, getStanjePoVrstamaZaKlijenteBatch, getTermCategories, getAdminInstructorsList, getAllClientsCompletedProgramIds, type StanjeVrstaRow } from '@/app/admin/actions';
 import AdminPredavanjeForm from '@/app/admin/termin/AdminPredavanjeForm';
 import { SEEDED_TERM_CATEGORY_INDIVIDUAL_ID } from '@/lib/term-categories';
 
@@ -44,20 +44,27 @@ export default async function AdminEditPredavanjePage({
 
   const { data: allClients } = await admin
     .from('clients')
-    .select('id, ime, prezime')
+    .select('id, ime, prezime, godiste, datum_testiranja')
     .order('ime')
     .order('prezime');
   const clients = (allClients ?? []).map((c) => ({
     id: c.id,
     ime: c.ime ?? '',
     prezime: c.prezime ?? '',
+    godiste: c.godiste ?? null,
+    datumTestiranja: c.datum_testiranja ?? null,
   }));
 
   const instructorId = (term as { instructor_id?: string }).instructor_id ?? '';
-  const stanjeMap = instructorId
-    ? await getStanjePoVrstamaZaKlijenteBatch(clients.map((c) => c.id), instructorId)
-    : new Map<string, StanjeVrstaRow[]>();
+  const [stanjeMap, completedMap] = await Promise.all([
+    instructorId
+      ? getStanjePoVrstamaZaKlijenteBatch(clients.map((c) => c.id), instructorId)
+      : Promise.resolve(new Map<string, StanjeVrstaRow[]>()),
+    getAllClientsCompletedProgramIds(),
+  ]);
   const clientStanjeList = clients.map((c) => ({ clientId: c.id, stanje: stanjeMap.get(c.id) ?? [] }));
+  const completedProgramIdsByClient: Record<string, string[]> = {};
+  for (const [cid, set] of completedMap) completedProgramIdsByClient[cid] = [...set];
 
   const termsInSlot = await admin
     .from('terms')
@@ -91,6 +98,7 @@ export default async function AdminEditPredavanjePage({
         initialClassroomId={termWithClassroom.classroom_id ?? null}
         takenClassroomIds={takenClassroomIds}
         clientStanjeList={clientStanjeList}
+        completedProgramIdsByClient={completedProgramIdsByClient}
         instructors={instructors}
         initialInstructorId={instructorId}
         predavanje={{

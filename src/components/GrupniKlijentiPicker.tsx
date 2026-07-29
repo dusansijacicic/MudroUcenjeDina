@@ -2,7 +2,15 @@
 
 import { useMemo, useState } from 'react';
 
-export type GrupniKlijentOption = { id: string; ime: string; prezime: string };
+export type GrupniKlijentOption = {
+  id: string;
+  ime: string;
+  prezime: string;
+  /** Godište (opciono) – prikazuje se pored imena radi lakšeg razlikovanja istoimene dece. */
+  godiste?: number | null;
+  /** Datum testiranja (YYYY-MM-DD, opciono) – prikazuje se pored imena. */
+  datumTestiranja?: string | null;
+};
 
 type Props = {
   clients: GrupniKlijentOption[];
@@ -11,7 +19,15 @@ type Props = {
   disabled?: boolean;
   /** Za jedinstven id polja pretrage ako ima više picker-a na stranici */
   inputId?: string;
+  /** Id-jevi klijenata koji su "završili" program vezan za trenutno izabranu vrstu časa – podrazumevano sakriveni. */
+  completedIds?: Set<string>;
 };
+
+function formatDatum(iso: string): string {
+  const d = new Date(iso + 'T12:00:00');
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString('sr-Latn-RS');
+}
 
 /** Višestruki izbor klijenata za grupni termin: pretraga + lista sa checkboxovima. */
 export default function GrupniKlijentiPicker({
@@ -20,10 +36,12 @@ export default function GrupniKlijentiPicker({
   onSelectionChange,
   disabled,
   inputId = 'grupni-klijenti-search',
+  completedIds,
 }: Props) {
   const [search, setSearch] = useState('');
+  const [showCompleted, setShowCompleted] = useState(false);
 
-  const filtered = useMemo(() => {
+  const searchMatched = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return clients;
     return clients.filter((c) => {
@@ -31,6 +49,17 @@ export default function GrupniKlijentiPicker({
       return full.includes(q);
     });
   }, [clients, search]);
+
+  const hiddenCompletedCount = useMemo(() => {
+    if (!completedIds || completedIds.size === 0) return 0;
+    // Ne broji već označene – oni ostaju vidljivi bez obzira na "završeno" da se ne bi izgubili iz izbora.
+    return searchMatched.filter((c) => completedIds.has(c.id) && !selectedIds.includes(c.id)).length;
+  }, [searchMatched, completedIds, selectedIds]);
+
+  const filtered = useMemo(() => {
+    if (!completedIds || completedIds.size === 0 || showCompleted) return searchMatched;
+    return searchMatched.filter((c) => !completedIds.has(c.id) || selectedIds.includes(c.id));
+  }, [searchMatched, completedIds, showCompleted, selectedIds]);
 
   const toggle = (id: string) => {
     if (selectedIds.includes(id)) {
@@ -95,6 +124,17 @@ export default function GrupniKlijentiPicker({
               </button>
             </div>
           )}
+          {!!completedIds && completedIds.size > 0 && (hiddenCompletedCount > 0 || showCompleted) && (
+            <label className="mt-1.5 flex items-center gap-1.5 text-xs text-stone-500 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={showCompleted}
+                onChange={(e) => setShowCompleted(e.target.checked)}
+                className="rounded border-stone-300 text-amber-600"
+              />
+              Prikaži i završene {hiddenCompletedCount > 0 && !showCompleted ? `(${hiddenCompletedCount})` : ''}
+            </label>
+          )}
         </div>
         <div
           className="max-h-56 overflow-y-auto overscroll-y-contain"
@@ -111,6 +151,7 @@ export default function GrupniKlijentiPicker({
           ) : (
             filtered.map((c) => {
               const checked = selectedIds.includes(c.id);
+              const isCompleted = completedIds?.has(c.id) ?? false;
               return (
                 <label
                   key={c.id}
@@ -127,6 +168,7 @@ export default function GrupniKlijentiPicker({
                   />
                   <span className="flex-1 min-w-0 text-base text-stone-900 font-normal leading-snug tracking-normal antialiased select-text break-words">
                     {fullName(c)}
+                    {isCompleted && <span className="ml-2 text-xs text-stone-400">(završeno)</span>}
                   </span>
                 </label>
               );
@@ -154,5 +196,9 @@ export default function GrupniKlijentiPicker({
 function fullName(c: GrupniKlijentOption): string {
   const i = (c.ime ?? '').trim();
   const p = (c.prezime ?? '').trim();
-  return [i, p].filter(Boolean).join(' ') || '—';
+  const name = [i, p].filter(Boolean).join(' ') || '—';
+  const extras: string[] = [];
+  if (c.godiste != null) extras.push(`(${c.godiste})`);
+  if (c.datumTestiranja) extras.push(formatDatum(c.datumTestiranja));
+  return extras.length > 0 ? `${name} ${extras.join(', ')}` : name;
 }

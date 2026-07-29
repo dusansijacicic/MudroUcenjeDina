@@ -2,7 +2,15 @@
 
 import { useMemo, useState } from 'react';
 
-export type SingleKlijentOption = { id: string; ime: string; prezime: string };
+export type SingleKlijentOption = {
+  id: string;
+  ime: string;
+  prezime: string;
+  /** Godište (opciono) – prikazuje se pored imena radi lakšeg razlikovanja istoimene dece. */
+  godiste?: number | null;
+  /** Datum testiranja (YYYY-MM-DD, opciono) – prikazuje se pored imena. */
+  datumTestiranja?: string | null;
+};
 
 type Props = {
   clients: SingleKlijentOption[];
@@ -10,7 +18,22 @@ type Props = {
   onChange: (id: string) => void;
   disabled?: boolean;
   inputId?: string;
+  /** Id-jevi klijenata koji su "završili" program vezan za trenutno izabranu vrstu časa – podrazumevano sakriveni. */
+  completedIds?: Set<string>;
 };
+
+function formatDatum(iso: string): string {
+  const d = new Date(iso + 'T12:00:00');
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString('sr-Latn-RS');
+}
+
+function displayLabel(c: SingleKlijentOption): string {
+  const extras: string[] = [];
+  if (c.godiste != null) extras.push(`(${c.godiste})`);
+  if (c.datumTestiranja) extras.push(formatDatum(c.datumTestiranja));
+  return extras.length > 0 ? `${c.ime} ${c.prezime} ${extras.join(', ')}` : `${c.ime} ${c.prezime}`;
+}
 
 /** Pretraga + jednострuki izbor klijenta po imenu (sortira po imenu, a ne prezimenu). */
 export default function SingleKlijentPicker({
@@ -19,8 +42,10 @@ export default function SingleKlijentPicker({
   onChange,
   disabled,
   inputId = 'single-klijent-search',
+  completedIds,
 }: Props) {
   const [search, setSearch] = useState('');
+  const [showCompleted, setShowCompleted] = useState(false);
 
   const sorted = useMemo(
     () =>
@@ -32,13 +57,21 @@ export default function SingleKlijentPicker({
     [clients]
   );
 
-  const filtered = useMemo(() => {
+  const searchMatched = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return sorted;
-    return sorted.filter((c) =>
-      `${c.ime ?? ''} ${c.prezime ?? ''}`.toLowerCase().includes(q)
-    );
+    return sorted.filter((c) => `${c.ime ?? ''} ${c.prezime ?? ''}`.toLowerCase().includes(q));
   }, [sorted, search]);
+
+  const hiddenCompletedCount = useMemo(() => {
+    if (!completedIds || completedIds.size === 0) return 0;
+    return searchMatched.filter((c) => completedIds.has(c.id)).length;
+  }, [searchMatched, completedIds]);
+
+  const filtered = useMemo(() => {
+    if (!completedIds || completedIds.size === 0 || showCompleted) return searchMatched;
+    return searchMatched.filter((c) => !completedIds.has(c.id));
+  }, [searchMatched, completedIds, showCompleted]);
 
   const selected = clients.find((c) => c.id === value);
 
@@ -63,6 +96,17 @@ export default function SingleKlijentPicker({
             disabled={disabled}
             className="w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm text-stone-900 placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500"
           />
+          {!!completedIds && completedIds.size > 0 && (hiddenCompletedCount > 0 || showCompleted) && (
+            <label className="mt-1.5 flex items-center gap-1.5 text-xs text-stone-500 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={showCompleted}
+                onChange={(e) => setShowCompleted(e.target.checked)}
+                className="rounded border-stone-300 text-amber-600"
+              />
+              Prikaži i završene {hiddenCompletedCount > 0 && !showCompleted ? `(${hiddenCompletedCount})` : ''}
+            </label>
+          )}
         </div>
         <div
           className="max-h-52 overflow-y-auto overscroll-y-contain"
@@ -78,6 +122,7 @@ export default function SingleKlijentPicker({
           ) : (
             filtered.map((c) => {
               const isSelected = c.id === value;
+              const isCompleted = completedIds?.has(c.id) ?? false;
               return (
                 <button
                   key={c.id}
@@ -92,7 +137,10 @@ export default function SingleKlijentPicker({
                       : 'hover:bg-stone-50 text-stone-900'
                   }`}
                 >
-                  {c.ime} {c.prezime}
+                  {displayLabel(c)}
+                  {isCompleted && (
+                    <span className="ml-2 text-xs text-stone-400">(završeno)</span>
+                  )}
                   {isSelected && (
                     <span className="ml-2 text-xs text-amber-700">✓</span>
                   )}
@@ -106,7 +154,7 @@ export default function SingleKlijentPicker({
       {selected && (
         <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50/60 px-3 py-2">
           <span className="text-sm font-medium text-stone-800">
-            Izabrano: {selected.ime} {selected.prezime}
+            Izabrano: {displayLabel(selected)}
           </span>
           {!disabled && (
             <button

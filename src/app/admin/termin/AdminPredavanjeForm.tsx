@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
 import {
@@ -16,8 +16,8 @@ import SingleKlijentPicker from '@/components/SingleKlijentPicker';
 import type { TermCategoryRow } from '@/lib/term-categories';
 import { findDefaultCitanjeTermTypeId } from '@/lib/term-types';
 
-type ClientOption = { id: string; ime: string; prezime: string };
-type TermTypeOption = { id: string; naziv: string; opis: string | null };
+type ClientOption = { id: string; ime: string; prezime: string; godiste?: number | null; datumTestiranja?: string | null };
+type TermTypeOption = { id: string; naziv: string; opis: string | null; program_id?: string | null };
 type ClassroomOption = { id: string; naziv: string; color: string | null };
 type InstructorOption = { id: string; ime: string; prezime: string };
 type StanjeItem = { term_type_id: string | null; term_type_naziv: string; uplaceno: number; odrzano: number; ostalo: number };
@@ -44,6 +44,8 @@ interface AdminPredavanjeFormProps {
   termCategories?: TermCategoryRow[];
   initialTermCategoryId?: string;
   initialTermNapomena?: string | null;
+  /** client_id -> program_id[] (koje je programe klijent završio) – za sakrivanje u pretrazi. */
+  completedProgramIdsByClient?: Record<string, string[]>;
 }
 
 export default function AdminPredavanjeForm({
@@ -65,17 +67,24 @@ export default function AdminPredavanjeForm({
   termCategories = [],
   initialTermCategoryId = '',
   initialTermNapomena = null,
+  completedProgramIdsByClient = {},
 }: AdminPredavanjeFormProps) {
   const router = useRouter();
-  const availableClassrooms = classrooms.filter(
-    (c) => !takenClassroomIds.includes(c.id) || c.id === (initialClassroomId ?? '')
-  );
 
   const [clientId, setClientId] = useState(predavanje?.client_id ?? '');
   const selectedStanje = clientStanjeList.find((s) => s.clientId === clientId)?.stanje ?? [];
   const [termTypeId, setTermTypeId] = useState(
     predavanje?.term_type_id ?? findDefaultCitanjeTermTypeId(termTypes) ?? ''
   );
+  const selectedProgramId = termTypes.find((tt) => tt.id === termTypeId)?.program_id ?? null;
+  const completedIds = useMemo(() => {
+    if (!selectedProgramId) return new Set<string>();
+    const set = new Set<string>();
+    for (const [cid, programIds] of Object.entries(completedProgramIdsByClient)) {
+      if (programIds.includes(selectedProgramId)) set.add(cid);
+    }
+    return set;
+  }, [selectedProgramId, completedProgramIdsByClient]);
   const [classroomId, setClassroomId] = useState(initialClassroomId ?? '');
   const [odrzano, setOdrzano] = useState(predavanje?.odrzano ?? false);
   const [placeno, setPlaceno] = useState(predavanje?.placeno ?? false);
@@ -313,6 +322,7 @@ export default function AdminPredavanjeForm({
           onChange={setClientId}
           disabled={loading}
           inputId="admin-predavanje-klijent-search"
+          completedIds={completedIds}
         />
         {clientId && selectedStanje.length > 0 && (
           <div className="mt-2 rounded-lg bg-stone-50 border border-stone-200 px-3 py-2 text-sm">
@@ -336,15 +346,12 @@ export default function AdminPredavanjeForm({
             className="w-full rounded-lg border border-stone-300 px-3 py-2 text-stone-800 bg-white"
           >
             <option value="">Izaberite učionicu</option>
-            {availableClassrooms.map((c) => (
+            {classrooms.map((c) => (
               <option key={c.id} value={c.id}>
-                {c.naziv}
+                {c.naziv}{takenClassroomIds.includes(c.id) && c.id !== initialClassroomId ? ' (zauzeto)' : ''}
               </option>
             ))}
           </select>
-          {availableClassrooms.length === 0 && (
-            <p className="text-xs text-amber-700 mt-1">Sve učionice su zauzete u ovom terminu.</p>
-          )}
         </div>
       )}
 

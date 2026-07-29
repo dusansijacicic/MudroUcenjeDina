@@ -4,13 +4,13 @@ import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import AdminTerminForm from './AdminTerminForm';
 import { TIME_SLOTS } from '@/lib/constants';
-import { getTermTypes, getTakenForSlot, getTermCategories } from '@/app/admin/actions';
+import { getTermTypes, getTakenForSlot, getTermCategories, getAllClientsCompletedProgramIds } from '@/app/admin/actions';
 import { getMaxTerminaPoSlotu } from '@/lib/settings';
 
 export default async function AdminTerminNoviPage({
   searchParams,
 }: {
-  searchParams: Promise<{ date?: string; slot?: string }>;
+  searchParams: Promise<{ date?: string; slot?: string; cat?: string }>;
 }) {
   const { user } = await getAuthedUser();
   if (!user) redirect('/login');
@@ -30,14 +30,20 @@ export default async function AdminTerminNoviPage({
     .order('ime');
   const { data: clients } = await adminSupabase
     .from('clients')
-    .select('id, ime, prezime')
+    .select('id, ime, prezime, godiste, datum_testiranja')
     .order('prezime')
     .order('ime');
   const { data: classrooms } = await adminSupabase
     .from('classrooms')
     .select('id, naziv')
     .order('naziv');
-  const [termTypes, termCategories] = await Promise.all([getTermTypes(), getTermCategories()]);
+  const [termTypes, termCategories, completedMap] = await Promise.all([
+    getTermTypes(),
+    getTermCategories(),
+    getAllClientsCompletedProgramIds(),
+  ]);
+  const completedProgramIdsByClient: Record<string, string[]> = {};
+  for (const [cid, set] of completedMap) completedProgramIdsByClient[cid] = [...set];
 
   const tomorrow = new Date();
   tomorrow.setDate(tomorrow.getDate() + 1);
@@ -70,12 +76,18 @@ export default async function AdminTerminNoviPage({
           <li>U formi redosled: <strong>vrsta časa</strong> → <strong>kategorija</strong> → <strong>deca</strong>.</li>
         </ul>
         <p className="mt-2 text-stone-600">
-          U padajućim listama vide se samo predavači i učionice koji su još slobodni u izabranom slotu. Iz kalendara koristite „+“ ili „Dodaj još termin u ovom slotu“.
+          U padajućim listama su svi predavači i učionice; oni koji su već zauzeti u izabranom slotu su označeni sa „(zauzeto)“ — i dalje se mogu izabrati. Iz kalendara koristite „+“ ili „Dodaj još termin u ovom slotu“.
         </p>
       </div>
       <AdminTerminForm
         instructors={(instructors ?? []) as { id: string; ime: string; prezime: string }[]}
-        clients={(clients ?? []) as { id: string; ime: string; prezime: string }[]}
+        clients={(clients ?? []).map((c) => ({
+          id: c.id,
+          ime: c.ime ?? '',
+          prezime: c.prezime ?? '',
+          godiste: c.godiste ?? null,
+          datumTestiranja: c.datum_testiranja ?? null,
+        }))}
         classrooms={(classrooms ?? []) as { id: string; naziv: string }[]}
         termTypes={termTypes}
         termCategories={termCategories}
@@ -85,6 +97,8 @@ export default async function AdminTerminNoviPage({
         initialTakenInstructorIds={takenInstructorIds}
         initialTakenClassroomIds={takenClassroomIds}
         maxTerminaPoSlotu={maxTerminaPoSlotu}
+        initialCategoryIsTesting={params.cat === 'testing'}
+        completedProgramIdsByClient={completedProgramIdsByClient}
       />
       <p className="mt-4">
         <Link href="/admin" className="text-sm text-amber-700 hover:underline">← Nazad na admin</Link>

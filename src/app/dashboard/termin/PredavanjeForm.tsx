@@ -18,8 +18,8 @@ import { findDefaultCitanjeTermTypeId } from '@/lib/term-types';
 import GrupniKlijentiPicker from '@/components/GrupniKlijentiPicker';
 import SingleKlijentPicker from '@/components/SingleKlijentPicker';
 
-type ClientOption = { id: string; ime: string; prezime: string };
-type TermTypeOption = { id: string; naziv: string; opis: string | null };
+type ClientOption = { id: string; ime: string; prezime: string; godiste?: number | null; datumTestiranja?: string | null };
+type TermTypeOption = { id: string; naziv: string; opis: string | null; program_id?: string | null };
 type ClassroomOption = { id: string; naziv: string; color: string | null };
 type StanjeItem = { term_type_id: string | null; term_type_naziv: string; uplaceno: number; odrzano: number; ostalo: number };
 
@@ -41,6 +41,8 @@ interface PredavanjeFormProps {
   initialTermCategoryId: string;
   /** Sa servera (kolona terms.napomena) */
   initialTermNapomena?: string | null;
+  /** client_id -> program_id[] (koje je programe klijent završio) – za sakrivanje u pretrazi. */
+  completedProgramIdsByClient?: Record<string, string[]>;
 }
 
 export default function PredavanjeForm({
@@ -59,6 +61,7 @@ export default function PredavanjeForm({
   termCategories,
   initialTermCategoryId,
   initialTermNapomena = null,
+  completedProgramIdsByClient = {},
 }: PredavanjeFormProps) {
   const availableClassrooms = classrooms.filter(
     (c) => !takenClassroomIds.includes(c.id) || c.id === (initialClassroomId ?? '')
@@ -69,6 +72,15 @@ export default function PredavanjeForm({
   const [termTypeId, setTermTypeId] = useState<string>(
     predavanje?.term_type_id ?? findDefaultCitanjeTermTypeId(termTypes) ?? ''
   );
+  const selectedProgramId = termTypes.find((tt) => tt.id === termTypeId)?.program_id ?? null;
+  const completedIds = useMemo(() => {
+    if (!selectedProgramId) return new Set<string>();
+    const set = new Set<string>();
+    for (const [cid, programIds] of Object.entries(completedProgramIdsByClient)) {
+      if (programIds.includes(selectedProgramId)) set.add(cid);
+    }
+    return set;
+  }, [selectedProgramId, completedProgramIdsByClient]);
   const [odrzano, setOdrzano] = useState(predavanje?.odrzano ?? false);
   const [placeno, setPlaceno] = useState(predavanje?.placeno ?? false);
   const [komentar, setKomentar] = useState(predavanje?.komentar ?? '');
@@ -309,6 +321,7 @@ export default function PredavanjeForm({
             onSelectionChange={setGrupniSelected}
             disabled={loading}
             inputId="dashboard-predavanje-grupni-search"
+            completedIds={completedIds}
           />
         </div>
       ) : (
@@ -322,6 +335,7 @@ export default function PredavanjeForm({
             onChange={setClientId}
             disabled={loading}
             inputId="dashboard-predavanje-klijent-search"
+            completedIds={completedIds}
           />
           {clientId && selectedStanje.length > 0 && (
             <div className="mt-2 rounded-lg bg-stone-50 border border-stone-200 px-3 py-2 text-sm">

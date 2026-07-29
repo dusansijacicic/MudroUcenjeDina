@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { TIME_SLOTS } from '@/lib/constants';
+import { TIME_SLOTS, AUTO_SPILLOVER_NAPOMENA } from '@/lib/constants';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { moveTermAsInstructor } from '@/app/dashboard/termin/actions';
@@ -34,7 +34,16 @@ export type RawTerm = {
     mobilni_roditelja?: string | null;
     status: string;
   }>;
+  /** Napomena termina – koristi se i za prepoznavanje automatski kreiranog "dvočas" bloka. */
+  napomena?: string | null;
+  /** Ako je setovan, ovo je nastavak (ručni ili automatski blok) roditeljskog termina. */
+  nastavak_of_term_id?: string | null;
 };
+
+/** Automatski kreiran "blokirajući" termin za dvočas – prazan, samo zauzima sledeći slot. */
+function isAutoSpillover(term: RawTerm): boolean {
+  return !!term.nastavak_of_term_id && term.napomena === AUTO_SPILLOVER_NAPOMENA && (term.predavanja ?? []).length === 0;
+}
 
 /** Tuđi termin (samo prikaz, bez linka) – boja instruktora i učionice za color coding */
 export type OtherTerm = RawTerm & {
@@ -197,6 +206,14 @@ function CellContent({
           +
         </Link>
         {otherTermsInSlot.map((ot) => {
+          if (isAutoSpillover(ot)) {
+            return (
+              <div key={ot.id} className="rounded-lg border-2 border-dashed p-2 text-xs text-stone-400 bg-stone-50">
+                <span className="font-medium">↳ Nastavak dužeg časa</span>
+                {ot.classroom && <span className="block text-[11px] mt-0.5">{ot.classroom.naziv}</span>}
+              </div>
+            );
+          }
           const iname = ot.instructor ? `${ot.instructor.ime} ${ot.instructor.prezime}` : '—';
           const preds = ot.predavanja ?? [];
           const otBorder = ot.classroom?.color ?? '#e5e7eb';
@@ -227,6 +244,20 @@ function CellContent({
             </div>
           );
         })}
+      </div>
+    );
+  }
+  if (isAutoSpillover(term)) {
+    return (
+      <div className="space-y-1.5 min-h-[52px]">
+        <Link
+          href={`/dashboard/termin/${term.nastavak_of_term_id}`}
+          className="block rounded-lg border-2 border-dashed p-2 text-xs text-stone-500 bg-stone-50 hover:bg-stone-100"
+          style={{ borderColor: term.classroom?.color ?? '#94a3b8' }}
+        >
+          <span className="font-medium">↳ Nastavak dužeg časa</span>
+          {term.classroom && <span className="block text-[11px] mt-0.5">{term.classroom.naziv}</span>}
+        </Link>
       </div>
     );
   }

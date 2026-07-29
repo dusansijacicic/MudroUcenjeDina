@@ -2,7 +2,7 @@ import { redirect, notFound } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getDashboardInstructor } from '@/lib/dashboard';
-import { getTermTypes, getClassrooms, getStanjePoVrstamaZaKlijenteBatch, getTermCategories } from '@/app/admin/actions';
+import { getTermTypes, getClassrooms, getStanjePoVrstamaZaKlijenteBatch, getTermCategories, getAllClientsCompletedProgramIds } from '@/app/admin/actions';
 import { termMozeNovoPredavanje } from '@/lib/settings';
 import PredavanjeForm from '@/app/dashboard/termin/PredavanjeForm';
 import { TIME_SLOTS } from '@/lib/constants';
@@ -127,28 +127,34 @@ export default async function EditPredavanjePage({
 
   const { data: linkRows } = await admin
     .from('instructor_clients')
-    .select('client:clients(id, ime, prezime)')
+    .select('client:clients(id, ime, prezime, godiste, datum_testiranja)')
     .eq('instructor_id', instructor.id);
-  const clients = (linkRows ?? []).map((r) => r.client).filter(Boolean) as unknown as {
-    id: string;
-    ime: string;
-    prezime: string;
-  }[];
+  type ClientLinkRow = { id: string; ime: string; prezime: string; godiste: number | null; datum_testiranja: string | null };
+  const clients = ((linkRows ?? []).map((r) => r.client).filter(Boolean) as unknown as ClientLinkRow[]).map((c) => ({
+    id: c.id,
+    ime: c.ime ?? '',
+    prezime: c.prezime ?? '',
+    godiste: c.godiste ?? null,
+    datumTestiranja: c.datum_testiranja ?? null,
+  }));
   clients.sort(
     (a, b) =>
       (a.ime ?? '').localeCompare(b.ime ?? '', 'sr') || (a.prezime ?? '').localeCompare(b.prezime ?? '', 'sr')
   );
-  const [termTypes, termCategoriesAll, classrooms, termsInSlotRes] = await Promise.all([
+  const [termTypes, termCategoriesAll, classrooms, termsInSlotRes, completedMap] = await Promise.all([
     getTermTypes(),
     getTermCategories(),
     getClassrooms(),
     admin.from('terms').select('classroom_id').eq('date', term.date).eq('slot_index', term.slot_index).neq('id', term.id),
+    getAllClientsCompletedProgramIds(),
   ]);
   const termCategories = termCategoriesAll.filter((c) => !c.is_testing);
   const termsInSlot = termsInSlotRes.data ?? [];
   const takenClassroomIds = termsInSlot.map((t: { classroom_id: string | null }) => t.classroom_id).filter((id: string | null): id is string => id != null);
   const stanjeMap = await getStanjePoVrstamaZaKlijenteBatch(clients.map((c) => c.id), instructor.id);
   const clientStanjeList = clients.map((c) => ({ clientId: c.id, stanje: stanjeMap.get(c.id) ?? [] }));
+  const completedProgramIdsByClient: Record<string, string[]> = {};
+  for (const [cid, set] of completedMap) completedProgramIdsByClient[cid] = [...set];
 
   return (
     <div className="max-w-lg space-y-6">
@@ -165,6 +171,7 @@ export default async function EditPredavanjePage({
           initialClassroomId={term.classroom_id ?? null}
           takenClassroomIds={takenClassroomIds}
           clientStanjeList={clientStanjeList}
+          completedProgramIdsByClient={completedProgramIdsByClient}
           initialTermCategoryId={term.term_category_id ?? SEEDED_TERM_CATEGORY_INDIVIDUAL_ID}
           initialTermNapomena={term.napomena ?? null}
           predavanje={{

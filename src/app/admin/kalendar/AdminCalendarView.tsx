@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { TIME_SLOTS } from '@/lib/constants';
+import { TIME_SLOTS, AUTO_SPILLOVER_NAPOMENA } from '@/lib/constants';
 import Link from 'next/link';
 import { moveTermAsAdmin } from '@/app/admin/actions';
 
@@ -43,7 +43,16 @@ export type AdminTerm = {
     term_type?: { naziv: string } | { naziv: string }[] | null;
   }>;
   potential_clients?: PotentialClientCalendar[];
+  /** Napomena termina – koristi se i za prepoznavanje automatski kreiranog "dvočas" bloka. */
+  napomena?: string | null;
+  /** Ako je setovan, ovo je nastavak (ručni ili automatski blok) roditeljskog termina. */
+  nastavak_of_term_id?: string | null;
 };
+
+/** Automatski kreiran "blokirajući" termin za dvočas – prazan, samo zauzima sledeći slot. */
+function isAutoSpillover(term: AdminTerm): boolean {
+  return !!term.nastavak_of_term_id && term.napomena === AUTO_SPILLOVER_NAPOMENA && (term.predavanja ?? []).length === 0;
+}
 
 function getWeekDates(start: string): string[] {
   const dates: string[] = [];
@@ -167,6 +176,7 @@ function AdminCellContent({
   maxTerminaPoSlotu: number;
 }) {
   const newTermHref = `/admin/termin/novi?date=${emptyDate}&slot=${emptySlot}`;
+  const newTestHref = `${newTermHref}&cat=testing`;
   const slotCount = termsInSlot.length;
   const canAddParallelTerm = slotCount < maxTerminaPoSlotu;
 
@@ -188,7 +198,7 @@ function AdminCellContent({
 
   if (termsInSlot.length === 0) {
     return (
-      <div>
+      <div className="space-y-1">
         <Link
           href={newTermHref}
           className="block rounded-lg border border-dashed border-stone-200 p-2 text-stone-400 hover:border-amber-400 hover:bg-amber-50/50 min-h-[52px]"
@@ -201,6 +211,12 @@ function AdminCellContent({
           }}
         >
           +
+        </Link>
+        <Link
+          href={newTestHref}
+          className="block rounded-lg border border-dashed border-stone-200 p-1 text-[11px] text-center text-stone-400 hover:border-amber-400 hover:bg-amber-50/50 hover:text-amber-800"
+        >
+          + Testiranje
         </Link>
         {CancelledEntries}
       </div>
@@ -218,6 +234,20 @@ function AdminCellContent({
       }}
     >
       {termsInSlot.map((term) => {
+        if (isAutoSpillover(term)) {
+          const instructorName = term.instructor ? `${term.instructor.ime} ${term.instructor.prezime}` : '—';
+          return (
+            <Link
+              key={term.id}
+              href={`/admin/termin/${term.nastavak_of_term_id}`}
+              className="block rounded-lg border-2 border-dashed p-2 text-xs text-stone-500 bg-stone-50 hover:bg-stone-100"
+              style={{ borderColor: term.classroom?.color ?? '#94a3b8' }}
+            >
+              <span className="font-medium">↳ Nastavak dužeg časa</span>
+              <span className="block text-[11px] mt-0.5">{instructorName} · {term.classroom?.naziv ?? 'Učionica'}</span>
+            </Link>
+          );
+        }
         const instructorColor = term.instructor?.color ?? DEFAULT_COLOR;
         const classroomColor = term.classroom?.color ?? '#64748b'; // fallback siva
         const bg = `${classroomColor}20`;
@@ -292,12 +322,20 @@ function AdminCellContent({
         );
       })}
       {canAddParallelTerm ? (
-        <Link
-          href={newTermHref}
-          className="block rounded-lg border border-dashed border-stone-200 p-1.5 text-stone-500 hover:border-amber-400 hover:bg-amber-50/50 hover:text-amber-800 text-xs text-center"
-        >
-          + Dodaj još termin u ovom slotu ({slotCount}/{maxTerminaPoSlotu})
-        </Link>
+        <>
+          <Link
+            href={newTermHref}
+            className="block rounded-lg border border-dashed border-stone-200 p-1.5 text-stone-500 hover:border-amber-400 hover:bg-amber-50/50 hover:text-amber-800 text-xs text-center"
+          >
+            + Dodaj još termin u ovom slotu ({slotCount}/{maxTerminaPoSlotu})
+          </Link>
+          <Link
+            href={newTestHref}
+            className="block rounded-lg border border-dashed border-stone-200 p-1 text-[11px] text-center text-stone-400 hover:border-amber-400 hover:bg-amber-50/50 hover:text-amber-800"
+          >
+            + Testiranje
+          </Link>
+        </>
       ) : (
         <p className="text-[0.7rem] text-stone-400 px-1">
           Slot pun ({maxTerminaPoSlotu} termina). Povećajte limit u Admin → Podešavanja ili izaberite drugo vreme.

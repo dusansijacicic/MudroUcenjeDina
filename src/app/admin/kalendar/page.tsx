@@ -99,6 +99,8 @@ export default async function AdminKalendarPage({
       term_category,
       predavanja: t.predavanja as AdminTerm['predavanja'],
       potential_clients,
+      napomena: (t as { napomena?: string | null }).napomena ?? null,
+      nastavak_of_term_id: (t as { nastavak_of_term_id?: string | null }).nastavak_of_term_id ?? null,
     };
   });
 

@@ -5,7 +5,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import type { TermCategoryRow } from '@/lib/term-categories';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
-import { INSTRUCTOR_COLORS, isTermInPast } from '@/lib/constants';
+import { INSTRUCTOR_COLORS, isTermInPast, slotsNeeded, AUTO_SPILLOVER_NAPOMENA } from '@/lib/constants';
 import { termMozeNovoPredavanje } from '@/lib/settings';
 import { normalizeClientPol } from '@/lib/client-pol';
 
@@ -141,32 +141,8 @@ export async function createTermAsAdmin(
     return { error: `Maksimalan broj termina u ovom slotu je ${maxTerminaPoSlotu}. Podešavanje u Admin → Podešavanja.` };
   }
 
-  // 2) Jedan predavač = jedan termin u slotu (A)
-  const { data: existingSameInstructor } = await adminSupabase
-    .from('terms')
-    .select('id')
-    .eq('instructor_id', instructorId)
-    .eq('date', dateStr)
-    .eq('slot_index', slot)
-    .maybeSingle();
-
-  if (existingSameInstructor) {
-    return { error: 'Ovaj instruktor već ima termin u ovom slotu. Jedan instruktor može imati samo jedan termin u istom vremenu.' };
-  }
-
-  // 3) Jedna učionica = jedan termin u slotu (B)
-  if (classroomId) {
-    const { data: existingSameClassroom } = await adminSupabase
-      .from('terms')
-      .select('id')
-      .eq('date', dateStr)
-      .eq('slot_index', slot)
-      .eq('classroom_id', classroomId)
-      .maybeSingle();
-    if (existingSameClassroom) {
-      return { error: 'Ova učionica je već zauzeta u ovom slotu. Jedna učionica može biti samo u jednom terminu u istom vremenu.' };
-    }
-  }
+  // Napomena: instruktor/učionica koji su već zauzeti u ovom slotu se NE blokiraju ovde –
+  // forma ih prikazuje sa oznakom "(zauzeto)" i dozvoljava svestan izbor (swap/paralelno zakazivanje).
 
   if (!termCategoryId?.trim()) {
     return { error: 'Izaberite kategoriju termina.' };
@@ -282,6 +258,78 @@ async function requireAdmin() {
   return { admin: createAdminClient(), error: null };
 }
 
+/**
+ * Uskladi "blokirajuće" nastavak-termine za duže časove (dvočas i sl.) sa željenim brojem dodatnih slotova –
+ * kreira ih ako fale, briše višak. Prazan termin (bez radionica), samo da niko drugi ne zakaže u tom slotu
+ * dok traje duži čas. Prepoznaje se preko `nastavak_of_term_id` + fiksne napomene (AUTO_SPILLOVER_NAPOMENA),
+ * za razliku od ručno kreiranog nastavka koji ima svoje radionice.
+ */
+export async function syncSpilloverSlots(
+  admin: ReturnType<typeof createAdminClient>,
+  originTermId: string,
+  totalSlotsNeeded: number
+): Promise<void> {
+  const { data: origin } = await admin
+    .from('terms')
+    .select('instructor_id, classroom_id, date, slot_index, term_category_id')
+    .eq('id', originTermId)
+    .single();
+  if (!origin) return;
+
+  const { data: existing } = await admin
+    .from('terms')
+    .select('id, slot_index')
+    .eq('nastavak_of_term_id', originTermId)
+    .eq('napomena', AUTO_SPILLOVER_NAPOMENA);
+  const existingBySlot = new Map((existing ?? []).map((t) => [t.slot_index, t.id as string]));
+
+  const desiredSlots: number[] = [];
+  for (let i = 1; i < totalSlotsNeeded; i++) {
+    const s = origin.slot_index + i;
+    if (s > 15) break;
+    desiredSlots.push(s);
+  }
+
+  for (const [slotIdx, id] of existingBySlot) {
+    if (!desiredSlots.includes(slotIdx)) {
+      await admin.from('terms').delete().eq('id', id);
+    }
+  }
+
+  for (const slotIdx of desiredSlots) {
+    if (existingBySlot.has(slotIdx)) continue;
+    await admin.from('terms').insert({
+      instructor_id: origin.instructor_id,
+      classroom_id: origin.classroom_id,
+      date: origin.date,
+      slot_index: slotIdx,
+      term_category_id: origin.term_category_id,
+      nastavak_of_term_id: originTermId,
+      napomena: AUTO_SPILLOVER_NAPOMENA,
+    });
+  }
+}
+
+/**
+ * Uzima najduže trajanje među SVIM radionicama u terminu (grupni termin može imati različite vrste
+ * časa sa različitim trajanjem) i uskladi broj zauzetih slotova prema tome.
+ */
+export async function syncSpilloverForTerm(
+  admin: ReturnType<typeof createAdminClient>,
+  termId: string
+): Promise<void> {
+  const { data: preds } = await admin.from('predavanja').select('term_type_id').eq('term_id', termId);
+  const termTypeIds = [...new Set((preds ?? []).map((p) => p.term_type_id).filter((id): id is string => !!id))];
+  let maxMinutes = 45;
+  if (termTypeIds.length > 0) {
+    const { data: types } = await admin.from('term_types').select('trajanje_minuta').in('id', termTypeIds);
+    for (const t of types ?? []) {
+      maxMinutes = Math.max(maxMinutes, t.trajanje_minuta ?? 45);
+    }
+  }
+  await syncSpilloverSlots(admin, termId, slotsNeeded(maxMinutes));
+}
+
 export async function createPredavanjeAsAdmin(
   termId: string,
   clientId: string,
@@ -326,6 +374,7 @@ export async function createPredavanjeAsAdmin(
   if (icErr && icErr.code !== '23505') {
     console.warn('[admin] instructor_clients insert (non-fatal)', icErr.message);
   }
+  await syncSpilloverForTerm(admin, termId);
   revalidatePath('/admin/kalendar');
   revalidatePath(`/admin/termin/${termId}`);
   return {};
@@ -395,6 +444,7 @@ export async function updatePredavanjeAsAdmin(
     })
     .eq('id', predavanjeId);
   if (error) return { error: error.message };
+  await syncSpilloverForTerm(admin, termId);
   revalidatePath('/admin/kalendar');
   revalidatePath(`/admin/termin/${termId}`);
   return {};
@@ -440,10 +490,14 @@ export async function deletePredavanjeAsAdmin(predavanjeId: string, termId: stri
   const { error } = await admin.from('predavanja').delete().eq('id', predavanjeId);
   if (error) return { error: error.message };
 
-  // If term has no more predavanja, delete the term (frees instructor + classroom)
+  // If term has no more predavanja, delete the term (frees instructor + classroom) – i njegove
+  // eventualne automatske "blokirajuće" slotove (nastavak_of_term_id nema CASCADE, brišemo ručno).
   const { count } = await admin.from('predavanja').select('*', { count: 'exact', head: true }).eq('term_id', termId);
   if ((count ?? 0) === 0) {
+    await admin.from('terms').delete().eq('nastavak_of_term_id', termId).eq('napomena', AUTO_SPILLOVER_NAPOMENA);
     await admin.from('terms').delete().eq('id', termId);
+  } else {
+    await syncSpilloverForTerm(admin, termId);
   }
 
   revalidatePath('/admin/kalendar');
@@ -486,13 +540,23 @@ export async function reassignPredavanjeInstructorAsAdmin(
   if (existingTerm) {
     newTermId = existingTerm.id as string;
   } else {
-    // Kreiramo novi termin za novog instruktora
+    // Kreiramo novi termin za novog instruktora – prenosimo kategoriju/učionicu/napomenu sa izvornog terma
+    // (term_category_id je NOT NULL u bazi, ne sme se izostaviti).
+    const { data: sourceTerm } = await admin
+      .from('terms')
+      .select('term_category_id, classroom_id, napomena')
+      .eq('id', currentTermId)
+      .single();
+    if (!sourceTerm) return { error: 'Izvorni termin nije pronađen.' };
     const { data: inserted, error: insErr } = await admin
       .from('terms')
       .insert({
         instructor_id: newInstructorId,
         date: termDate.slice(0, 10),
         slot_index: slotIndex,
+        term_category_id: sourceTerm.term_category_id,
+        classroom_id: sourceTerm.classroom_id,
+        napomena: sourceTerm.napomena,
       })
       .select('id')
       .single();
@@ -597,11 +661,11 @@ export async function updateTermClassroomAsAdmin(termId: string, classroomId: st
   return {};
 }
 
-export type TermTypeRow = { id: string; naziv: string; opis: string | null; cena_po_casu: number | null; program_id: string | null };
+export type TermTypeRow = { id: string; naziv: string; opis: string | null; cena_po_casu: number | null; program_id: string | null; trajanje_minuta: number };
 
 export async function getTermTypes(): Promise<TermTypeRow[]> {
   const admin = createAdminClient();
-  const { data } = await admin.from('term_types').select('id, naziv, opis, cena_po_casu, program_id').order('naziv');
+  const { data } = await admin.from('term_types').select('id, naziv, opis, cena_po_casu, program_id, trajanje_minuta').order('naziv');
   return (data ?? []) as TermTypeRow[];
 }
 
@@ -609,15 +673,19 @@ export async function createTermTypeAsAdmin(
   naziv: string,
   opis: string | null,
   cena_po_casu: number | null,
-  program_id: string | null
+  program_id: string | null,
+  trajanje_minuta: number
 ): Promise<{ error?: string }> {
   const { admin, error: authErr } = await requireAdmin();
   if (authErr || !admin) return { error: authErr ?? 'Samo admin.' };
+  if (!program_id) return { error: 'Izaberite program.' };
+  if (!Number.isFinite(trajanje_minuta) || trajanje_minuta <= 0) return { error: 'Trajanje mora biti pozitivan broj minuta.' };
   const { error } = await admin.from('term_types').insert({
     naziv: naziv.trim(),
     opis: opis?.trim() || null,
     cena_po_casu: cena_po_casu != null && Number.isFinite(cena_po_casu) ? cena_po_casu : null,
-    program_id: program_id || null,
+    program_id,
+    trajanje_minuta,
   });
   if (error) return { error: error.message };
   revalidatePath('/admin/vrste-termina');
@@ -629,15 +697,19 @@ export async function updateTermTypeAsAdmin(
   naziv: string,
   opis: string | null,
   cena_po_casu: number | null,
-  program_id: string | null
+  program_id: string | null,
+  trajanje_minuta: number
 ): Promise<{ error?: string }> {
   const { admin, error: authErr } = await requireAdmin();
   if (authErr || !admin) return { error: authErr ?? 'Samo admin.' };
+  if (!program_id) return { error: 'Izaberite program.' };
+  if (!Number.isFinite(trajanje_minuta) || trajanje_minuta <= 0) return { error: 'Trajanje mora biti pozitivan broj minuta.' };
   const { error } = await admin.from('term_types').update({
     naziv: naziv.trim(),
     opis: opis?.trim() || null,
     cena_po_casu: cena_po_casu != null && Number.isFinite(cena_po_casu) ? cena_po_casu : null,
-    program_id: program_id || null,
+    program_id,
+    trajanje_minuta,
   }).eq('id', id);
   if (error) return { error: error.message };
   revalidatePath('/admin/vrste-termina');
@@ -721,6 +793,26 @@ export async function saveClientProgrami(
       selections.map((s) => ({ client_id: clientId, program_id: s.program_id, zavrseno: s.zavrseno }))
     );
   }
+}
+
+/**
+ * Za sve klijente odjednom: koje programe su završili (zavrseno=true), grupisano po klijentu.
+ * Koristi se za filtriranje "Pretraga klijenata" pri zakazivanju – deca koja su završila program
+ * vezan za izabranu vrstu časa se podrazumevano ne prikazuju.
+ */
+export async function getAllClientsCompletedProgramIds(): Promise<Map<string, Set<string>>> {
+  const admin = createAdminClient();
+  const { data } = await admin
+    .from('client_programi')
+    .select('client_id, program_id')
+    .eq('zavrseno', true);
+  const out = new Map<string, Set<string>>();
+  for (const row of data ?? []) {
+    const set = out.get(row.client_id) ?? new Set<string>();
+    set.add(row.program_id);
+    out.set(row.client_id, set);
+  }
+  return out;
 }
 
 export async function getTermCategories(): Promise<TermCategoryRow[]> {

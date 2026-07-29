@@ -1,18 +1,60 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { createTermAsAdmin, createPredavanjeAsAdmin, getTakenForSlot, getTermsForNastavak } from '../../actions';
 import type { TermForNastavak } from '../../actions';
 import GrupniKlijentiPicker from '@/components/GrupniKlijentiPicker';
 import SingleKlijentPicker from '@/components/SingleKlijentPicker';
 import { TIME_SLOTS } from '@/lib/constants';
+import { findDefaultCitanjeTermTypeId } from '@/lib/term-types';
 
 type Instructor = { id: string; ime: string; prezime: string };
-type Client = { id: string; ime: string; prezime: string };
+type Client = { id: string; ime: string; prezime: string; godiste?: number | null; datumTestiranja?: string | null };
 type Classroom = { id: string; naziv: string };
-type TermTypeOption = { id: string; naziv: string; opis: string | null };
+type TermTypeOption = { id: string; naziv: string; opis: string | null; program_id?: string | null };
 type TermCategoryOption = { id: string; naziv: string; jedan_klijent_po_terminu: boolean; is_testing?: boolean; is_nastavak?: boolean };
+
+/** Skida srpsku dijakritiku i menja u mala slova, za labavo poređenje naziva. */
+function normalizeNaziv(s: string): string {
+  return s
+    .toLowerCase()
+    .replace(/[čć]/g, 'c')
+    .replace(/đ/g, 'dj')
+    .replace(/š/g, 's')
+    .replace(/ž/g, 'z');
+}
+
+/** Podrazumevani izbor: preferirani (po imenu) ako je slobodan, inače prvi slobodan, inače preferirani/prvi (i zauzet). */
+function pickDefault<T extends { id: string }>(
+  list: T[],
+  takenIds: string[],
+  isPreferred: (item: T) => boolean
+): string {
+  const preferred = list.find(isPreferred);
+  if (preferred && !takenIds.includes(preferred.id)) return preferred.id;
+  const firstFree = list.find((item) => !takenIds.includes(item.id));
+  if (firstFree) return firstFree.id;
+  return preferred?.id ?? list[0]?.id ?? '';
+}
+
+function pickDefaultInstructor(instructors: Instructor[], takenIds: string[]): string {
+  return pickDefault(instructors, takenIds, (i) => {
+    const n = normalizeNaziv(`${i.ime} ${i.prezime}`);
+    return n.includes('mirjana') && n.includes('poljakovic');
+  });
+}
+
+function pickDefaultClassroom(classrooms: Classroom[], takenIds: string[]): string {
+  return pickDefault(classrooms, takenIds, (c) => normalizeNaziv(c.naziv).includes('buzan'));
+}
+
+function getMonday(d: Date): string {
+  const x = new Date(d);
+  const dow = x.getDay();
+  x.setDate(x.getDate() - (dow === 0 ? 6 : dow - 1));
+  return x.toISOString().slice(0, 10);
+}
 
 export default function AdminTerminForm({
   instructors,
@@ -26,6 +68,8 @@ export default function AdminTerminForm({
   initialTakenInstructorIds = [],
   initialTakenClassroomIds = [],
   maxTerminaPoSlotu = 4,
+  initialCategoryIsTesting = false,
+  completedProgramIdsByClient = {},
 }: {
   instructors: Instructor[];
   clients: Client[];
@@ -38,6 +82,10 @@ export default function AdminTerminForm({
   initialTakenInstructorIds?: string[];
   initialTakenClassroomIds?: string[];
   maxTerminaPoSlotu?: number;
+  /** Ako je true, default kategorija je "Testiranje" (prečica sa prazne ćelije kalendara). */
+  initialCategoryIsTesting?: boolean;
+  /** client_id -> program_id[] (koje je programe klijent završio) – za sakrivanje u pretrazi. */
+  completedProgramIdsByClient?: Record<string, string[]>;
 }) {
   const router = useRouter();
   const [date, setDate] = useState(defaultDate);
@@ -48,18 +96,31 @@ export default function AdminTerminForm({
   const [error, setError] = useState('');
 
   const [instructorId, setInstructorId] = useState(
-    () => instructors.filter((i) => !initialTakenInstructorIds.includes(i.id))[0]?.id ?? ''
+    () => pickDefaultInstructor(instructors, initialTakenInstructorIds)
   );
   const [clientId, setClientId] = useState(clients[0]?.id ?? '');
-  const [termCategoryId, setTermCategoryId] = useState(
-    () => termCategories.find((c) => c.jedan_klijent_po_terminu && !c.is_testing && !c.is_nastavak)?.id ?? termCategories[0]?.id ?? ''
-  );
+  const [termCategoryId, setTermCategoryId] = useState(() => {
+    if (initialCategoryIsTesting) {
+      const testing = termCategories.find((c) => c.is_testing);
+      if (testing) return testing.id;
+    }
+    return termCategories.find((c) => c.jedan_klijent_po_terminu && !c.is_testing && !c.is_nastavak)?.id ?? termCategories[0]?.id ?? '';
+  });
   const [termNapomena, setTermNapomena] = useState('');
   const [grupniIds, setGrupniIds] = useState<string[]>([]);
   const [classroomId, setClassroomId] = useState(
-    () => classrooms.filter((c) => !initialTakenClassroomIds.includes(c.id))[0]?.id ?? ''
+    () => pickDefaultClassroom(classrooms, initialTakenClassroomIds)
   );
-  const [termTypeId, setTermTypeId] = useState(termTypes[0]?.id ?? '');
+  const [termTypeId, setTermTypeId] = useState(() => findDefaultCitanjeTermTypeId(termTypes) ?? termTypes[0]?.id ?? '');
+  const selectedProgramId = termTypes.find((tt) => tt.id === termTypeId)?.program_id ?? null;
+  const completedIds = useMemo(() => {
+    if (!selectedProgramId) return new Set<string>();
+    const set = new Set<string>();
+    for (const [cid, programIds] of Object.entries(completedProgramIdsByClient)) {
+      if (programIds.includes(selectedProgramId)) set.add(cid);
+    }
+    return set;
+  }, [selectedProgramId, completedProgramIdsByClient]);
 
   // NASTAVAK state
   const [nastavakTerms, setNastavakTerms] = useState<TermForNastavak[]>([]);
@@ -73,33 +134,18 @@ export default function AdminTerminForm({
 
   const selectedParentTerm = nastavakTerms.find((t) => t.id === nastavakOfTermId) ?? null;
 
-  const availableInstructors = useMemo(
-    () => instructors.filter((i) => !takenInstructorIds.includes(i.id)),
-    [instructors, takenInstructorIds]
-  );
-  const availableClassrooms = useMemo(
-    () => classrooms.filter((c) => !takenClassroomIds.includes(c.id)),
-    [classrooms, takenClassroomIds]
-  );
-
-  // When NOT nastavak: sync instructor/classroom dropdowns when slot changes
+  // Kad se promeni datum/slot (i time takenInstructorIds/takenClassroomIds), ponovo primeni default
+  // (preferirani instruktor/učionica ako su slobodni, inače prvi slobodan) – ali ne diramo izbor korisnika
+  // usred nastavak-toka, i ne blokiramo zauzete (mogu se svesno izabrati, samo su obeleženi).
+  const prevSlotKey = useRef<string>('');
   useEffect(() => {
     if (isNastavakCat) return;
-    if (availableInstructors.length && !availableInstructors.some((i) => i.id === instructorId)) {
-      setInstructorId(availableInstructors[0]?.id ?? '');
-    } else if (!availableInstructors.length) {
-      setInstructorId('');
-    }
-  }, [availableInstructors, instructorId, isNastavakCat]);
-
-  useEffect(() => {
-    if (isNastavakCat) return;
-    if (availableClassrooms.length && !availableClassrooms.some((c) => c.id === classroomId)) {
-      setClassroomId(availableClassrooms[0]?.id ?? '');
-    } else if (!availableClassrooms.length) {
-      setClassroomId('');
-    }
-  }, [availableClassrooms, classroomId, isNastavakCat]);
+    const key = `${date}|${slotIndex}`;
+    if (prevSlotKey.current === key) return;
+    prevSlotKey.current = key;
+    setInstructorId(pickDefaultInstructor(instructors, takenInstructorIds));
+    setClassroomId(pickDefaultClassroom(classrooms, takenClassroomIds));
+  }, [date, slotIndex, instructors, classrooms, takenInstructorIds, takenClassroomIds, isNastavakCat]);
 
   useEffect(() => {
     let cancelled = false;
@@ -141,9 +187,7 @@ export default function AdminTerminForm({
   const nastavakClassroomBusy = isNastavakCat && !!selectedParentTerm && takenClassroomIds.includes(selectedParentTerm.classroom_id ?? '');
 
   const slotFull = takenInstructorIds.length >= maxTerminaPoSlotu;
-  const noInstructorsAvailable = !isNastavakCat && !slotFull && availableInstructors.length === 0;
-  const noClassroomsAvailable = !isNastavakCat && !slotFull && availableClassrooms.length === 0;
-  const cannotSubmit = slotFull || noInstructorsAvailable || noClassroomsAvailable || nastavakInstructorBusy || nastavakClassroomBusy;
+  const cannotSubmit = slotFull || nastavakInstructorBusy || nastavakClassroomBusy;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -195,7 +239,12 @@ export default function AdminTerminForm({
         }
       }
 
-      router.push(`/admin/termin/${termResult.termId}`);
+      if (isTestingCat) {
+        router.push(`/admin/termin/${termResult.termId}/testiranje/novi`);
+      } else {
+        const monday = getMonday(new Date(date + 'T12:00:00'));
+        router.push(`/admin/kalendar?week=${monday}`);
+      }
       router.refresh();
     } finally {
       setLoading(false);
@@ -224,22 +273,6 @@ export default function AdminTerminForm({
         <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-800">
           <p className="font-medium">Maksimalan broj termina u ovom slotu je dostignut ({maxTerminaPoSlotu}).</p>
           <p className="mt-0.5 text-amber-700">Promenite datum ili vreme, ili povećajte limit u Admin → Podešavanja.</p>
-        </div>
-      )}
-      {(noInstructorsAvailable || noClassroomsAvailable) && (
-        <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-          {noInstructorsAvailable && (
-            <>
-              <p className="font-medium">Nema slobodnih instruktora u ovom terminu.</p>
-              <p className="mt-0.5 text-amber-700">Svi instruktori već imaju termin u izabranom datumu i vremenu.</p>
-            </>
-          )}
-          {noClassroomsAvailable && (
-            <>
-              <p className="font-medium mt-2">Nema slobodnih učionica u ovom terminu.</p>
-              <p className="mt-0.5 text-amber-700">Sve učionice su zauzete u izabranom terminu.</p>
-            </>
-          )}
         </div>
       )}
       {(nastavakInstructorBusy || nastavakClassroomBusy) && (
@@ -409,16 +442,18 @@ export default function AdminTerminForm({
               value={instructorId}
               onChange={(e) => setInstructorId(e.target.value)}
               required
-              disabled={noInstructorsAvailable || slotFull}
+              disabled={slotFull}
               className="w-full rounded-lg border border-stone-300 px-3 py-2 text-stone-800 disabled:bg-stone-100 disabled:cursor-not-allowed"
             >
               <option value="">Izaberite instruktora</option>
-              {availableInstructors.map((i) => (
-                <option key={i.id} value={i.id}>{i.ime} {i.prezime}</option>
+              {instructors.map((i) => (
+                <option key={i.id} value={i.id}>
+                  {i.ime} {i.prezime}{takenInstructorIds.includes(i.id) ? ' (zauzeto)' : ''}
+                </option>
               ))}
             </select>
-            {takenInstructorIds.length > 0 && availableInstructors.length > 0 && (
-              <p className="text-xs text-stone-500 mt-0.5">{takenInstructorIds.length} instruktor(a) već ima termin u ovom slotu.</p>
+            {takenInstructorIds.length > 0 && (
+              <p className="text-xs text-stone-500 mt-0.5">{takenInstructorIds.length} instruktor(a) već ima termin u ovom slotu — i dalje se mogu izabrati.</p>
             )}
           </div>
           <div>
@@ -427,16 +462,18 @@ export default function AdminTerminForm({
               value={classroomId}
               onChange={(e) => setClassroomId(e.target.value)}
               required
-              disabled={noClassroomsAvailable || slotFull}
+              disabled={slotFull}
               className="w-full rounded-lg border border-stone-300 px-3 py-2 text-stone-800 disabled:bg-stone-100 disabled:cursor-not-allowed"
             >
               <option value="">Izaberite učionicu</option>
-              {availableClassrooms.map((c) => (
-                <option key={c.id} value={c.id}>{c.naziv}</option>
+              {classrooms.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.naziv}{takenClassroomIds.includes(c.id) ? ' (zauzeto)' : ''}
+                </option>
               ))}
             </select>
-            {takenClassroomIds.length > 0 && availableClassrooms.length > 0 && (
-              <p className="text-xs text-stone-500 mt-0.5">{takenClassroomIds.length} učionica je zauzeta u ovom slotu.</p>
+            {takenClassroomIds.length > 0 && (
+              <p className="text-xs text-stone-500 mt-0.5">{takenClassroomIds.length} učionica je zauzeta u ovom slotu — i dalje se mogu izabrati.</p>
             )}
           </div>
         </div>
@@ -467,6 +504,7 @@ export default function AdminTerminForm({
                 onSelectionChange={setGrupniIds}
                 disabled={loading}
                 inputId="admin-termin-grupni-search"
+                completedIds={completedIds}
               />
             </div>
           ) : (
@@ -478,6 +516,7 @@ export default function AdminTerminForm({
                 onChange={setClientId}
                 disabled={loading}
                 inputId="admin-termin-klijent-search"
+                completedIds={completedIds}
               />
             </div>
           )}

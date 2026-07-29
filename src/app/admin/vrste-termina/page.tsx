@@ -14,7 +14,7 @@ export default async function AdminVrsteTerminaPage() {
 
   const adminSupabase = createAdminClient();
   const [{ data: rows }, programs] = await Promise.all([
-    adminSupabase.from('term_types').select('id, naziv, opis, cena_po_casu, program_id').order('naziv'),
+    adminSupabase.from('term_types').select('id, naziv, opis, cena_po_casu, program_id, trajanje_minuta').order('naziv'),
     getPrograms(),
   ]);
   const programNazivById = new Map(programs.map((p) => [p.id, p.naziv]));
@@ -38,6 +38,7 @@ export default async function AdminVrsteTerminaPage() {
               naziv={r.naziv ?? ''}
               opis={r.opis}
               cenaPoCasu={r.cena_po_casu}
+              trajanjeMinuta={r.trajanje_minuta ?? 45}
               programNaziv={r.program_id ? programNazivById.get(r.program_id) ?? null : null}
             />
           ))
@@ -55,12 +56,14 @@ function TermTypeRow({
   naziv,
   opis,
   cenaPoCasu,
+  trajanjeMinuta,
   programNaziv,
 }: {
   id: string;
   naziv: string;
   opis: string | null;
   cenaPoCasu?: number | null;
+  trajanjeMinuta?: number;
   programNaziv?: string | null;
 }) {
   return (
@@ -73,6 +76,9 @@ function TermTypeRow({
         )}
         <p className="text-xs text-stone-500 mt-0.5">
           Program: {programNaziv ?? <span className="text-stone-400">nije izabran</span>}
+          {trajanjeMinuta != null && trajanjeMinuta !== 45 && (
+            <span className="ml-2 text-amber-700 font-medium">· {trajanjeMinuta} min (dvočas)</span>
+          )}
         </p>
       </div>
       <div className="flex items-center gap-2">

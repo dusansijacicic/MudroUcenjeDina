@@ -18,7 +18,7 @@ export default async function AdminVrstaTerminaEditPage({
 
   const adminSupabase = createAdminClient();
   const [{ data: row, error }, programs] = await Promise.all([
-    adminSupabase.from('term_types').select('id, naziv, opis, cena_po_casu, program_id').eq('id', id).single(),
+    adminSupabase.from('term_types').select('id, naziv, opis, cena_po_casu, program_id, trajanje_minuta').eq('id', id).single(),
     getPrograms(),
   ]);
 
@@ -33,6 +33,7 @@ export default async function AdminVrstaTerminaEditPage({
         initialOpis={row.opis ?? ''}
         initialCenaPoCasu={row.cena_po_casu != null ? String(row.cena_po_casu) : ''}
         initialProgramId={row.program_id ?? ''}
+        initialTrajanjeMinuta={row.trajanje_minuta ?? 45}
         programs={programs}
       />
       <p className="mt-4">

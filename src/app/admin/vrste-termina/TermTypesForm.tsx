@@ -10,6 +10,7 @@ export default function TermTypesForm({ programs = [] }: { programs?: ProgramRow
   const [opis, setOpis] = useState('');
   const [cenaPoCasu, setCenaPoCasu] = useState('');
   const [programId, setProgramId] = useState('');
+  const [trajanjeMinuta, setTrajanjeMinuta] = useState('45');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -20,6 +21,15 @@ export default function TermTypesForm({ programs = [] }: { programs?: ProgramRow
       setError('Unesite naziv.');
       return;
     }
+    if (!programId) {
+      setError('Izaberite program.');
+      return;
+    }
+    const trajanje = parseInt(trajanjeMinuta, 10);
+    if (!Number.isFinite(trajanje) || trajanje <= 0) {
+      setError('Trajanje mora biti pozitivan broj minuta.');
+      return;
+    }
     setLoading(true);
     const cena = cenaPoCasu.trim() ? parseFloat(cenaPoCasu.replace(',', '.')) : null;
     const cenaInvalid = cenaPoCasu.trim() && (cena == null || !Number.isFinite(cena) || Number(cena) < 0);
@@ -28,7 +38,7 @@ export default function TermTypesForm({ programs = [] }: { programs?: ProgramRow
       setLoading(false);
       return;
     }
-    const result = await createTermTypeAsAdmin(naziv.trim(), opis.trim() || null, cena, programId || null);
+    const result = await createTermTypeAsAdmin(naziv.trim(), opis.trim() || null, cena, programId || null, trajanje);
     if (result.error) {
       setError(result.error);
       setLoading(false);
@@ -38,6 +48,7 @@ export default function TermTypesForm({ programs = [] }: { programs?: ProgramRow
     setOpis('');
     setCenaPoCasu('');
     setProgramId('');
+    setTrajanjeMinuta('45');
     router.refresh();
     setLoading(false);
   };
@@ -75,13 +86,25 @@ export default function TermTypesForm({ programs = [] }: { programs?: ProgramRow
         />
       </div>
       <div>
-        <label className="block text-sm font-medium text-stone-700 mb-1">Program (opciono)</label>
+        <label className="block text-sm font-medium text-stone-700 mb-1">Trajanje (min)</label>
+        <input
+          type="number"
+          min="1"
+          value={trajanjeMinuta}
+          onChange={(e) => setTrajanjeMinuta(e.target.value)}
+          className="rounded-lg border border-stone-300 px-3 py-2 text-stone-800 w-24"
+        />
+        <p className="text-xs text-stone-500 mt-1 w-24">Preko 45 min = zauzima i sledeći slot.</p>
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-stone-700 mb-1">Program *</label>
         <select
           value={programId}
           onChange={(e) => setProgramId(e.target.value)}
+          required
           className="rounded-lg border border-stone-300 px-3 py-2 text-stone-800 bg-white w-48"
         >
-          <option value="">— bez programa —</option>
+          <option value="">— izaberite —</option>
           {programs.map((p) => (
             <option key={p.id} value={p.id}>
               {p.naziv}

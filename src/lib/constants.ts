@@ -20,6 +20,15 @@ export const TIME_SLOTS = [
 
 export const SLOT_DURATION_MINUTES = 45;
 
+/** Koliko uzastopnih slotova zauzima čas date dužine (npr. 55 min → 2 slota od 45 min). */
+export function slotsNeeded(trajanjeMinuta: number | null | undefined): number {
+  if (!trajanjeMinuta || trajanjeMinuta <= SLOT_DURATION_MINUTES) return 1;
+  return Math.ceil(trajanjeMinuta / SLOT_DURATION_MINUTES);
+}
+
+/** Napomena kojom se prepoznaje automatski kreiran "blokirajući" nastavak (dvočas), za razliku od ručno unetog nastavka. */
+export const AUTO_SPILLOVER_NAPOMENA = 'Automatski zauzeto (nastavak dužeg časa)';
+
 /** Kraj vremena slota (npr. slot 0 = 09:00–09:45 → "09:45"). */
 export function getSlotEndTime(slotIndex: number): string {
   if (slotIndex < 0 || slotIndex >= TIME_SLOTS.length) return '21:00';

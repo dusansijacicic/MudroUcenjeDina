@@ -12,6 +12,7 @@ export default function TermTypeEditForm({
   initialOpis,
   initialCenaPoCasu,
   initialProgramId,
+  initialTrajanjeMinuta,
   programs = [],
 }: {
   id: string;
@@ -19,6 +20,7 @@ export default function TermTypeEditForm({
   initialOpis: string;
   initialCenaPoCasu: string;
   initialProgramId?: string;
+  initialTrajanjeMinuta?: number;
   programs?: ProgramRow[];
 }) {
   const router = useRouter();
@@ -26,6 +28,7 @@ export default function TermTypeEditForm({
   const [opis, setOpis] = useState(initialOpis);
   const [cenaPoCasu, setCenaPoCasu] = useState(initialCenaPoCasu);
   const [programId, setProgramId] = useState(initialProgramId ?? '');
+  const [trajanjeMinuta, setTrajanjeMinuta] = useState(String(initialTrajanjeMinuta ?? 45));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -36,6 +39,15 @@ export default function TermTypeEditForm({
       setError('Unesite naziv.');
       return;
     }
+    if (!programId) {
+      setError('Izaberite program.');
+      return;
+    }
+    const trajanje = parseInt(trajanjeMinuta, 10);
+    if (!Number.isFinite(trajanje) || trajanje <= 0) {
+      setError('Trajanje mora biti pozitivan broj minuta.');
+      return;
+    }
     const cena = cenaPoCasu.trim() ? parseFloat(cenaPoCasu.replace(',', '.')) : null;
     const cenaInvalid = cenaPoCasu.trim() && (cena == null || !Number.isFinite(cena) || Number(cena) < 0);
     if (cenaInvalid) {
@@ -43,7 +55,7 @@ export default function TermTypeEditForm({
       return;
     }
     setLoading(true);
-    const result = await updateTermTypeAsAdmin(id, naziv.trim(), opis.trim() || null, cena, programId || null);
+    const result = await updateTermTypeAsAdmin(id, naziv.trim(), opis.trim() || null, cena, programId || null, trajanje);
     setLoading(false);
     if (result.error) {
       setError(result.error);
@@ -70,13 +82,25 @@ export default function TermTypeEditForm({
         <input type="text" value={cenaPoCasu} onChange={(e) => setCenaPoCasu(e.target.value)} placeholder="npr. 1500" className="w-full rounded-lg border border-stone-300 px-3 py-2 text-stone-800 max-w-[140px]" />
       </div>
       <div>
-        <label className="block text-sm font-medium text-stone-700 mb-1">Program (opciono)</label>
+        <label className="block text-sm font-medium text-stone-700 mb-1">Trajanje (min)</label>
+        <input
+          type="number"
+          min="1"
+          value={trajanjeMinuta}
+          onChange={(e) => setTrajanjeMinuta(e.target.value)}
+          className="w-full rounded-lg border border-stone-300 px-3 py-2 text-stone-800 max-w-[100px]"
+        />
+        <p className="text-xs text-stone-500 mt-1">Preko 45 min = zauzima i sledeći slot (npr. 55 min → 2 slota).</p>
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-stone-700 mb-1">Program *</label>
         <select
           value={programId}
           onChange={(e) => setProgramId(e.target.value)}
+          required
           className="w-full max-w-xs rounded-lg border border-stone-300 px-3 py-2 text-stone-800 bg-white"
         >
-          <option value="">— bez programa —</option>
+          <option value="">— izaberite —</option>
           {programs.map((p) => (
             <option key={p.id} value={p.id}>
               {p.naziv}

@@ -5,6 +5,8 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { getDashboardInstructor } from '@/lib/dashboard';
 import { termMozeNovoPredavanje, getMaxTerminaPoSlotu, jedanDeteMaksimalnoPoTerminu } from '@/lib/settings';
 import { revalidatePath } from 'next/cache';
+import { syncSpilloverForTerm } from '@/app/admin/actions';
+import { AUTO_SPILLOVER_NAPOMENA } from '@/lib/constants';
 
 export async function createPredavanje(
   termId: string,
@@ -81,6 +83,7 @@ export async function createPredavanje(
   if (icErr && icErr.code !== '23505') {
     console.warn('[termin] instructor_clients insert (non-fatal)', icErr.message);
   }
+  await syncSpilloverForTerm(admin, termId);
   revalidatePath(`/dashboard/termin/${termId}`);
   revalidatePath('/dashboard');
   revalidatePath('/dashboard/klijenti');
@@ -152,6 +155,7 @@ export async function createPredavanjaBatch(
       console.warn('[termin] instructor_clients batch', icErr.message);
     }
   }
+  await syncSpilloverForTerm(admin, termId);
   revalidatePath(`/dashboard/termin/${termId}`);
   revalidatePath('/dashboard');
   revalidatePath('/dashboard/klijenti');
@@ -199,6 +203,7 @@ export async function updatePredavanje(
     })
     .eq('id', predavanjeId);
   if (error) return { error: error.message };
+  await syncSpilloverForTerm(admin, termId);
   revalidatePath(`/dashboard/termin/${termId}`);
   revalidatePath('/dashboard');
   revalidatePath('/dashboard/klijenti');
@@ -250,10 +255,14 @@ export async function deletePredavanje(predavanjeId: string, termId: string): Pr
   const { error } = await admin.from('predavanja').delete().eq('id', predavanjeId);
   if (error) return { error: error.message };
 
-  // If term is now empty, delete it (frees instructor + classroom)
+  // If term is now empty, delete it (frees instructor + classroom) – i njegove eventualne
+  // automatske "blokirajuće" slotove (nastavak_of_term_id nema CASCADE, brišemo ručno).
   const { count } = await admin.from('predavanja').select('*', { count: 'exact', head: true }).eq('term_id', termId);
   if ((count ?? 0) === 0) {
+    await admin.from('terms').delete().eq('nastavak_of_term_id', termId).eq('napomena', AUTO_SPILLOVER_NAPOMENA);
     await admin.from('terms').delete().eq('id', termId);
+  } else {
+    await syncSpilloverForTerm(admin, termId);
   }
 
   revalidatePath(`/dashboard/termin/${termId}`);

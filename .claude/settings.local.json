@@ -6,7 +6,14 @@
       "Bash(mkdir -p \"c:\\\\Users\\\\korisnik\\\\Desktop\\\\Dina kalendar\\\\src\\\\app\\\\admin\\\\termin\\\\[id]\\\\testiranje\\\\[pcId]\")",
       "Bash(python -c ' *)",
       "Bash(npx eslint *)",
-      "Bash(git fetch *)"
+      "Bash(git fetch *)",
+      "Bash(git diff *)",
+      "Bash(git worktree *)",
+      "Bash(git branch *)",
+      "Bash(mkdir -p \"/c/Users/korisnik/AppData/Local/Temp/claude/c--Users-korisnik-Desktop-Dina-kalendar/d03b738d-6db7-48f0-92bd-d421434eddcf/scratchpad\")"
+    ],
+    "additionalDirectories": [
+      "C:\\Users\\korisnik\\AppData\\Local\\Temp\\claude\\c--Users-korisnik-Desktop-Dina-kalendar\\d03b738d-6db7-48f0-92bd-d421434eddcf\\scratchpad"
     ]
   }
 }

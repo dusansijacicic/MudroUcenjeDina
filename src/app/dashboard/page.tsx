@@ -79,6 +79,8 @@ export default async function DashboardPage({
     date: string;
     slot_index: number;
     classroom_id?: string | null;
+    napomena?: string | null;
+    nastavak_of_term_id?: string | null;
     instructor?: { id: string; ime: string; prezime: string; color?: string | null } | { id: string; ime: string; prezime: string; color?: string | null }[] | null;
     classroom?: { id: string; naziv: string; color?: string | null } | { id: string; naziv: string; color?: string | null }[] | null;
     term_category?: { id: string; naziv: string; is_testing: boolean } | { id: string; naziv: string; is_testing: boolean }[] | null;
@@ -93,7 +95,7 @@ export default async function DashboardPage({
     const admin = createAdminClient();
     serviceRoleUsed = true;
     const [termsRes, classRes] = await Promise.all([
-      admin.from('terms').select('id, instructor_id, date, slot_index, classroom_id, instructor:instructors(id, ime, prezime, color), classroom:classrooms(id, naziv, color), term_category:term_categories(id, naziv, is_testing), predavanja(*, client:clients(id, ime, prezime), term_type:term_types(naziv)), potential_clients(id, ime, prezime, ime_roditelja, mobilni_roditelja, status)').gte('date', dateFrom).lte('date', dateTo).order('date').order('slot_index'),
+      admin.from('terms').select('id, instructor_id, date, slot_index, classroom_id, napomena, nastavak_of_term_id, instructor:instructors(id, ime, prezime, color), classroom:classrooms(id, naziv, color), term_category:term_categories(id, naziv, is_testing), predavanja(*, client:clients(id, ime, prezime), term_type:term_types(naziv)), potential_clients(id, ime, prezime, ime_roditelja, mobilni_roditelja, status)').gte('date', dateFrom).lte('date', dateTo).order('date').order('slot_index'),
       admin.from('classrooms').select('id, naziv, color').order('naziv'),
     ]);
     allTermsRaw = (termsRes.data ?? []) as TermRow[];
@@ -102,7 +104,7 @@ export default async function DashboardPage({
     console.error('[dashboard] createAdminClient or terms fetch failed – using fallback (samo vaši termini). Postavite SUPABASE_SERVICE_ROLE_KEY na Vercel.', err);
     const supabase = await createClient();
     const [termsRes, classRes] = await Promise.all([
-      supabase.from('terms').select('id, instructor_id, date, slot_index, classroom_id, instructor:instructors(id, ime, prezime, color), classroom:classrooms(id, naziv, color), term_category:term_categories(id, naziv, is_testing), predavanja(*, client:clients(id, ime, prezime), term_type:term_types(naziv)), potential_clients(id, ime, prezime, ime_roditelja, mobilni_roditelja, status)').eq('instructor_id', instructorId).gte('date', dateFrom).lte('date', dateTo).order('date').order('slot_index'),
+      supabase.from('terms').select('id, instructor_id, date, slot_index, classroom_id, napomena, nastavak_of_term_id, instructor:instructors(id, ime, prezime, color), classroom:classrooms(id, naziv, color), term_category:term_categories(id, naziv, is_testing), predavanja(*, client:clients(id, ime, prezime), term_type:term_types(naziv)), potential_clients(id, ime, prezime, ime_roditelja, mobilni_roditelja, status)').eq('instructor_id', instructorId).gte('date', dateFrom).lte('date', dateTo).order('date').order('slot_index'),
       supabase.from('classrooms').select('id, naziv, color').order('naziv'),
     ]);
     allTermsRaw = (termsRes.data ?? []) as TermRow[];
@@ -140,6 +142,8 @@ export default async function DashboardPage({
         date: t.date,
         slot_index: t.slot_index,
         predavanja: t.predavanja,
+        napomena: t.napomena ?? null,
+        nastavak_of_term_id: t.nastavak_of_term_id ?? null,
         instructor: inst ? { ime: inst.ime, prezime: inst.prezime, color: inst.color ?? undefined } : null,
         classroom: room ? { id: room.id, naziv: room.naziv, color: room.color ?? undefined } : null,
       };
@@ -158,6 +162,8 @@ export default async function DashboardPage({
       classroom: room ? { id: room.id, naziv: room.naziv, color: room.color ?? undefined } : null,
       term_category,
       potential_clients: t.potential_clients,
+      napomena: t.napomena ?? null,
+      nastavak_of_term_id: t.nastavak_of_term_id ?? null,
     };
   });
   let filteredOtherTerms = otherTerms;
