@@ -569,11 +569,14 @@ export async function reassignPredavanjeInstructorAsAdmin(
   if (existingTerm) {
     newTermId = existingTerm.id as string;
   } else {
-    // Kreiramo novi termin za novog instruktora – prenosimo kategoriju/učionicu/napomenu sa izvornog terma
-    // (term_category_id je NOT NULL u bazi, ne sme se izostaviti).
+    // Kreiramo novi termin za novog instruktora – prenosimo kategoriju/napomenu sa izvornog terma
+    // (term_category_id je NOT NULL u bazi, ne sme se izostaviti). NE prenosimo učionicu ovde:
+    // izvorni termin je u ISTOM datumu/slotu i još uvek je "drži", pa bi kopiranje odmah probilo
+    // UNIQUE(classroom_id, date, slot_index). Učionicu eventualno preuzima novi termin ispod,
+    // POSLE što se izvorni termin isprazni i obriše (oslobodi je).
     const { data: sourceTerm } = await admin
       .from('terms')
-      .select('term_category_id, classroom_id, napomena')
+      .select('term_category_id, napomena')
       .eq('id', currentTermId)
       .single();
     if (!sourceTerm) return { error: 'Izvorni termin nije pronađen.' };
@@ -584,7 +587,6 @@ export async function reassignPredavanjeInstructorAsAdmin(
         date: termDate.slice(0, 10),
         slot_index: slotIndex,
         term_category_id: sourceTerm.term_category_id,
-        classroom_id: sourceTerm.classroom_id,
         napomena: sourceTerm.napomena,
       })
       .select('id')
@@ -616,6 +618,27 @@ export async function reassignPredavanjeInstructorAsAdmin(
   if (icErr && icErr.code !== '23505') {
     console.warn('[admin] instructor_clients upsert (non-fatal)', icErr.message);
   }
+
+  // Ako je izvorni termin sad prazan, obriši ga (oslobađa instruktora i učionicu) – isti obrazac
+  // kao deletePredavanjeAsAdmin. Ako je time oslobođena učionica, i novi termin je nema, preuzima je.
+  const { count: remainingInSource } = await admin
+    .from('predavanja')
+    .select('*', { count: 'exact', head: true })
+    .eq('term_id', currentTermId);
+  if ((remainingInSource ?? 0) === 0) {
+    const { data: freedTerm } = await admin.from('terms').select('classroom_id').eq('id', currentTermId).single();
+    await admin.from('terms').delete().eq('nastavak_of_term_id', currentTermId).eq('napomena', AUTO_SPILLOVER_NAPOMENA);
+    await admin.from('terms').delete().eq('id', currentTermId);
+    if (freedTerm?.classroom_id) {
+      const { data: targetTerm } = await admin.from('terms').select('classroom_id').eq('id', newTermId).single();
+      if (targetTerm && !targetTerm.classroom_id) {
+        await admin.from('terms').update({ classroom_id: freedTerm.classroom_id }).eq('id', newTermId);
+      }
+    }
+  } else {
+    await syncSpilloverForTerm(admin, currentTermId);
+  }
+  await syncSpilloverForTerm(admin, newTermId);
 
   revalidatePath('/admin/kalendar');
   revalidatePath(`/admin/termin/${currentTermId}`);
