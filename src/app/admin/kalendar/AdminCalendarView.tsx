@@ -1,7 +1,8 @@
 'use client';
 
-import { createContext, useContext, useState } from 'react';
+import { createContext, useContext, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import toast from 'react-hot-toast';
 import { TIME_SLOTS, AUTO_SPILLOVER_NAPOMENA } from '@/lib/constants';
 import Link from 'next/link';
 import { moveTermAsAdmin, swapTermsAsAdmin } from '@/app/admin/actions';
@@ -67,6 +68,38 @@ const SwapContext = createContext<SwapContextValue>({
   onSelectTerm: () => {},
 });
 
+type SwapFields = { termin: boolean; instruktor: boolean; ucionica: boolean; klijent: boolean };
+
+/** Optimistička primena zamene na lokalnu listu termina – ekran se ažurira odmah, pre nego što
+ * server potvrdi. Ogledalo swap_terms() SQL funkcije za polja koja ova komponenta uopšte renderuje
+ * (datum/slot/instruktor/učionica/radionice); server ostaje jedini izvor istine za sudare i dvočas
+ * spillover, pa router.refresh() posle uspeha uskladi sve što optimistička verzija nije mogla znati. */
+function applySwapOptimistically(terms: AdminTerm[], aId: string, bId: string, fields: SwapFields): AdminTerm[] {
+  const a = terms.find((t) => t.id === aId);
+  const b = terms.find((t) => t.id === bId);
+  if (!a || !b) return terms;
+  const canSwapKlijent = fields.klijent && (a.predavanja ?? []).length === 1 && (b.predavanja ?? []).length === 1;
+  const newA: AdminTerm = {
+    ...a,
+    date: fields.termin ? b.date : a.date,
+    slot_index: fields.termin ? b.slot_index : a.slot_index,
+    instructor_id: fields.instruktor ? b.instructor_id : a.instructor_id,
+    instructor: fields.instruktor ? b.instructor : a.instructor,
+    classroom: fields.ucionica ? b.classroom : a.classroom,
+    predavanja: canSwapKlijent ? b.predavanja : a.predavanja,
+  };
+  const newB: AdminTerm = {
+    ...b,
+    date: fields.termin ? a.date : b.date,
+    slot_index: fields.termin ? a.slot_index : b.slot_index,
+    instructor_id: fields.instruktor ? a.instructor_id : b.instructor_id,
+    instructor: fields.instruktor ? a.instructor : b.instructor,
+    classroom: fields.ucionica ? a.classroom : b.classroom,
+    predavanja: canSwapKlijent ? a.predavanja : b.predavanja,
+  };
+  return terms.map((t) => (t.id === aId ? newA : t.id === bId ? newB : t));
+}
+
 function swapTermLabel(term: AdminTerm): string {
   const d = new Date(term.date + 'T12:00:00');
   const dateLabel = `${d.getDate()}.${d.getMonth() + 1}.`;
@@ -103,7 +136,7 @@ const DEFAULT_COLOR = '#0d9488';
 const DEFAULT_MAX_TERMINA_PO_SLOTU = 4;
 
 export default function AdminCalendarView({
-  terms,
+  terms: termsProp,
   otkazaniTermini = [],
   startOfWeek,
   singleDay,
@@ -123,17 +156,22 @@ export default function AdminCalendarView({
   const router = useRouter();
   const [draggedTermId, setDraggedTermId] = useState<string | null>(null);
 
+  // Lokalna kopija termina – omogućava optimističku primenu swap-a (ekran se menja odmah, pre nego
+  // što server potvrdi). Sinhronizuje se sa serverom kad god page.tsx pošalje sveže podatke
+  // (nakon router.refresh() ili promene nedelje/dana/meseca).
+  const [terms, setTerms] = useState(termsProp);
+  useEffect(() => {
+    setTerms(termsProp);
+  }, [termsProp]);
+
   const [swapMode, setSwapMode] = useState(false);
   const [swapFields, setSwapFields] = useState({ termin: false, instruktor: false, ucionica: false, klijent: false });
   const [swapFirst, setSwapFirst] = useState<{ termId: string; label: string } | null>(null);
   const [swapSecond, setSwapSecond] = useState<{ termId: string; label: string } | null>(null);
-  const [swapLoading, setSwapLoading] = useState(false);
-  const [swapError, setSwapError] = useState('');
 
   const resetSwapSelection = () => {
     setSwapFirst(null);
     setSwapSecond(null);
-    setSwapError('');
   };
 
   const toggleSwapMode = () => {
@@ -142,7 +180,6 @@ export default function AdminCalendarView({
   };
 
   const onSelectTerm = (term: AdminTerm) => {
-    setSwapError('');
     const label = swapTermLabel(term);
     if (!swapFirst) {
       setSwapFirst({ termId: term.id, label });
@@ -164,16 +201,22 @@ export default function AdminCalendarView({
 
   const confirmSwap = async () => {
     if (!swapFirst || !swapSecond || !anyFieldChecked) return;
-    setSwapLoading(true);
-    setSwapError('');
-    const res = await swapTermsAsAdmin(swapFirst.termId, swapSecond.termId, swapFields);
-    setSwapLoading(false);
-    if (res.error) {
-      setSwapError(res.error);
-      return;
-    }
+    const aId = swapFirst.termId;
+    const bId = swapSecond.termId;
+    const prevTerms = terms;
+
+    // Optimistički: ekran se menja odmah, mod se gasi kao da je gotovo – server potvrđuje u
+    // pozadini. Ako ipak odbije zamenu (sudar, dvočas blok...), vraćamo prethodno stanje i javljamo.
+    setTerms(applySwapOptimistically(terms, aId, bId, swapFields));
     resetSwapSelection();
     setSwapMode(false);
+
+    const res = await swapTermsAsAdmin(aId, bId, swapFields);
+    if (res.error) {
+      setTerms(prevTerms);
+      toast.error(res.error);
+      return;
+    }
     router.refresh();
   };
 
@@ -284,10 +327,10 @@ export default function AdminCalendarView({
               <button
                 type="button"
                 onClick={confirmSwap}
-                disabled={!swapFirst || !swapSecond || !anyFieldChecked || swapLoading}
+                disabled={!swapFirst || !swapSecond || !anyFieldChecked}
                 className="px-3 py-1.5 rounded-lg text-sm font-medium bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                {swapLoading ? 'Zamenjujem…' : 'Potvrdi zamenu'}
+                Potvrdi zamenu
               </button>
               <button
                 type="button"
@@ -329,7 +372,6 @@ export default function AdminCalendarView({
             </div>
           </div>
         )}
-        {swapMode && swapError && <p className="mt-2 text-sm text-red-600">{swapError}</p>}
       </div>
       {body}
     </SwapContext.Provider>
