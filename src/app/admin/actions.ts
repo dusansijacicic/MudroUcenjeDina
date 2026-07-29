@@ -293,18 +293,21 @@ export async function syncSpilloverSlots(
   originTermId: string,
   totalSlotsNeeded: number
 ): Promise<void> {
-  const { data: origin } = await admin
-    .from('terms')
-    .select('instructor_id, classroom_id, date, slot_index, term_category_id')
-    .eq('id', originTermId)
-    .single();
+  // Origin i existing ne zavise jedno od drugog – paralelno umesto sekvencijalno (upola manje čekanja).
+  const [{ data: origin }, { data: existing }] = await Promise.all([
+    admin
+      .from('terms')
+      .select('instructor_id, classroom_id, date, slot_index, term_category_id')
+      .eq('id', originTermId)
+      .single(),
+    admin
+      .from('terms')
+      .select('id, slot_index')
+      .eq('nastavak_of_term_id', originTermId)
+      .eq('napomena', AUTO_SPILLOVER_NAPOMENA),
+  ]);
   if (!origin) return;
 
-  const { data: existing } = await admin
-    .from('terms')
-    .select('id, slot_index')
-    .eq('nastavak_of_term_id', originTermId)
-    .eq('napomena', AUTO_SPILLOVER_NAPOMENA);
   const existingBySlot = new Map((existing ?? []).map((t) => [t.slot_index, t.id as string]));
 
   const desiredSlots: number[] = [];
@@ -314,29 +317,28 @@ export async function syncSpilloverSlots(
     desiredSlots.push(s);
   }
 
-  for (const [slotIdx, id] of existingBySlot) {
-    if (!desiredSlots.includes(slotIdx)) {
-      await admin.from('terms').delete().eq('id', id);
-    }
-  }
+  const toDelete = [...existingBySlot.entries()].filter(([slotIdx]) => !desiredSlots.includes(slotIdx));
+  const toInsert = desiredSlots.filter((slotIdx) => !existingBySlot.has(slotIdx));
 
-  for (const slotIdx of desiredSlots) {
-    if (existingBySlot.has(slotIdx)) continue;
-    const { error: spilloverErr } = await admin.from('terms').insert({
-      instructor_id: origin.instructor_id,
-      classroom_id: origin.classroom_id,
-      date: origin.date,
-      slot_index: slotIdx,
-      term_category_id: origin.term_category_id,
-      nastavak_of_term_id: originTermId,
-      napomena: AUTO_SPILLOVER_NAPOMENA,
-    });
-    if (spilloverErr) {
-      // Instruktor ili učionica su već genuinely zauzeti u tom slotu nečim drugim – ne rušimo
-      // čuvanje radionice zbog ovoga, samo beležimo da automatska blokada nije uspela.
-      console.warn('[dvočas] spillover insert failed for slot', slotIdx, spilloverErr.message);
-    }
-  }
+  await Promise.all([
+    ...toDelete.map(([, id]) => admin.from('terms').delete().eq('id', id)),
+    ...toInsert.map(async (slotIdx) => {
+      const { error: spilloverErr } = await admin.from('terms').insert({
+        instructor_id: origin.instructor_id,
+        classroom_id: origin.classroom_id,
+        date: origin.date,
+        slot_index: slotIdx,
+        term_category_id: origin.term_category_id,
+        nastavak_of_term_id: originTermId,
+        napomena: AUTO_SPILLOVER_NAPOMENA,
+      });
+      if (spilloverErr) {
+        // Instruktor ili učionica su već genuinely zauzeti u tom slotu nečim drugim – ne rušimo
+        // čuvanje radionice zbog ovoga, samo beležimo da automatska blokada nije uspela.
+        console.warn('[dvočas] spillover insert failed for slot', slotIdx, spilloverErr.message);
+      }
+    }),
+  ]);
 }
 
 /**
@@ -347,14 +349,16 @@ export async function syncSpilloverForTerm(
   admin: ReturnType<typeof createAdminClient>,
   termId: string
 ): Promise<void> {
-  const { data: preds } = await admin.from('predavanja').select('term_type_id').eq('term_id', termId);
-  const termTypeIds = [...new Set((preds ?? []).map((p) => p.term_type_id).filter((id): id is string => !!id))];
+  // Jedan upit (embedded join) umesto dva sekvencijalna (prvo term_type_id pa onda term_types).
+  const { data: preds } = await admin
+    .from('predavanja')
+    .select('term_type:term_types(trajanje_minuta)')
+    .eq('term_id', termId);
   let maxMinutes = 45;
-  if (termTypeIds.length > 0) {
-    const { data: types } = await admin.from('term_types').select('trajanje_minuta').in('id', termTypeIds);
-    for (const t of types ?? []) {
-      maxMinutes = Math.max(maxMinutes, t.trajanje_minuta ?? 45);
-    }
+  for (const p of preds ?? []) {
+    const tt = p.term_type as { trajanje_minuta?: number } | { trajanje_minuta?: number }[] | null;
+    const trajanje = Array.isArray(tt) ? tt[0]?.trajanje_minuta : tt?.trajanje_minuta;
+    if (trajanje) maxMinutes = Math.max(maxMinutes, trajanje);
   }
   await syncSpilloverSlots(admin, termId, slotsNeeded(maxMinutes));
 }
@@ -769,8 +773,7 @@ export async function swapTermsAsAdmin(
   });
   if (error) return { error: error.message || 'Greška pri zameni termina.' };
 
-  await syncSpilloverForTerm(admin, termAId);
-  await syncSpilloverForTerm(admin, termBId);
+  await Promise.all([syncSpilloverForTerm(admin, termAId), syncSpilloverForTerm(admin, termBId)]);
 
   revalidatePath('/admin/kalendar');
   return {};
