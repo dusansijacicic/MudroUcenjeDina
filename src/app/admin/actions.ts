@@ -697,6 +697,9 @@ export async function deleteTermAsAdmin(termId: string): Promise<{ error?: strin
     await savePredavanjeToHistory(admin, p.id);
   }
 
+  // Briše i eventualne automatske "blokirajuće" slotove dužeg časa (nastavak_of_term_id nema CASCADE).
+  await admin.from('terms').delete().eq('nastavak_of_term_id', termId).eq('napomena', AUTO_SPILLOVER_NAPOMENA);
+
   const { error } = await admin.from('terms').delete().eq('id', termId);
   if (error) return { error: error.message };
   revalidatePath('/admin/kalendar');

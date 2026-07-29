@@ -423,6 +423,9 @@ export async function deleteTermAsInstructor(termId: string): Promise<{ error?: 
   if (!term || term.instructor_id !== instructor.id) {
     return { error: 'Niste ovlašćeni za ovaj termin.' };
   }
+  // Briše i eventualne automatske "blokirajuće" slotove dužeg časa (nastavak_of_term_id nema CASCADE).
+  await admin.from('terms').delete().eq('nastavak_of_term_id', termId).eq('napomena', AUTO_SPILLOVER_NAPOMENA);
+
   const { error } = await admin.from('terms').delete().eq('id', termId);
   if (error) return { error: error.message };
   revalidatePath('/dashboard');
