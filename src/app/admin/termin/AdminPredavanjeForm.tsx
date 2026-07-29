@@ -16,6 +16,13 @@ import SingleKlijentPicker from '@/components/SingleKlijentPicker';
 import type { TermCategoryRow } from '@/lib/term-categories';
 import { findDefaultCitanjeTermTypeId } from '@/lib/term-types';
 
+function getMonday(d: Date): string {
+  const x = new Date(d);
+  const dow = x.getDay();
+  x.setDate(x.getDate() - (dow === 0 ? 6 : dow - 1));
+  return x.toISOString().slice(0, 10);
+}
+
 type ClientOption = { id: string; ime: string; prezime: string; godiste?: number | null; datumTestiranja?: string | null };
 type TermTypeOption = { id: string; naziv: string; opis: string | null; program_id?: string | null };
 type ClassroomOption = { id: string; naziv: string; color: string | null };
@@ -104,6 +111,7 @@ export default function AdminPredavanjeForm({
   const isNew = !predavanje;
   const atLimit = isNew && currentCount >= maxCasova;
   const backHref = `/admin/termin/${termId}`;
+  const kalendarHref = `/admin/kalendar?week=${getMonday(new Date(termDate + 'T12:00:00'))}`;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -131,7 +139,7 @@ export default function AdminPredavanjeForm({
         if (res.error) throw new Error(res.error);
         // Termin se promenio – redirect na termin novog instruktora
         toast.success('Instruktor je promenjen. Radionica je prebačena.');
-        router.push(`/admin/termin/${res.newTermId ?? termId}`);
+        router.push(kalendarHref);
         router.refresh();
         return;
       }
@@ -176,7 +184,7 @@ export default function AdminPredavanjeForm({
         if (result.error) throw new Error(result.error);
         toast.success('Radionica dodata.');
       }
-      router.push(backHref);
+      router.push(kalendarHref);
       router.refresh();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Greška pri čuvanju.';
@@ -198,7 +206,7 @@ export default function AdminPredavanjeForm({
         return;
       }
       toast.success('Radionica obrisana.');
-      router.push(backHref);
+      router.push(kalendarHref);
       router.refresh();
     } catch {
       setError('Greška pri brisanju.');

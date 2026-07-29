@@ -8,6 +8,13 @@ import PredavanjeForm from '@/app/dashboard/termin/PredavanjeForm';
 import { TIME_SLOTS } from '@/lib/constants';
 import { SEEDED_TERM_CATEGORY_INDIVIDUAL_ID } from '@/lib/term-categories';
 
+function getMonday(d: Date): string {
+  const x = new Date(d);
+  const dow = x.getDay();
+  x.setDate(x.getDate() - (dow === 0 ? 6 : dow - 1));
+  return x.toISOString().slice(0, 10);
+}
+
 async function movePredavanjeToAnotherTerm(formData: FormData) {
   'use server';
 
@@ -92,7 +99,7 @@ async function movePredavanjeToAnotherTerm(formData: FormData) {
   revalidatePath(`/dashboard/termin/${targetTermId}`);
   revalidatePath(`/dashboard/predavanje/${predavanjeId}`);
 
-  redirect(`/dashboard/termin/${targetTermId}`);
+  redirect(`/dashboard?week=${getMonday(new Date(targetDate + 'T12:00:00'))}`);
 }
 
 export default async function EditPredavanjePage({
