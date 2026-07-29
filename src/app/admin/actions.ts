@@ -744,6 +744,38 @@ export async function updateTermClassroomAsAdmin(termId: string, classroomId: st
   return {};
 }
 
+/**
+ * Eksplicitna zamena (swap) dva termina sa kalendara – bira se koje dimenzije se menjaju
+ * (termin=datum/slot, instruktor, učionica, klijent=cela radionica). Cela logika i validacija
+ * sudara je u Postgres funkciji swap_terms (037_swap_terms.sql), pošto zamena datuma/vremena
+ * između dva termina istog instruktora zahteva odloženu (deferred) proveru UNIQUE ograničenja
+ * unutar jedne transakcije – to nije izvodivo preko običnih .update() poziva iz JS-a.
+ */
+export async function swapTermsAsAdmin(
+  termAId: string,
+  termBId: string,
+  opts: { termin: boolean; instruktor: boolean; ucionica: boolean; klijent: boolean }
+): Promise<{ error?: string }> {
+  const { admin, error: authErr } = await requireAdmin();
+  if (authErr || !admin) return { error: authErr ?? 'Niste ovlašćeni.' };
+
+  const { error } = await admin.rpc('swap_terms', {
+    p_term_a: termAId,
+    p_term_b: termBId,
+    p_swap_termin: opts.termin,
+    p_swap_instruktor: opts.instruktor,
+    p_swap_ucionica: opts.ucionica,
+    p_swap_klijent: opts.klijent,
+  });
+  if (error) return { error: error.message || 'Greška pri zameni termina.' };
+
+  await syncSpilloverForTerm(admin, termAId);
+  await syncSpilloverForTerm(admin, termBId);
+
+  revalidatePath('/admin/kalendar');
+  return {};
+}
+
 export type TermTypeRow = { id: string; naziv: string; opis: string | null; cena_po_casu: number | null; program_id: string | null; trajanje_minuta: number };
 
 export async function getTermTypes(): Promise<TermTypeRow[]> {

@@ -1,10 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { createContext, useContext, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { TIME_SLOTS, AUTO_SPILLOVER_NAPOMENA } from '@/lib/constants';
 import Link from 'next/link';
-import { moveTermAsAdmin } from '@/app/admin/actions';
+import { moveTermAsAdmin, swapTermsAsAdmin } from '@/app/admin/actions';
 
 const DAY_NAMES = ['Pon', 'Uto', 'Sre', 'Čet', 'Pet', 'Sub', 'Ned'];
 
@@ -54,6 +54,28 @@ function isAutoSpillover(term: AdminTerm): boolean {
   return !!term.nastavak_of_term_id && term.napomena === AUTO_SPILLOVER_NAPOMENA && (term.predavanja ?? []).length === 0;
 }
 
+/** Kontekst za "Swap" mod – prosleđen direktno od AdminCalendarView do AdminCellContent, bez
+ * prljanja potpisa AdminWeekView/AdminDayView koji swap stanje ne koriste, samo ga prenose dalje. */
+type SwapContextValue = {
+  swapMode: boolean;
+  isSelected: (termId: string) => 'first' | 'second' | null;
+  onSelectTerm: (term: AdminTerm) => void;
+};
+const SwapContext = createContext<SwapContextValue>({
+  swapMode: false,
+  isSelected: () => null,
+  onSelectTerm: () => {},
+});
+
+function swapTermLabel(term: AdminTerm): string {
+  const d = new Date(term.date + 'T12:00:00');
+  const dateLabel = `${d.getDate()}.${d.getMonth() + 1}.`;
+  const time = TIME_SLOTS[term.slot_index] ?? `slot ${term.slot_index}`;
+  const instructorName = term.instructor ? `${term.instructor.ime} ${term.instructor.prezime}` : '—';
+  const classroomName = term.classroom?.naziv ?? 'bez učionice';
+  return `${dateLabel} ${time} · ${instructorName} · ${classroomName}`;
+}
+
 function getWeekDates(start: string): string[] {
   const dates: string[] = [];
   const d = new Date(start + 'T12:00:00');
@@ -101,6 +123,59 @@ export default function AdminCalendarView({
   const router = useRouter();
   const [draggedTermId, setDraggedTermId] = useState<string | null>(null);
 
+  const [swapMode, setSwapMode] = useState(false);
+  const [swapFields, setSwapFields] = useState({ termin: false, instruktor: false, ucionica: false, klijent: false });
+  const [swapFirst, setSwapFirst] = useState<{ termId: string; label: string } | null>(null);
+  const [swapSecond, setSwapSecond] = useState<{ termId: string; label: string } | null>(null);
+  const [swapLoading, setSwapLoading] = useState(false);
+  const [swapError, setSwapError] = useState('');
+
+  const resetSwapSelection = () => {
+    setSwapFirst(null);
+    setSwapSecond(null);
+    setSwapError('');
+  };
+
+  const toggleSwapMode = () => {
+    setSwapMode((v) => !v);
+    resetSwapSelection();
+  };
+
+  const onSelectTerm = (term: AdminTerm) => {
+    setSwapError('');
+    const label = swapTermLabel(term);
+    if (!swapFirst) {
+      setSwapFirst({ termId: term.id, label });
+      return;
+    }
+    if (term.id === swapFirst.termId) return;
+    if (!swapSecond) {
+      setSwapSecond({ termId: term.id, label });
+    }
+  };
+
+  const isSelected = (termId: string): 'first' | 'second' | null => {
+    if (swapFirst?.termId === termId) return 'first';
+    if (swapSecond?.termId === termId) return 'second';
+    return null;
+  };
+
+  const anyFieldChecked = swapFields.termin || swapFields.instruktor || swapFields.ucionica || swapFields.klijent;
+
+  const confirmSwap = async () => {
+    if (!swapFirst || !swapSecond || !anyFieldChecked) return;
+    setSwapLoading(true);
+    setSwapError('');
+    const res = await swapTermsAsAdmin(swapFirst.termId, swapSecond.termId, swapFields);
+    setSwapLoading(false);
+    if (res.error) {
+      setSwapError(res.error);
+      return;
+    }
+    resetSwapSelection();
+    router.refresh();
+  };
+
   const handleDrop = async (date: string, slot: number) => {
     if (!draggedTermId) return;
     const ok = window.confirm('Da li ste sigurni da želite da premestite ovaj termin na novi datum/vreme?');
@@ -117,8 +192,9 @@ export default function AdminCalendarView({
   const base = '/admin/kalendar';
   const linkSuffix = '';
 
+  let body: React.ReactNode;
   if (view === 'dan' && singleDay) {
-    return (
+    body = (
       <AdminDayView
         date={singleDay}
         terms={terms}
@@ -130,9 +206,8 @@ export default function AdminCalendarView({
         maxTerminaPoSlotu={maxTerminaPoSlotu}
       />
     );
-  }
-  if (view === 'mesec' && monthStart) {
-    return (
+  } else if (view === 'mesec' && monthStart) {
+    body = (
       <AdminMonthView
         monthStart={monthStart}
         terms={terms}
@@ -140,19 +215,123 @@ export default function AdminCalendarView({
         base={base}
       />
     );
+  } else {
+    body = (
+      <AdminWeekView
+        startOfWeek={startOfWeek}
+        terms={terms}
+        otkazaniTermini={otkazaniTermini}
+        linkSuffix={linkSuffix}
+        base={base}
+        draggedTermId={draggedTermId}
+        setDraggedTermId={setDraggedTermId}
+        onDropCell={handleDrop}
+        maxTerminaPoSlotu={maxTerminaPoSlotu}
+      />
+    );
   }
+
   return (
-    <AdminWeekView
-      startOfWeek={startOfWeek}
-      terms={terms}
-      otkazaniTermini={otkazaniTermini}
-      linkSuffix={linkSuffix}
-      base={base}
-      draggedTermId={draggedTermId}
-      setDraggedTermId={setDraggedTermId}
-      onDropCell={handleDrop}
-      maxTerminaPoSlotu={maxTerminaPoSlotu}
-    />
+    <SwapContext.Provider value={{ swapMode, isSelected, onSelectTerm }}>
+      <div className="mb-4 rounded-xl border border-stone-200 bg-white p-3">
+        <div className="flex items-center gap-3 flex-wrap">
+          <button
+            type="button"
+            onClick={toggleSwapMode}
+            className={`px-3 py-1.5 rounded-lg text-sm font-medium ${
+              swapMode ? 'bg-amber-600 text-white hover:bg-amber-700' : 'bg-stone-200 text-stone-700 hover:bg-stone-300'
+            }`}
+          >
+            {swapMode ? 'Swap: uključen' : 'Swap'}
+          </button>
+          {swapMode && (
+            <>
+              <div className="flex items-center gap-3 flex-wrap text-sm text-stone-700">
+                <label className="flex items-center gap-1.5">
+                  <input
+                    type="checkbox"
+                    checked={swapFields.termin}
+                    onChange={(e) => setSwapFields((f) => ({ ...f, termin: e.target.checked }))}
+                  />
+                  Termin
+                </label>
+                <label className="flex items-center gap-1.5">
+                  <input
+                    type="checkbox"
+                    checked={swapFields.instruktor}
+                    onChange={(e) => setSwapFields((f) => ({ ...f, instruktor: e.target.checked }))}
+                  />
+                  Instruktor
+                </label>
+                <label className="flex items-center gap-1.5">
+                  <input
+                    type="checkbox"
+                    checked={swapFields.ucionica}
+                    onChange={(e) => setSwapFields((f) => ({ ...f, ucionica: e.target.checked }))}
+                  />
+                  Učionica
+                </label>
+                <label className="flex items-center gap-1.5">
+                  <input
+                    type="checkbox"
+                    checked={swapFields.klijent}
+                    onChange={(e) => setSwapFields((f) => ({ ...f, klijent: e.target.checked }))}
+                  />
+                  Klijent
+                </label>
+              </div>
+              <button
+                type="button"
+                onClick={confirmSwap}
+                disabled={!swapFirst || !swapSecond || !anyFieldChecked || swapLoading}
+                className="px-3 py-1.5 rounded-lg text-sm font-medium bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {swapLoading ? 'Zamenjujem…' : 'Potvrdi zamenu'}
+              </button>
+              <button
+                type="button"
+                onClick={resetSwapSelection}
+                className="px-3 py-1.5 rounded-lg text-sm font-medium bg-stone-100 text-stone-600 hover:bg-stone-200"
+              >
+                Otkaži izbor
+              </button>
+            </>
+          )}
+        </div>
+        {swapMode && (
+          <div className="mt-2 flex flex-wrap items-center gap-3 text-sm">
+            <div className="flex items-center gap-2">
+              <span className="text-stone-500">Prvi termin:</span>
+              {swapFirst ? (
+                <span className="rounded-lg bg-amber-50 border border-amber-300 px-2 py-1 text-stone-800">
+                  {swapFirst.label}{' '}
+                  <button type="button" onClick={() => setSwapFirst(null)} className="ml-1 text-amber-700 underline">
+                    Izmeni
+                  </button>
+                </span>
+              ) : (
+                <span className="text-stone-400">kliknite termin na kalendaru</span>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-stone-500">Drugi termin:</span>
+              {swapSecond ? (
+                <span className="rounded-lg bg-amber-50 border border-amber-300 px-2 py-1 text-stone-800">
+                  {swapSecond.label}{' '}
+                  <button type="button" onClick={() => setSwapSecond(null)} className="ml-1 text-amber-700 underline">
+                    Izmeni
+                  </button>
+                </span>
+              ) : (
+                <span className="text-stone-400">kliknite termin na kalendaru</span>
+              )}
+            </div>
+          </div>
+        )}
+        {swapMode && swapError && <p className="mt-2 text-sm text-red-600">{swapError}</p>}
+      </div>
+      {body}
+    </SwapContext.Provider>
   );
 }
 
@@ -175,6 +354,7 @@ function AdminCellContent({
   onDropCell: (date: string, slot: number) => void | Promise<void>;
   maxTerminaPoSlotu: number;
 }) {
+  const swap = useContext(SwapContext);
   const newTermHref = `/admin/termin/novi?date=${emptyDate}&slot=${emptySlot}`;
   const newTestHref = `${newTermHref}&cat=testing`;
   const slotCount = termsInSlot.length;
@@ -259,16 +439,25 @@ function AdminCellContent({
         const tcRaw = term.term_category;
         const isTesting = Array.isArray(tcRaw) ? (tcRaw as {is_testing: boolean}[])[0]?.is_testing === true : tcRaw?.is_testing === true;
         const potentialClients = term.potential_clients ?? [];
+        const swapSelected = swap.isSelected(term.id);
 
         return (
           <Link
             key={term.id}
             href={`/admin/termin/${term.id}`}
-            className="block rounded-lg border-2 p-2 text-sm transition-opacity hover:opacity-90"
+            className={`block rounded-lg border-2 p-2 text-sm transition-opacity hover:opacity-90${
+              swapSelected ? ' ring-2 ring-offset-1 ring-amber-500' : ''
+            }`}
             style={{ borderColor: classroomColor, backgroundColor: bg, color: instructorColor }}
-            draggable
-            onDragStart={() => setDraggedTermId(term.id)}
+            draggable={!swap.swapMode}
+            onDragStart={() => !swap.swapMode && setDraggedTermId(term.id)}
             onDragEnd={() => setDraggedTermId(null)}
+            onClick={(e) => {
+              if (swap.swapMode) {
+                e.preventDefault();
+                swap.onSelectTerm(term);
+              }
+            }}
           >
             <span className="font-medium">{instructorName}</span>
             <span className="ml-1 text-[0.7rem] uppercase tracking-wide opacity-80">
