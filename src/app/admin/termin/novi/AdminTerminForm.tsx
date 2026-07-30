@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
+import toast from 'react-hot-toast';
 import { createTermAsAdmin, createPredavanjeAsAdmin, getTakenForSlot, getTermsForNastavak } from '../../actions';
 import type { TermForNastavak } from '../../actions';
 import GrupniKlijentiPicker from '@/components/GrupniKlijentiPicker';
@@ -112,6 +113,8 @@ export default function AdminTerminForm({
     () => pickDefaultClassroom(classrooms, initialTakenClassroomIds)
   );
   const [termTypeId, setTermTypeId] = useState(() => findDefaultCitanjeTermTypeId(termTypes) ?? termTypes[0]?.id ?? '');
+  /** 0 = samo za danas (default). Ponavlja se svaki naredni kalendarski dan (ne isti dan u nedelji). */
+  const [repeatDays, setRepeatDays] = useState(0);
   const selectedProgramId = termTypes.find((tt) => tt.id === termTypeId)?.program_id ?? null;
   const completedIds = useMemo(() => {
     if (!selectedProgramId) return new Set<string>();
@@ -224,8 +227,8 @@ export default function AdminTerminForm({
         return;
       }
 
+      const idsToAdd = (isNastavakCat || allowsMultipleClients) ? grupniIds : [clientId];
       if (!isTestingCat) {
-        const idsToAdd = (isNastavakCat || allowsMultipleClients) ? grupniIds : [clientId];
         for (const cid of idsToAdd) {
           const predavanjeResult = await createPredavanjeAsAdmin(
             termResult.termId,
@@ -236,6 +239,32 @@ export default function AdminTerminForm({
             (!isNastavakCat && termTypeId) ? termTypeId : null
           );
           if (predavanjeResult.error) { setError(predavanjeResult.error); return; }
+        }
+      }
+
+      // "Zakaži isti termin i narednih N dana" – samo za obične (ne testiranje/nastavak) termine.
+      // Svaki naredni dan je nezavisan slot (drugi datum), pa se kreiraju paralelno.
+      const effectiveRepeatDays = !isTestingCat && !isNastavakCat ? repeatDays : 0;
+      if (effectiveRepeatDays > 0) {
+        const results = await Promise.all(
+          Array.from({ length: effectiveRepeatDays }, (_, idx) => idx + 1).map(async (offset) => {
+            const d = new Date(date + 'T12:00:00');
+            d.setDate(d.getDate() + offset);
+            const dStr = d.toISOString().slice(0, 10);
+            const res = await createTermAsAdmin(instructorId, dStr, slotIndex, classroomId, termCategoryId, termNapomena.trim() || null, null);
+            if (res.error || !res.termId) return { dStr, error: res.error ?? 'Greška pri kreiranju termina.' };
+            for (const cid of idsToAdd) {
+              const pr = await createPredavanjeAsAdmin(res.termId, cid, false, false, null, termTypeId || null);
+              if (pr.error) return { dStr, error: pr.error };
+            }
+            return { dStr, error: null as string | null };
+          })
+        );
+        const failed = results.filter((r) => r.error);
+        if (failed.length > 0) {
+          toast.error(`Nije zakazano za: ${failed.map((f) => `${f.dStr} (${f.error})`).join('; ')}`);
+        } else {
+          toast.success(`Zakazano i za narednih ${effectiveRepeatDays} dana.`);
         }
       }
 
@@ -522,6 +551,26 @@ export default function AdminTerminForm({
           )}
         </div>
       ) : null}
+
+      {!isTestingCat && !isNastavakCat && (
+        <div>
+          <label className="block text-sm font-medium text-stone-700 mb-1">
+            Zakaži isti termin i narednih
+          </label>
+          <div className="flex items-center gap-2">
+            <input
+              type="number"
+              min={0}
+              max={60}
+              value={repeatDays}
+              onChange={(e) => setRepeatDays(Math.max(0, Math.min(60, parseInt(e.target.value, 10) || 0)))}
+              className="w-20 rounded-lg border border-stone-300 px-3 py-2 text-stone-800"
+            />
+            <span className="text-sm text-stone-600">dana (uzastopnih kalendarskih dana, ne isti dan u nedelji)</span>
+          </div>
+          <p className="text-xs text-stone-500 mt-1">0 = samo za izabrani datum. Isti instruktor/učionica/dete/vrsta časa, svaki naredni dan.</p>
+        </div>
+      )}
 
       {error && (
         <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>
