@@ -26,7 +26,7 @@ export default async function NoviPredavanjePage({
 
   if (!term) notFound();
 
-  const [predRes, maxCasova, termTypes, termCategoriesAll, classrooms, termsInSlotRes, termWithCatRes] = await Promise.all([
+  const [predRes, maxCasova, termTypes, termCategories, classrooms, termsInSlotRes, termWithCatRes] = await Promise.all([
     admin.from('predavanja').select('*', { count: 'exact', head: true }).eq('term_id', termId),
     getMaxCasovaPoTerminu(),
     getTermTypes(),
@@ -35,7 +35,6 @@ export default async function NoviPredavanjePage({
     admin.from('terms').select('classroom_id').eq('date', term.date).eq('slot_index', term.slot_index).neq('id', termId),
     admin.from('terms').select('term_categories(jedan_klijent_po_terminu)').eq('id', termId).single(),
   ]);
-  const termCategories = termCategoriesAll.filter((c) => !c.is_testing);
   const currentCount = predRes.count ?? 0;
   const tc = termWithCatRes.data?.term_categories as
     | { jedan_klijent_po_terminu?: boolean }
@@ -48,25 +47,19 @@ export default async function NoviPredavanjePage({
   const termsInSlot = termsInSlotRes.data ?? [];
   const takenClassroomIds = termsInSlot.map((t: { classroom_id: string | null }) => t.classroom_id).filter((id: string | null): id is string => id != null);
 
-  const { data: clientLinks } = await admin
-    .from('instructor_clients')
-    .select('client:clients(id, ime, prezime, godiste, datum_testiranja)')
-    .eq('instructor_id', instructor.id);
-  type ClientLinkRow = { id: string; ime: string; prezime: string; godiste: number | null; datum_testiranja: string | null };
-  const clients: { id: string; ime: string; prezime: string; godiste: number | null; datumTestiranja: string | null }[] = (
-    (clientLinks ?? []).map((r) => r.client).filter(Boolean) as unknown as ClientLinkRow[]
-  )
-    .map((c) => ({
-      id: c.id,
-      ime: c.ime ?? '',
-      prezime: c.prezime ?? '',
-      godiste: c.godiste ?? null,
-      datumTestiranja: c.datum_testiranja ?? null,
-    }))
-    .sort((a, b) =>
-      (a.ime ?? '').localeCompare(b.ime ?? '', 'sr') ||
-      (a.prezime ?? '').localeCompare(b.prezime ?? '', 'sr')
-    );
+  // Svi klijenti – instruktor vidi sve, isto kao na stranici Klijenti (ne samo one iz instructor_clients).
+  const { data: allClients } = await admin
+    .from('clients')
+    .select('id, ime, prezime, godiste, datum_testiranja')
+    .order('ime')
+    .order('prezime');
+  const clients = (allClients ?? []).map((c) => ({
+    id: c.id,
+    ime: c.ime ?? '',
+    prezime: c.prezime ?? '',
+    godiste: c.godiste ?? null,
+    datumTestiranja: c.datum_testiranja ?? null,
+  }));
 
   const [stanjeMap, completedMap] = await Promise.all([
     getStanjePoVrstamaZaKlijenteBatch(clients.map((c) => c.id), instructor.id),
