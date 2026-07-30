@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { TIME_SLOTS, AUTO_SPILLOVER_NAPOMENA } from '@/lib/constants';
 import Link from 'next/link';
-import { moveTermAsAdmin, swapTermsAsAdmin, deleteOtkazaniTermin } from '@/app/admin/actions';
+import { moveTermAsAdmin, swapTermsAsAdmin, copyTermAsAdmin, deleteOtkazaniTermin } from '@/app/admin/actions';
 
 const DAY_NAMES = ['Pon', 'Uto', 'Sre', 'Čet', 'Pet', 'Sub', 'Ned'];
 
@@ -55,7 +55,7 @@ function isAutoSpillover(term: AdminTerm): boolean {
   return !!term.nastavak_of_term_id && term.napomena === AUTO_SPILLOVER_NAPOMENA && (term.predavanja ?? []).length === 0;
 }
 
-/** Kontekst za "Swap" mod i akcije nad otkazanim terminima – prosleđen direktno od
+/** Kontekst za "Swap"/"Copy" mod i akcije nad otkazanim terminima – prosleđen direktno od
  * AdminCalendarView do AdminCellContent, bez prljanja potpisa AdminWeekView/AdminDayView koji ovo
  * stanje ne koriste, samo ga prenose dalje. */
 type SwapContextValue = {
@@ -63,12 +63,20 @@ type SwapContextValue = {
   isSelected: (termId: string) => 'first' | 'second' | null;
   onSelectTerm: (term: AdminTerm) => void;
   onDeleteOtkazani: (id: string) => void;
+  copyMode: boolean;
+  copySourceId: string | null;
+  onSelectCopySource: (term: AdminTerm) => void;
+  onSelectCopyTarget: (date: string, slot: number) => void;
 };
 const SwapContext = createContext<SwapContextValue>({
   swapMode: false,
   isSelected: () => null,
   onSelectTerm: () => {},
   onDeleteOtkazani: () => {},
+  copyMode: false,
+  copySourceId: null,
+  onSelectCopySource: () => {},
+  onSelectCopyTarget: () => {},
 });
 
 type SwapFields = { termin: boolean; instruktor: boolean; ucionica: boolean; klijent: boolean };
@@ -194,9 +202,54 @@ export default function AdminCalendarView({
     setSwapSecond(null);
   };
 
+  const [copyMode, setCopyMode] = useState(false);
+  const [copySource, setCopySource] = useState<{ termId: string; label: string } | null>(null);
+  const [copyLoading, setCopyLoading] = useState(false);
+
+  // Swap i Copy su međusobno isključivi – uključivanje jednog gasi drugi da klikovi na kalendaru
+  // ne budu dvosmisleni.
   const toggleSwapMode = () => {
-    setSwapMode((v) => !v);
+    setSwapMode((v) => {
+      const next = !v;
+      if (next) {
+        setCopyMode(false);
+        setCopySource(null);
+      }
+      return next;
+    });
     resetSwapSelection();
+  };
+
+  const toggleCopyMode = () => {
+    setCopyMode((v) => {
+      const next = !v;
+      if (next) {
+        setSwapMode(false);
+        resetSwapSelection();
+      }
+      return next;
+    });
+    setCopySource(null);
+  };
+
+  const onSelectCopySource = (term: AdminTerm) => {
+    setCopySource({ termId: term.id, label: swapTermLabel(term) });
+  };
+
+  const onSelectCopyTarget = async (date: string, slot: number) => {
+    if (!copySource) return;
+    const sourceId = copySource.termId;
+    setCopySource(null);
+    setCopyMode(false);
+    setCopyLoading(true);
+    const res = await copyTermAsAdmin(sourceId, date, slot);
+    setCopyLoading(false);
+    if (res.error) {
+      toast.error(res.error);
+    } else {
+      toast.success('Termin kopiran.');
+    }
+    if (res.termId) router.refresh();
   };
 
   const onSelectTerm = (term: AdminTerm) => {
@@ -296,7 +349,18 @@ export default function AdminCalendarView({
   }
 
   return (
-    <SwapContext.Provider value={{ swapMode, isSelected, onSelectTerm, onDeleteOtkazani: handleDeleteOtkazani }}>
+    <SwapContext.Provider
+      value={{
+        swapMode,
+        isSelected,
+        onSelectTerm,
+        onDeleteOtkazani: handleDeleteOtkazani,
+        copyMode,
+        copySourceId: copySource?.termId ?? null,
+        onSelectCopySource,
+        onSelectCopyTarget,
+      }}
+    >
       <div className="mb-4 rounded-xl border border-stone-200 bg-white p-3">
         <div className="flex items-center gap-3 flex-wrap">
           <button
@@ -308,6 +372,16 @@ export default function AdminCalendarView({
           >
             {swapMode ? 'Swap: uključen' : 'Swap'}
           </button>
+          <button
+            type="button"
+            onClick={toggleCopyMode}
+            className={`px-3 py-1.5 rounded-lg text-sm font-medium ${
+              copyMode ? 'bg-amber-600 text-white hover:bg-amber-700' : 'bg-stone-200 text-stone-700 hover:bg-stone-300'
+            }`}
+          >
+            {copyMode ? 'Copy: uključen' : 'Copy'}
+          </button>
+          {copyLoading && <span className="text-sm text-stone-500">Kopiram…</span>}
           {swapMode && (
             <>
               <div className="flex items-center gap-3 flex-wrap text-sm text-stone-700">
@@ -392,6 +466,28 @@ export default function AdminCalendarView({
             </div>
           </div>
         )}
+        {copyMode && (
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
+            <span className="text-stone-500">Kopiraj iz:</span>
+            {copySource ? (
+              <>
+                <span className="rounded-lg bg-amber-50 border border-amber-300 px-2 py-1 text-stone-800">
+                  {copySource.label}
+                </span>
+                <span className="text-stone-400">kliknite prazan (ili slobodan) slot da kopirate termin tamo</span>
+                <button
+                  type="button"
+                  onClick={() => setCopySource(null)}
+                  className="px-3 py-1.5 rounded-lg text-sm font-medium bg-stone-100 text-stone-600 hover:bg-stone-200"
+                >
+                  Otkaži izbor
+                </button>
+              </>
+            ) : (
+              <span className="text-stone-400">kliknite termin na kalendaru koji želite da kopirate</span>
+            )}
+          </div>
+        )}
       </div>
       {body}
     </SwapContext.Provider>
@@ -457,7 +553,15 @@ function AdminCellContent({
       <div className="space-y-1">
         <Link
           href={newTermHref}
-          className="block rounded-lg border border-dashed border-stone-200 p-2 text-stone-400 hover:border-amber-400 hover:bg-amber-50/50 min-h-[52px]"
+          className={`block rounded-lg border border-dashed border-stone-200 p-2 text-stone-400 hover:border-amber-400 hover:bg-amber-50/50 min-h-[52px]${
+            swap.copyMode ? ' ring-2 ring-offset-1 ring-amber-300' : ''
+          }`}
+          onClick={(e) => {
+            if (swap.copyMode) {
+              e.preventDefault();
+              swap.onSelectCopyTarget(emptyDate, emptySlot);
+            }
+          }}
           onDragOver={(e) => {
             if (draggedTermId) e.preventDefault();
           }}
@@ -466,7 +570,7 @@ function AdminCellContent({
             if (draggedTermId) onDropCell(emptyDate, emptySlot);
           }}
         >
-          +
+          {swap.copyMode ? 'Kopiraj ovde' : '+'}
         </Link>
         <Link
           href={newTestHref}
@@ -516,22 +620,26 @@ function AdminCellContent({
         const isTesting = Array.isArray(tcRaw) ? (tcRaw as {is_testing: boolean}[])[0]?.is_testing === true : tcRaw?.is_testing === true;
         const potentialClients = term.potential_clients ?? [];
         const swapSelected = swap.isSelected(term.id);
+        const copySelected = swap.copySourceId === term.id;
 
         return (
           <Link
             key={term.id}
             href={`/admin/termin/${term.id}`}
             className={`block rounded-lg border-2 p-2 text-sm transition-opacity hover:opacity-90${
-              swapSelected ? ' ring-2 ring-offset-1 ring-amber-500' : ''
+              swapSelected || copySelected ? ' ring-2 ring-offset-1 ring-amber-500' : ''
             }`}
             style={{ borderColor: classroomColor, backgroundColor: bg, color: instructorColor }}
-            draggable={!swap.swapMode}
-            onDragStart={() => !swap.swapMode && setDraggedTermId(term.id)}
+            draggable={!swap.swapMode && !swap.copyMode}
+            onDragStart={() => !swap.swapMode && !swap.copyMode && setDraggedTermId(term.id)}
             onDragEnd={() => setDraggedTermId(null)}
             onClick={(e) => {
               if (swap.swapMode) {
                 e.preventDefault();
                 swap.onSelectTerm(term);
+              } else if (swap.copyMode) {
+                e.preventDefault();
+                swap.onSelectCopySource(term);
               }
             }}
           >
@@ -590,9 +698,17 @@ function AdminCellContent({
         <>
           <Link
             href={newTermHref}
-            className="block rounded-lg border border-dashed border-stone-200 p-1.5 text-stone-500 hover:border-amber-400 hover:bg-amber-50/50 hover:text-amber-800 text-xs text-center"
+            className={`block rounded-lg border border-dashed border-stone-200 p-1.5 text-stone-500 hover:border-amber-400 hover:bg-amber-50/50 hover:text-amber-800 text-xs text-center${
+              swap.copyMode ? ' ring-2 ring-offset-1 ring-amber-300' : ''
+            }`}
+            onClick={(e) => {
+              if (swap.copyMode) {
+                e.preventDefault();
+                swap.onSelectCopyTarget(emptyDate, emptySlot);
+              }
+            }}
           >
-            + Dodaj još termin u ovom slotu ({slotCount}/{maxTerminaPoSlotu})
+            {swap.copyMode ? 'Kopiraj ovde' : `+ Dodaj još termin u ovom slotu (${slotCount}/${maxTerminaPoSlotu})`}
           </Link>
           <Link
             href={newTestHref}

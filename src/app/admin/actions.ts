@@ -779,6 +779,63 @@ export async function swapTermsAsAdmin(
   return {};
 }
 
+/**
+ * Kopira termin (instruktor, učionica, kategorija, napomena) i sve njegove radionice (klijent,
+ * vrsta časa, komentar) na prazan slot – odrzano/placeno se NE prenose (nova radionica se još nije
+ * desala). Cilja samo prazne slotove (za razliku od swap-a nema šta da se zameni), pa se ponovo
+ * koriste već validirane funkcije createTermAsAdmin/createPredavanjeAsAdmin umesto duplirane provere.
+ */
+export async function copyTermAsAdmin(
+  sourceTermId: string,
+  targetDate: string,
+  targetSlot: number
+): Promise<{ error?: string; termId?: string }> {
+  const { admin, error: authErr } = await requireAdmin();
+  if (authErr || !admin) return { error: authErr ?? 'Niste ovlašćeni.' };
+
+  const { data: source } = await admin
+    .from('terms')
+    .select('instructor_id, classroom_id, term_category_id, napomena, nastavak_of_term_id')
+    .eq('id', sourceTermId)
+    .single();
+  if (!source) return { error: 'Termin za kopiranje nije pronađen.' };
+  if (source.nastavak_of_term_id) {
+    return { error: 'Automatski blok (nastavak dužeg časa) nije moguće kopirati – izaberite pravi termin.' };
+  }
+
+  const { data: preds } = await admin
+    .from('predavanja')
+    .select('client_id, term_type_id, komentar')
+    .eq('term_id', sourceTermId);
+  if (!preds || preds.length === 0) {
+    return { error: 'Ovaj termin nema nijednu radionicu za kopiranje.' };
+  }
+
+  const createRes = await createTermAsAdmin(
+    source.instructor_id,
+    targetDate,
+    targetSlot,
+    source.classroom_id,
+    source.term_category_id,
+    source.napomena
+  );
+  if (createRes.error || !createRes.termId) return { error: createRes.error ?? 'Greška pri kreiranju termina.' };
+  const newTermId = createRes.termId;
+
+  let firstError: string | null = null;
+  let successCount = 0;
+  for (const p of preds) {
+    const res = await createPredavanjeAsAdmin(newTermId, p.client_id, false, false, p.komentar, p.term_type_id);
+    if (res.error) firstError = firstError ?? res.error;
+    else successCount += 1;
+  }
+
+  revalidatePath('/admin/kalendar');
+  if (successCount === 0) return { error: firstError ?? 'Kopiranje nije uspelo.' };
+  if (firstError) return { termId: newTermId, error: `Kopirano ${successCount}/${preds.length} – ${firstError}` };
+  return { termId: newTermId };
+}
+
 export type TermTypeRow = { id: string; naziv: string; opis: string | null; cena_po_casu: number | null; program_id: string | null; trajanje_minuta: number };
 
 export async function getTermTypes(): Promise<TermTypeRow[]> {
