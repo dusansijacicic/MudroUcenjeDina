@@ -18,17 +18,20 @@ export default function AdminUputstvoPage() {
       <RoleBlock
         title="Admin (super admin)"
         badgeClass="bg-amber-600 text-white"
-        intro="Pun pristup administraciji i podacima cele škole/centra. Ulogovan na /admin."
+        intro="Pun pristup administraciji i podacima cele škole/centra. Ulogovan na /admin. Sve što ume predavač, ume i admin – plus sledeće:"
         items={[
-          'Instruktori: pregled, dodavanje novih instruktora (vezivanje na Auth nalog).',
-          'Klijenti (deca): pregled svih, izmena svih podataka, uključujući popust (%), datum testiranja, napomenu.',
-          'Evidencija uplata: unos i pregled uplata (po instruktoru, klijentu, vrsti časa).',
-          'Vrste časova i Kategorije termina: CRUD (cene, tip časa; „jedno dete“ vs grupa u terminu).',
-          'Učionice: dodavanje i izmena učionica (boje, nazivi).',
-          'Kalendar: pregled termina; zakazivanje termina u ime bilo kog instruktora (+ radionice).',
+          'Kalendar (početna posle prijave): pregled svih termina svih instruktora, zakazivanje u ime bilo kog instruktora, "+ Testiranje" prečica na praznom slotu.',
+          'Swap mod na kalendaru: čekira se šta se menja (Termin/Instruktor/Učionica/Klijent), klikne se prvi pa drugi termin, "Potvrdi zamenu" – radi trenutno (optimistički), server potvrđuje u pozadini. Samo admin ima ovaj mod.',
+          'Otkazani (sivi) termini na kalendaru: admin ih može trajno obrisati sa kalendara (✕ na kartici) – predavač ih samo vidi.',
+          'Testiranje: kreira termin za testiranje, upisuje potencijalne klijente (ime, roditelj, telefon), kasnije ih prebacuje u pravog klijenta iz Admin → Testiranja.',
+          'Klijenti: pregled i izmena svih, uključujući popust (%), datum testiranja, godište, napomenu; koje Programe i Vrste termina dete pohađa i da li je završeno (koristi se za automatsko sakrivanje "završene" dece iz pretrage).',
+          'Instruktori (Predavači): pregled, dodavanje novih (vezivanje na Auth nalog), izmena.',
+          'Evidencija uplata: unos i pregled uplata svih instruktora (po instruktoru, klijentu, vrsti časa).',
+          'Programi, Vrste termina i Kategorije termina: CRUD (cene, trajanje časa u minutima – duži čas automatski blokira i naredni slot, "jedno dete" vs grupa u terminu, kategorija Testiranje).',
+          'Učionice: dodavanje i izmena (boje, nazivi).',
           'Podešavanja: maks. broj radionica po terminu, maks. broj termina u istom vremenskom slotu.',
-          'Može otkazati termine, menjati meta podatke termina (kategorija, napomena) i radionice u admin prikazu.',
-          'Pregled „kao instruktor“ (view) ako koristite te linkove – i dalje admin nalog.',
+          'Otkazivanje/brisanje termina, izmena meta podataka termina (kategorija, napomena) i bilo koje radionice.',
+          'Pregled "kao instruktor" (Admin → Predavači → dugme "Pregled →" kod željenog instruktora) – i dalje admin nalog.',
           'Kad se u kodu doda nova SQL migracija (npr. nova kolona ili indeks za brzinu), treba je ručno pokrenuti u Supabase SQL Editoru – koraci su u fajlu KAKO_POKRENUTI_SQL.md u repozitorijumu.',
         ]}
       />
@@ -36,16 +39,17 @@ export default function AdminUputstvoPage() {
       <RoleBlock
         title="Predavač (instruktor)"
         badgeClass="bg-stone-700 text-white"
-        intro="Ulogovan na /dashboard (ne vidi /admin meni). Vidi samo svoje termine i klijente sa kojima je povezan."
+        intro="Ulogovan na /dashboard (ne vidi /admin meni). Kalendar mu pokazuje samo NJEGOVE termine, ali klijente (decu) vidi SVE – iste kao admin."
         items={[
-          'Kalendar / dashboard: svoj nedeljni raspored, termini gde je on predavač.',
-          'Termini: dodavanje radionica (dece) u svoj termin, izmena održano/plaćeno/komentar, otkazivanje svog termina gde je dozvoljeno.',
-          'Kategorija termina i napomena termina: može menjati u okviru forme radionice ili na stranici termina (napomena).',
-          'Klijenti: lista „Moji klijenti“ – samo oni u vezi preko sistema (instructor–klijent). Može dodati novog klijenta i vezati ga za sebe, menjati podatke tih klijenata (uključujući napomenu). Ne menja admin-only polja kao što je popust na nivou klijenta (to radi admin).',
+          'Kalendar / dashboard (početna): svoj nedeljni raspored; termin se može prevući (drag & drop) u drugi slot, ili premestiti dugmetom "Premesti u drugi termin" na stranici radionice.',
+          'Zakazivanje: novi termin ili radionica u postojećem terminu, biranje bilo kog klijenta iz cele baze (ne samo "svojih").',
+          'Termini: dodavanje/izmena radionica (dece) u svom terminu, izmena održano/plaćeno/komentar, izmena kategorije i napomene termina, izmena učionice.',
+          'Otkazivanje: može trajno otkazati (obrisati) sopstveni termin – ostaje samo istorijski zapis, sivo na kalendaru.',
+          'Klijenti: vidi i može menjati podatke svih klijenata (uključujući napomenu), dodati novog klijenta. Ne menja admin-only polje popust (%) – to radi samo admin.',
           'Zahtevi: obrađuje zahteve učenika za čas (potvrda, promena termina, odbijanje).',
-          'Uplate: može unositi evidenciju uplata za sebe (ako je omogućeno u vašoj konfiguraciji).',
-          'Podešavanja (dashboard): nedeljna dostupnost i periodi – šta učenik vidi pri „Zatraži termin“.',
-          'Ne sme: pristupiti admin stranicama, menjati tuđe instruktore, globalna podešavanja, brisati bilo kog klijenta van svoje liste bez admin prava.',
+          'Uplate: unosi evidenciju uplata (za bilo kog klijenta).',
+          'Podešavanja (dashboard): nedeljna dostupnost i periodi – šta učenik vidi pri "Zatraži termin".',
+          'Ne sme: pristupiti admin stranicama (/admin), Swap modu na kalendaru, brisati otkazane termine sa kalendara, menjati druge instruktore ili globalna podešavanja.',
         ]}
       />
 
