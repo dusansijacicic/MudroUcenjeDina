@@ -22,6 +22,8 @@ export default function AdminUputstvoPage() {
         items={[
           'Kalendar (početna posle prijave): pregled svih termina svih instruktora, zakazivanje u ime bilo kog instruktora, "+ Testiranje" prečica na praznom slotu.',
           'Swap mod na kalendaru: čekira se šta se menja (Termin/Instruktor/Učionica/Klijent), klikne se prvi pa drugi termin, "Potvrdi zamenu" – radi trenutno (optimistički), server potvrđuje u pozadini. Samo admin ima ovaj mod.',
+          'Copy mod na kalendaru: klikne se termin za kopiranje, pa prazan (ili slobodan) slot – kopira se instruktor/učionica/kategorija i sve radionice (dete, vrsta časa), održano/plaćeno se ne prenose. Samo admin.',
+          'Zakazivanje: opciono polje "i narednih N dana" – zakaže isti termin (isti instruktor/učionica/dete/vrsta) i za narednih N uzastopnih kalendarskih dana odjednom.',
           'Otkazani (sivi) termini na kalendaru: admin ih može trajno obrisati sa kalendara (✕ na kartici) – predavač ih samo vidi.',
           'Testiranje: kreira termin za testiranje, upisuje potencijalne klijente (ime, roditelj, telefon), kasnije ih prebacuje u pravog klijenta iz Admin → Testiranja.',
           'Klijenti: pregled i izmena svih, uključujući popust (%), datum testiranja, godište, napomenu; koje Programe i Vrste termina dete pohađa i da li je završeno (koristi se za automatsko sakrivanje "završene" dece iz pretrage).',
@@ -49,7 +51,7 @@ export default function AdminUputstvoPage() {
           'Zahtevi: obrađuje zahteve učenika za čas (potvrda, promena termina, odbijanje).',
           'Uplate: unosi evidenciju uplata (za bilo kog klijenta).',
           'Podešavanja (dashboard): nedeljna dostupnost i periodi – šta učenik vidi pri "Zatraži termin".',
-          'Ne sme: pristupiti admin stranicama (/admin), Swap modu na kalendaru, brisati otkazane termine sa kalendara, menjati druge instruktore ili globalna podešavanja.',
+          'Ne sme: pristupiti admin stranicama (/admin), Swap/Copy modu na kalendaru, brisati otkazane termine sa kalendara, menjati druge instruktore ili globalna podešavanja.',
         ]}
       />
 
