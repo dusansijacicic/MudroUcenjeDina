@@ -132,30 +132,26 @@ export default async function EditPredavanjePage({
   };
   const slotLabel = TIME_SLOTS[term.slot_index] ?? '—';
 
-  const { data: linkRows } = await admin
-    .from('instructor_clients')
-    .select('client:clients(id, ime, prezime, godiste, datum_testiranja)')
-    .eq('instructor_id', instructor.id);
-  type ClientLinkRow = { id: string; ime: string; prezime: string; godiste: number | null; datum_testiranja: string | null };
-  const clients = ((linkRows ?? []).map((r) => r.client).filter(Boolean) as unknown as ClientLinkRow[]).map((c) => ({
+  // Svi klijenti – instruktor vidi sve, isto kao na stranici Klijenti (ne samo one iz instructor_clients).
+  const { data: allClients } = await admin
+    .from('clients')
+    .select('id, ime, prezime, godiste, datum_testiranja')
+    .order('ime')
+    .order('prezime');
+  const clients = (allClients ?? []).map((c) => ({
     id: c.id,
     ime: c.ime ?? '',
     prezime: c.prezime ?? '',
     godiste: c.godiste ?? null,
     datumTestiranja: c.datum_testiranja ?? null,
   }));
-  clients.sort(
-    (a, b) =>
-      (a.ime ?? '').localeCompare(b.ime ?? '', 'sr') || (a.prezime ?? '').localeCompare(b.prezime ?? '', 'sr')
-  );
-  const [termTypes, termCategoriesAll, classrooms, termsInSlotRes, completedMap] = await Promise.all([
+  const [termTypes, termCategories, classrooms, termsInSlotRes, completedMap] = await Promise.all([
     getTermTypes(),
     getTermCategories(),
     getClassrooms(),
     admin.from('terms').select('classroom_id').eq('date', term.date).eq('slot_index', term.slot_index).neq('id', term.id),
     getAllClientsCompletedProgramIds(),
   ]);
-  const termCategories = termCategoriesAll.filter((c) => !c.is_testing);
   const termsInSlot = termsInSlotRes.data ?? [];
   const takenClassroomIds = termsInSlot.map((t: { classroom_id: string | null }) => t.classroom_id).filter((id: string | null): id is string => id != null);
   const stanjeMap = await getStanjePoVrstamaZaKlijenteBatch(clients.map((c) => c.id), instructor.id);
