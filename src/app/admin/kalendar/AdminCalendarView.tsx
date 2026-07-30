@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { TIME_SLOTS, AUTO_SPILLOVER_NAPOMENA } from '@/lib/constants';
 import Link from 'next/link';
-import { moveTermAsAdmin, swapTermsAsAdmin } from '@/app/admin/actions';
+import { moveTermAsAdmin, swapTermsAsAdmin, deleteOtkazaniTermin } from '@/app/admin/actions';
 
 const DAY_NAMES = ['Pon', 'Uto', 'Sre', 'Čet', 'Pet', 'Sub', 'Ned'];
 
@@ -55,17 +55,20 @@ function isAutoSpillover(term: AdminTerm): boolean {
   return !!term.nastavak_of_term_id && term.napomena === AUTO_SPILLOVER_NAPOMENA && (term.predavanja ?? []).length === 0;
 }
 
-/** Kontekst za "Swap" mod – prosleđen direktno od AdminCalendarView do AdminCellContent, bez
- * prljanja potpisa AdminWeekView/AdminDayView koji swap stanje ne koriste, samo ga prenose dalje. */
+/** Kontekst za "Swap" mod i akcije nad otkazanim terminima – prosleđen direktno od
+ * AdminCalendarView do AdminCellContent, bez prljanja potpisa AdminWeekView/AdminDayView koji ovo
+ * stanje ne koriste, samo ga prenose dalje. */
 type SwapContextValue = {
   swapMode: boolean;
   isSelected: (termId: string) => 'first' | 'second' | null;
   onSelectTerm: (term: AdminTerm) => void;
+  onDeleteOtkazani: (id: string) => void;
 };
 const SwapContext = createContext<SwapContextValue>({
   swapMode: false,
   isSelected: () => null,
   onSelectTerm: () => {},
+  onDeleteOtkazani: () => {},
 });
 
 type SwapFields = { termin: boolean; instruktor: boolean; ucionica: boolean; klijent: boolean };
@@ -137,7 +140,7 @@ const DEFAULT_MAX_TERMINA_PO_SLOTU = 4;
 
 export default function AdminCalendarView({
   terms: termsProp,
-  otkazaniTermini = [],
+  otkazaniTermini: otkazaniTerminiProp = [],
   startOfWeek,
   singleDay,
   monthStart,
@@ -163,6 +166,23 @@ export default function AdminCalendarView({
   useEffect(() => {
     setTerms(termsProp);
   }, [termsProp]);
+
+  // Isti obrazac za otkazane termine – omogućava trenutno brisanje sa kalendara.
+  const [otkazaniTermini, setOtkazaniTermini] = useState(otkazaniTerminiProp);
+  useEffect(() => {
+    setOtkazaniTermini(otkazaniTerminiProp);
+  }, [otkazaniTerminiProp]);
+
+  const handleDeleteOtkazani = async (id: string) => {
+    if (!confirm('Trajno obrisati ovaj otkazani termin sa kalendara?')) return;
+    const prev = otkazaniTermini;
+    setOtkazaniTermini((list) => list.filter((ot) => ot.id !== id));
+    const res = await deleteOtkazaniTermin(id);
+    if (res.error) {
+      setOtkazaniTermini(prev);
+      toast.error(res.error);
+    }
+  };
 
   const [swapMode, setSwapMode] = useState(false);
   const [swapFields, setSwapFields] = useState({ termin: false, instruktor: false, ucionica: false, klijent: false });
@@ -276,7 +296,7 @@ export default function AdminCalendarView({
   }
 
   return (
-    <SwapContext.Provider value={{ swapMode, isSelected, onSelectTerm }}>
+    <SwapContext.Provider value={{ swapMode, isSelected, onSelectTerm, onDeleteOtkazani: handleDeleteOtkazani }}>
       <div className="mb-4 rounded-xl border border-stone-200 bg-white p-3">
         <div className="flex items-center gap-3 flex-wrap">
           <button
@@ -407,9 +427,22 @@ function AdminCellContent({
     <div className="mt-1 space-y-1">
       {otkazaniInSlot.map((ot) => (
         <div key={ot.id} className="rounded-lg border border-stone-200 bg-stone-50 p-1.5 text-xs text-stone-400 opacity-70">
-          <span className="line-through block">
-            {ot.client_ime}{ot.client_prezime ? ` ${ot.client_prezime}` : ''}
-          </span>
+          <div className="flex items-start justify-between gap-1">
+            <span className="line-through block">
+              {ot.client_ime}{ot.client_prezime ? ` ${ot.client_prezime}` : ''}
+            </span>
+            <button
+              type="button"
+              title="Trajno obriši"
+              onClick={(e) => {
+                e.preventDefault();
+                swap.onDeleteOtkazani(ot.id);
+              }}
+              className="shrink-0 leading-none text-stone-400 hover:text-red-600"
+            >
+              ✕
+            </button>
+          </div>
           {ot.instructor_ime && (
             <span className="block text-[11px]">{ot.instructor_ime} {ot.instructor_prezime ?? ''}</span>
           )}

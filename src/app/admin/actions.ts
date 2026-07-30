@@ -1552,11 +1552,12 @@ export async function updateOtkazaniTerminPlaceno(id: string, placeno: boolean, 
   return {};
 }
 
-export async function deleteOtkazaniTermin(id: string, clientId: string): Promise<{ error?: string }> {
+export async function deleteOtkazaniTermin(id: string, clientId?: string): Promise<{ error?: string }> {
   const { admin, error: authErr } = await requireAdmin();
   if (authErr || !admin) return { error: authErr ?? 'Niste ovlašćeni.' };
   const { error } = await admin.from('otkazani_termini').delete().eq('id', id);
   if (error) return { error: error.message };
-  revalidatePath(`/admin/klijenti/${clientId}`);
+  revalidatePath('/admin/kalendar');
+  if (clientId) revalidatePath(`/admin/klijenti/${clientId}`);
   return {};
 }
