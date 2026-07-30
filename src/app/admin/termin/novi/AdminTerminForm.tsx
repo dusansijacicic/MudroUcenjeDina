@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
-import { createTermAsAdmin, createPredavanjeAsAdmin, getTakenForSlot, getTermsForNastavak } from '../../actions';
+import { createTermAsAdmin, createPredavanjeAsAdmin, repeatTermAsAdmin, getTakenForSlot, getTermsForNastavak } from '../../actions';
 import type { TermForNastavak } from '../../actions';
 import GrupniKlijentiPicker from '@/components/GrupniKlijentiPicker';
 import SingleKlijentPicker from '@/components/SingleKlijentPicker';
@@ -243,26 +243,23 @@ export default function AdminTerminForm({
       }
 
       // "Zakaži isti termin i narednih N dana" – samo za obične (ne testiranje/nastavak) termine.
-      // Svaki naredni dan je nezavisan slot (drugi datum), pa se kreiraju paralelno.
+      // Jedan poziv serveru koji sam iznutra paralelizuje dane, umesto N poziva sa klijenta (svaki
+      // pun HTTP round-trip) – to je ono što je prethodno pravilo "visi na Kreiranje…".
       const effectiveRepeatDays = !isTestingCat && !isNastavakCat ? repeatDays : 0;
       if (effectiveRepeatDays > 0) {
-        const results = await Promise.all(
-          Array.from({ length: effectiveRepeatDays }, (_, idx) => idx + 1).map(async (offset) => {
-            const d = new Date(date + 'T12:00:00');
-            d.setDate(d.getDate() + offset);
-            const dStr = d.toISOString().slice(0, 10);
-            const res = await createTermAsAdmin(instructorId, dStr, slotIndex, classroomId, termCategoryId, termNapomena.trim() || null, null);
-            if (res.error || !res.termId) return { dStr, error: res.error ?? 'Greška pri kreiranju termina.' };
-            for (const cid of idsToAdd) {
-              const pr = await createPredavanjeAsAdmin(res.termId, cid, false, false, null, termTypeId || null);
-              if (pr.error) return { dStr, error: pr.error };
-            }
-            return { dStr, error: null as string | null };
-          })
+        const { failed } = await repeatTermAsAdmin(
+          instructorId,
+          date,
+          slotIndex,
+          classroomId,
+          termCategoryId,
+          termNapomena.trim() || null,
+          idsToAdd,
+          termTypeId || null,
+          effectiveRepeatDays
         );
-        const failed = results.filter((r) => r.error);
         if (failed.length > 0) {
-          toast.error(`Nije zakazano za: ${failed.map((f) => `${f.dStr} (${f.error})`).join('; ')}`);
+          toast.error(`Nije zakazano za: ${failed.map((f) => `${f.date} (${f.error})`).join('; ')}`);
         } else {
           toast.success(`Zakazano i za narednih ${effectiveRepeatDays} dana.`);
         }

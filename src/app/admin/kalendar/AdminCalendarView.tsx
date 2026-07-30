@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { TIME_SLOTS, AUTO_SPILLOVER_NAPOMENA } from '@/lib/constants';
 import Link from 'next/link';
-import { moveTermAsAdmin, swapTermsAsAdmin, copyTermAsAdmin, deleteOtkazaniTermin } from '@/app/admin/actions';
+import { moveTermAsAdmin, swapTermsAsAdmin, copyTermAsAdmin, deleteTermsAsAdmin, deleteOtkazaniTermin } from '@/app/admin/actions';
 
 const DAY_NAMES = ['Pon', 'Uto', 'Sre', 'Čet', 'Pet', 'Sub', 'Ned'];
 
@@ -55,7 +55,7 @@ function isAutoSpillover(term: AdminTerm): boolean {
   return !!term.nastavak_of_term_id && term.napomena === AUTO_SPILLOVER_NAPOMENA && (term.predavanja ?? []).length === 0;
 }
 
-/** Kontekst za "Swap"/"Copy" mod i akcije nad otkazanim terminima – prosleđen direktno od
+/** Kontekst za "Swap"/"Copy"/"Delete" mod i akcije nad otkazanim terminima – prosleđen direktno od
  * AdminCalendarView do AdminCellContent, bez prljanja potpisa AdminWeekView/AdminDayView koji ovo
  * stanje ne koriste, samo ga prenose dalje. */
 type SwapContextValue = {
@@ -67,6 +67,9 @@ type SwapContextValue = {
   copySourceId: string | null;
   onSelectCopySource: (term: AdminTerm) => void;
   onSelectCopyTarget: (date: string, slot: number) => void;
+  deleteMode: boolean;
+  isMarkedForDelete: (termId: string) => boolean;
+  onToggleDeleteSelect: (termId: string) => void;
 };
 const SwapContext = createContext<SwapContextValue>({
   swapMode: false,
@@ -77,6 +80,9 @@ const SwapContext = createContext<SwapContextValue>({
   copySourceId: null,
   onSelectCopySource: () => {},
   onSelectCopyTarget: () => {},
+  deleteMode: false,
+  isMarkedForDelete: () => false,
+  onToggleDeleteSelect: () => {},
 });
 
 type SwapFields = { termin: boolean; instruktor: boolean; ucionica: boolean; klijent: boolean };
@@ -206,14 +212,20 @@ export default function AdminCalendarView({
   const [copySource, setCopySource] = useState<{ termId: string; label: string } | null>(null);
   const [copyLoading, setCopyLoading] = useState(false);
 
-  // Swap i Copy su međusobno isključivi – uključivanje jednog gasi drugi da klikovi na kalendaru
-  // ne budu dvosmisleni.
+  const [deleteMode, setDeleteMode] = useState(false);
+  const [deleteSelection, setDeleteSelection] = useState<Set<string>>(new Set());
+  const [deleteLoading, setDeleteLoading] = useState(false);
+
+  // Swap/Copy/Delete su međusobno isključivi – uključivanje jednog gasi ostale da klikovi na
+  // kalendaru ne budu dvosmisleni.
   const toggleSwapMode = () => {
     setSwapMode((v) => {
       const next = !v;
       if (next) {
         setCopyMode(false);
         setCopySource(null);
+        setDeleteMode(false);
+        setDeleteSelection(new Set());
       }
       return next;
     });
@@ -226,10 +238,53 @@ export default function AdminCalendarView({
       if (next) {
         setSwapMode(false);
         resetSwapSelection();
+        setDeleteMode(false);
+        setDeleteSelection(new Set());
       }
       return next;
     });
     setCopySource(null);
+  };
+
+  const toggleDeleteMode = () => {
+    setDeleteMode((v) => {
+      const next = !v;
+      if (next) {
+        setSwapMode(false);
+        resetSwapSelection();
+        setCopyMode(false);
+        setCopySource(null);
+      }
+      return next;
+    });
+    setDeleteSelection(new Set());
+  };
+
+  const onToggleDeleteSelect = (termId: string) => {
+    setDeleteSelection((prev) => {
+      const next = new Set(prev);
+      if (next.has(termId)) next.delete(termId);
+      else next.add(termId);
+      return next;
+    });
+  };
+
+  const confirmDelete = async () => {
+    if (deleteSelection.size === 0) return;
+    if (!confirm(`Trajno obrisati ${deleteSelection.size} termin(a)? Ova akcija se ne može poništiti.`)) return;
+    const ids = [...deleteSelection];
+    setTerms((list) => list.filter((t) => !deleteSelection.has(t.id)));
+    setDeleteSelection(new Set());
+    setDeleteMode(false);
+    setDeleteLoading(true);
+    const { failed } = await deleteTermsAsAdmin(ids);
+    setDeleteLoading(false);
+    if (failed.length > 0) {
+      toast.error(`Nije obrisano ${failed.length}/${ids.length} termina.`);
+    } else {
+      toast.success(`Obrisano ${ids.length} termin(a).`);
+    }
+    router.refresh();
   };
 
   const onSelectCopySource = (term: AdminTerm) => {
@@ -359,6 +414,9 @@ export default function AdminCalendarView({
         copySourceId: copySource?.termId ?? null,
         onSelectCopySource,
         onSelectCopyTarget,
+        deleteMode,
+        isMarkedForDelete: (termId: string) => deleteSelection.has(termId),
+        onToggleDeleteSelect,
       }}
     >
       <div className="mb-4 rounded-xl border border-stone-200 bg-white p-3">
@@ -382,6 +440,29 @@ export default function AdminCalendarView({
             {copyMode ? 'Copy: uključen' : 'Copy'}
           </button>
           {copyLoading && <span className="text-sm text-stone-500">Kopiram…</span>}
+          <button
+            type="button"
+            onClick={toggleDeleteMode}
+            className={`px-3 py-1.5 rounded-lg text-sm font-medium ${
+              deleteMode ? 'bg-red-600 text-white hover:bg-red-700' : 'bg-stone-200 text-stone-700 hover:bg-stone-300'
+            }`}
+          >
+            {deleteMode ? 'Delete: uključen' : 'Delete'}
+          </button>
+          {deleteMode && (
+            <>
+              <button
+                type="button"
+                onClick={confirmDelete}
+                disabled={deleteSelection.size === 0}
+                className="px-3 py-1.5 rounded-lg text-sm font-medium bg-red-600 text-white hover:bg-red-700 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Potvrdi brisanje ({deleteSelection.size})
+              </button>
+              <span className="text-sm text-stone-400">kliknite termine da ih označite, klik ponovo za deselekciju</span>
+            </>
+          )}
+          {deleteLoading && <span className="text-sm text-stone-500">Brišem…</span>}
           {swapMode && (
             <>
               <div className="flex items-center gap-3 flex-wrap text-sm text-stone-700">
@@ -621,6 +702,7 @@ function AdminCellContent({
         const potentialClients = term.potential_clients ?? [];
         const swapSelected = swap.isSelected(term.id);
         const copySelected = swap.copySourceId === term.id;
+        const deleteSelected = swap.isMarkedForDelete(term.id);
 
         return (
           <Link
@@ -628,10 +710,10 @@ function AdminCellContent({
             href={`/admin/termin/${term.id}`}
             className={`block rounded-lg border-2 p-2 text-sm transition-opacity hover:opacity-90${
               swapSelected || copySelected ? ' ring-2 ring-offset-1 ring-amber-500' : ''
-            }`}
+            }${deleteSelected ? ' ring-2 ring-offset-1 ring-red-600' : ''}`}
             style={{ borderColor: classroomColor, backgroundColor: bg, color: instructorColor }}
-            draggable={!swap.swapMode && !swap.copyMode}
-            onDragStart={() => !swap.swapMode && !swap.copyMode && setDraggedTermId(term.id)}
+            draggable={!swap.swapMode && !swap.copyMode && !swap.deleteMode}
+            onDragStart={() => !swap.swapMode && !swap.copyMode && !swap.deleteMode && setDraggedTermId(term.id)}
             onDragEnd={() => setDraggedTermId(null)}
             onClick={(e) => {
               if (swap.swapMode) {
@@ -640,6 +722,9 @@ function AdminCellContent({
               } else if (swap.copyMode) {
                 e.preventDefault();
                 swap.onSelectCopySource(term);
+              } else if (swap.deleteMode) {
+                e.preventDefault();
+                swap.onToggleDeleteSelect(term.id);
               }
             }}
           >

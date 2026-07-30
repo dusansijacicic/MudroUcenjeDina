@@ -194,6 +194,47 @@ export async function createTermAsAdmin(
   return { termId: inserted.id, instructorId };
 }
 
+/**
+ * "Zakaži isti termin i narednih N dana" – SVE dane kreira u JEDNOM server pozivu (a ne klijent
+ * poziva createTermAsAdmin/createPredavanjeAsAdmin N puta preko mreže). Svaki poziv sa klijenta je
+ * pun HTTP round-trip do servera; kad se to uradi N puta (a svaki dan iznutra već ima nekoliko
+ * sekvencijalnih upita), zbir kasni i po nekoliko sekundi po danu – vidljivo kao "visi na Kreiranje…".
+ * Dani su nezavisni slotovi (različiti datumi), pa se ovde – već unutar jednog zahteva servera –
+ * paralelizuju sa Promise.all bez rizika od sudara.
+ */
+export async function repeatTermAsAdmin(
+  instructorId: string,
+  baseDate: string,
+  slotIndex: number,
+  classroomId: string | null,
+  termCategoryId: string,
+  napomena: string | null,
+  clientIds: string[],
+  termTypeId: string | null,
+  days: number
+): Promise<{ failed: { date: string; error: string }[] }> {
+  const { error: authErr } = await requireAdmin();
+  if (authErr) {
+    return { failed: [{ date: baseDate, error: authErr }] };
+  }
+
+  const results = await Promise.all(
+    Array.from({ length: days }, (_, idx) => idx + 1).map(async (offset) => {
+      const d = new Date(baseDate + 'T12:00:00');
+      d.setDate(d.getDate() + offset);
+      const dStr = d.toISOString().slice(0, 10);
+      const res = await createTermAsAdmin(instructorId, dStr, slotIndex, classroomId, termCategoryId, napomena, null);
+      if (res.error || !res.termId) return { date: dStr, error: res.error ?? 'Greška pri kreiranju termina.' };
+      for (const cid of clientIds) {
+        const pr = await createPredavanjeAsAdmin(res.termId, cid, false, false, null, termTypeId);
+        if (pr.error) return { date: dStr, error: pr.error };
+      }
+      return { date: dStr, error: null as string | null };
+    })
+  );
+  return { failed: results.filter((r): r is { date: string; error: string } => r.error !== null) };
+}
+
 export async function getAdminInstructorsList(): Promise<{ id: string; ime: string; prezime: string }[]> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -708,6 +749,24 @@ export async function deleteTermAsAdmin(termId: string): Promise<{ error?: strin
   if (error) return { error: error.message };
   revalidatePath('/admin/kalendar');
   return {};
+}
+
+/**
+ * Briše više termina odjednom (Delete mod na kalendaru) – JEDAN poziv serveru koji iznutra
+ * paralelizuje brisanje (nezavisni termini, različiti redovi), umesto da klijent zove
+ * deleteTermAsAdmin N puta preko mreže (isti problem kao kod repeatTermAsAdmin).
+ */
+export async function deleteTermsAsAdmin(termIds: string[]): Promise<{ failed: { termId: string; error: string }[] }> {
+  const { error: authErr } = await requireAdmin();
+  if (authErr) return { failed: termIds.map((termId) => ({ termId, error: authErr })) };
+
+  const results = await Promise.all(
+    termIds.map(async (termId) => {
+      const res = await deleteTermAsAdmin(termId);
+      return { termId, error: res.error ?? null };
+    })
+  );
+  return { failed: results.filter((r): r is { termId: string; error: string } => r.error !== null) };
 }
 
 /**
