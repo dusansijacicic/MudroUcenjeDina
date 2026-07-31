@@ -62,7 +62,17 @@ export default async function AdminKalendarPage({
   }
 
   const adminSupabase = createAdminClient();
-  const [{ data: termsRaw }, { data: instructorsList }, { data: classroomsList }, { data: clientsList }, { data: otkazaniRaw }, { data: zahteviRaw }, maxTerminaPoSlotu, termTypes] = await Promise.all([
+  const [
+    { data: termsRaw },
+    { data: instructorsList },
+    { data: classroomsList },
+    { data: clientsList },
+    { data: otkazaniRaw },
+    { data: zahteviRaw },
+    maxTerminaPoSlotu,
+    termTypes,
+    { data: allPendingZahteviRaw },
+  ] = await Promise.all([
     adminSupabase
       .from('terms')
       .select('*, instructor:instructors(id, ime, prezime, color), classroom:classrooms(id, naziv, color), term_category:term_categories(id, naziv, is_testing), predavanja(*, client:clients(id, ime, prezime), term_type:term_types(naziv)), potential_clients(id, ime, prezime, ime_roditelja, mobilni_roditelja, status)')
@@ -82,15 +92,11 @@ export default async function AdminKalendarPage({
       .lte('requested_date', dateTo),
     getMaxTerminaPoSlotu(),
     getTermTypes(),
+    // Globalno (bez obzira na trenutno prikazanu nedelju/dan) – da admin ne propusti zahtev van
+    // trenutnog prikaza. Samo datumi, radi lakog dugmeta "skoči na tu nedelju". U ISTOM Promise.all-u
+    // (ne odvojen await posle) da ne doda dodatan sekvencijalni round-trip.
+    adminSupabase.from('zahtevi_za_cas').select('requested_date').eq('status', 'pending').order('requested_date'),
   ]);
-
-  // Globalno (bez obzira na trenutno prikazanu nedelju/dan) – da admin ne propusti zahtev van
-  // trenutnog prikaza. Samo datumi, radi lakog dugmeta "skoči na tu nedelju".
-  const { data: allPendingZahteviRaw } = await adminSupabase
-    .from('zahtevi_za_cas')
-    .select('requested_date')
-    .eq('status', 'pending')
-    .order('requested_date');
   const allPendingZahteviDates = [...new Set((allPendingZahteviRaw ?? []).map((z) => String(z.requested_date).slice(0, 10)))];
 
   let terms: AdminTerm[] = (termsRaw ?? []).map((t) => {
