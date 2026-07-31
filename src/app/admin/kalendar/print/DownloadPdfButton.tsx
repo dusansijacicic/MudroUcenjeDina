@@ -8,13 +8,21 @@ import toast from 'react-hot-toast';
  * jsPDF fontova (koji podrazumevano ne podržavaju č/ć/đ/š/ž), ovo garantovano ispravno prikazuje
  * srpsku latinicu jer koristi stvarni font iz browsera, samo kao sliku.
  */
-export default function DownloadPdfButton({ fileName }: { fileName: string }) {
+export default function DownloadPdfButton({
+  fileName,
+  targetId,
+  label = '⬇ Preuzmi PDF',
+}: {
+  fileName: string;
+  targetId: string;
+  label?: string;
+}) {
   const [loading, setLoading] = useState(false);
 
   const handleDownload = async () => {
     setLoading(true);
     try {
-      const el = document.getElementById('print-table-wrap');
+      const el = document.getElementById(targetId);
       if (!el) throw new Error('Tabela nije pronađena.');
 
       const [{ default: html2canvas }, { jsPDF }] = await Promise.all([import('html2canvas'), import('jspdf')]);
@@ -47,9 +55,9 @@ export default function DownloadPdfButton({ fileName }: { fileName: string }) {
       type="button"
       onClick={handleDownload}
       disabled={loading}
-      className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700 disabled:opacity-50"
+      className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700 disabled:opacity-50 whitespace-nowrap"
     >
-      {loading ? 'Generišem…' : '⬇ Preuzmi PDF'}
+      {loading ? 'Generišem…' : label}
     </button>
   );
 }

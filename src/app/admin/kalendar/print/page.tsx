@@ -123,7 +123,16 @@ export default async function AdminKalendarPrintPage({
           <Link href="/admin/kalendar" className="text-sm text-stone-500 hover:text-stone-700">
             ← Kalendar
           </Link>
-          <DownloadPdfButton fileName={`raspored_${dateFrom}_${dateTo}`} />
+          <DownloadPdfButton
+            targetId="print-table-wrap"
+            fileName={`raspored_${dateFrom}_${dateTo}_sa_statistikom`}
+            label="⬇ PDF sa statistikom"
+          />
+          <DownloadPdfButton
+            targetId="print-table-only"
+            fileName={`raspored_${dateFrom}_${dateTo}`}
+            label="⬇ PDF bez statistike"
+          />
         </div>
       </div>
 
@@ -163,6 +172,7 @@ export default async function AdminKalendarPrintPage({
             </div>
           </div>
         </div>
+        <div id="print-table-only">
         <table
           className="w-full border-collapse leading-tight"
           style={{ color: '#000000', fontSize: '20px', tableLayout: 'fixed' }}
@@ -219,6 +229,7 @@ export default async function AdminKalendarPrintPage({
             ))}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   );
