@@ -31,6 +31,17 @@ export type OtkazaniTerminCalendar = {
   placeno: boolean;
 };
 
+/** Zahtev (zahtevi_za_cas) na čekanju, bez instruktora – prikazan na kalendaru samo informativno
+ * ("Više termina" mod ih pravi umesto pravih termina); preuzima ih predavač na Dashboard → Zahtevi. */
+export type PendingZahtevCalendar = {
+  id: string;
+  date: string;
+  slot_index: number;
+  client_ime: string;
+  client_prezime?: string | null;
+  term_type_naziv?: string | null;
+};
+
 export type PotentialClientCalendar = {
   id: string;
   ime: string;
@@ -190,6 +201,7 @@ export default function AdminCalendarView({
   termTypes = [],
   instructorsList = [],
   classroomsList = [],
+  pendingZahtevi = [],
 }: {
   terms: AdminTerm[];
   otkazaniTermini?: OtkazaniTerminCalendar[];
@@ -205,6 +217,8 @@ export default function AdminCalendarView({
   /** Za "Dodeli instruktora"/"Dodeli učionicu" module. */
   instructorsList?: { id: string; ime: string; prezime: string }[];
   classroomsList?: { id: string; naziv: string }[];
+  /** Zahtevi na čekanju (bez instruktora) – informativni prikaz na kalendaru. */
+  pendingZahtevi?: PendingZahtevCalendar[];
 }) {
   const router = useRouter();
   const [draggedTermId, setDraggedTermId] = useState<string | null>(null);
@@ -520,6 +534,7 @@ export default function AdminCalendarView({
         date={singleDay}
         terms={terms}
         otkazaniTermini={otkazaniTermini}
+        pendingZahtevi={pendingZahtevi}
         linkSuffix={linkSuffix}
         base={base}
         draggedTermId={draggedTermId}
@@ -542,6 +557,7 @@ export default function AdminCalendarView({
         startOfWeek={startOfWeek}
         terms={terms}
         otkazaniTermini={otkazaniTermini}
+        pendingZahtevi={pendingZahtevi}
         linkSuffix={linkSuffix}
         base={base}
         draggedTermId={draggedTermId}
@@ -832,6 +848,7 @@ export default function AdminCalendarView({
 function AdminCellContent({
   termsInSlot,
   otkazaniInSlot,
+  pendingZahteviInSlot,
   emptyDate,
   emptySlot,
   draggedTermId,
@@ -841,6 +858,7 @@ function AdminCellContent({
 }: {
   termsInSlot: AdminTerm[];
   otkazaniInSlot: OtkazaniTerminCalendar[];
+  pendingZahteviInSlot: PendingZahtevCalendar[];
   emptyDate: string;
   emptySlot: number;
   draggedTermId: string | null;
@@ -919,6 +937,20 @@ function AdminCellContent({
     </div>
   ) : null;
 
+  const PendingZahteviEntries = pendingZahteviInSlot.length > 0 ? (
+    <div className="mt-1 space-y-1">
+      {pendingZahteviInSlot.map((z) => (
+        <div key={z.id} className="rounded-lg border border-dashed border-blue-300 bg-blue-50 p-1.5 text-xs text-blue-700">
+          <span className="block font-medium">
+            {z.client_ime}{z.client_prezime ? ` ${z.client_prezime}` : ''}
+          </span>
+          {z.term_type_naziv && <span className="block text-[11px]">{z.term_type_naziv}</span>}
+          <span className="text-[10px] uppercase tracking-wide text-blue-500">zahtev · čeka predavača</span>
+        </div>
+      ))}
+    </div>
+  ) : null;
+
   if (termsInSlot.length === 0) {
     return (
       <div className="space-y-1">
@@ -949,6 +981,7 @@ function AdminCellContent({
         >
           + Testiranje
         </Link>
+        {PendingZahteviEntries}
         {CancelledEntries}
       </div>
     );
@@ -1104,6 +1137,7 @@ function AdminCellContent({
           Slot pun ({maxTerminaPoSlotu} termina). Povećajte limit u Admin → Podešavanja ili izaberite drugo vreme.
         </p>
       )}
+      {PendingZahteviEntries}
       {CancelledEntries}
     </div>
   );
@@ -1113,6 +1147,7 @@ function AdminWeekView({
   startOfWeek,
   terms,
   otkazaniTermini,
+  pendingZahtevi,
   linkSuffix,
   base,
   draggedTermId,
@@ -1123,6 +1158,7 @@ function AdminWeekView({
   startOfWeek: string;
   terms: AdminTerm[];
   otkazaniTermini: OtkazaniTerminCalendar[];
+  pendingZahtevi: PendingZahtevCalendar[];
   linkSuffix: string;
   base: string;
   draggedTermId: string | null;
@@ -1203,11 +1239,13 @@ function AdminWeekView({
                 {allDates.map((date, idx) => {
                   const termsInSlot = termsByKey(terms, date, slotIndex);
                   const otkazaniInSlot = otkazaniTermini.filter((ot) => ot.term_date === date && ot.slot_index === slotIndex);
+                  const pendingZahteviInSlot = pendingZahtevi.filter((z) => z.date === date && z.slot_index === slotIndex);
                   return (
                     <td key={date} className={`p-1 align-top${idx === 7 ? ' border-l-2 border-stone-300' : ''}`}>
                       <AdminCellContent
                         termsInSlot={termsInSlot}
                         otkazaniInSlot={otkazaniInSlot}
+                        pendingZahteviInSlot={pendingZahteviInSlot}
                         emptyDate={date}
                         emptySlot={slotIndex}
                         draggedTermId={draggedTermId}
@@ -1231,6 +1269,7 @@ function AdminDayView({
   date,
   terms,
   otkazaniTermini,
+  pendingZahtevi,
   linkSuffix,
   base,
   draggedTermId,
@@ -1240,6 +1279,7 @@ function AdminDayView({
   date: string;
   terms: AdminTerm[];
   otkazaniTermini: OtkazaniTerminCalendar[];
+  pendingZahtevi: PendingZahtevCalendar[];
   linkSuffix: string;
   base: string;
   draggedTermId: string | null;
@@ -1280,6 +1320,7 @@ function AdminDayView({
         {TIME_SLOTS.map((time, slotIndex) => {
           const termsInSlot = termsByKey(terms, date, slotIndex);
           const otkazaniInSlot = otkazaniTermini.filter((ot) => ot.term_date === date && ot.slot_index === slotIndex);
+          const pendingZahteviInSlot = pendingZahtevi.filter((z) => z.date === date && z.slot_index === slotIndex);
           return (
             <div key={slotIndex} className="flex items-stretch gap-4 p-3">
               <div className="w-16 shrink-0 text-stone-500 font-medium">{time}</div>
@@ -1287,6 +1328,7 @@ function AdminDayView({
                 <AdminCellContent
                   termsInSlot={termsInSlot}
                   otkazaniInSlot={otkazaniInSlot}
+                  pendingZahteviInSlot={pendingZahteviInSlot}
                   emptyDate={date}
                   emptySlot={slotIndex}
                   draggedTermId={draggedTermId}

@@ -62,7 +62,7 @@ export default async function AdminKalendarPage({
   }
 
   const adminSupabase = createAdminClient();
-  const [{ data: termsRaw }, { data: instructorsList }, { data: classroomsList }, { data: clientsList }, { data: otkazaniRaw }, maxTerminaPoSlotu, termTypes] = await Promise.all([
+  const [{ data: termsRaw }, { data: instructorsList }, { data: classroomsList }, { data: clientsList }, { data: otkazaniRaw }, { data: zahteviRaw }, maxTerminaPoSlotu, termTypes] = await Promise.all([
     adminSupabase
       .from('terms')
       .select('*, instructor:instructors(id, ime, prezime, color), classroom:classrooms(id, naziv, color), term_category:term_categories(id, naziv, is_testing), predavanja(*, client:clients(id, ime, prezime), term_type:term_types(naziv)), potential_clients(id, ime, prezime, ime_roditelja, mobilni_roditelja, status)')
@@ -74,6 +74,12 @@ export default async function AdminKalendarPage({
     adminSupabase.from('classrooms').select('id, naziv').order('naziv'),
     adminSupabase.from('clients').select('id, ime, prezime, godiste, datum_testiranja').order('ime').order('prezime'),
     adminSupabase.from('otkazani_termini').select('id, client_ime, client_prezime, instructor_id, instructor_ime, instructor_prezime, term_date, slot_index, term_type_naziv, placeno').gte('term_date', dateFrom).lte('term_date', dateTo),
+    adminSupabase
+      .from('zahtevi_za_cas')
+      .select('id, requested_date, requested_slot_index, client:clients(ime, prezime), term_type:term_types(naziv)')
+      .eq('status', 'pending')
+      .gte('requested_date', dateFrom)
+      .lte('requested_date', dateTo),
     getMaxTerminaPoSlotu(),
     getTermTypes(),
   ]);
@@ -109,6 +115,19 @@ export default async function AdminKalendarPage({
   if (filterInstructorId) terms = terms.filter((t) => t.instructor_id === filterInstructorId);
   if (filterClassroomId) terms = terms.filter((t) => t.classroom?.id === filterClassroomId);
   if (filterClientId) terms = terms.filter((t) => (t.predavanja ?? []).some((p) => (p.client as { id?: string })?.id === filterClientId));
+
+  const pendingZahtevi = (zahteviRaw ?? []).map((z) => {
+    const client = Array.isArray(z.client) ? z.client[0] : z.client;
+    const termType = Array.isArray(z.term_type) ? z.term_type[0] : z.term_type;
+    return {
+      id: z.id,
+      date: String(z.requested_date).slice(0, 10),
+      slot_index: z.requested_slot_index,
+      client_ime: (client as { ime?: string } | null)?.ime ?? '',
+      client_prezime: (client as { prezime?: string } | null)?.prezime ?? null,
+      term_type_naziv: (termType as { naziv?: string } | null)?.naziv ?? null,
+    };
+  });
 
   const base = '/admin/kalendar';
   const month = params.month || new Date().toISOString().slice(0, 7);
@@ -185,6 +204,7 @@ export default async function AdminKalendarPage({
         termTypes={termTypes}
         instructorsList={(instructorsList ?? []).map((i) => ({ id: i.id, ime: i.ime ?? '', prezime: i.prezime ?? '' }))}
         classroomsList={(classroomsList ?? []).map((c) => ({ id: c.id, naziv: c.naziv ?? '' }))}
+        pendingZahtevi={pendingZahtevi}
       />
     </div>
   );
