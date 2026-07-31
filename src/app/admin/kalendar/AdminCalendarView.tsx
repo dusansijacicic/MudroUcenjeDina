@@ -5,7 +5,16 @@ import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { TIME_SLOTS, AUTO_SPILLOVER_NAPOMENA } from '@/lib/constants';
 import Link from 'next/link';
-import { moveTermAsAdmin, swapTermsAsAdmin, copyTermAsAdmin, deleteTermsAsAdmin, deleteOtkazaniTermin, createBulkZahteviAsAdmin } from '@/app/admin/actions';
+import {
+  moveTermAsAdmin,
+  swapTermsAsAdmin,
+  copyTermAsAdmin,
+  deleteTermsAsAdmin,
+  deleteOtkazaniTermin,
+  createBulkZahteviAsAdmin,
+  assignInstructorToTermsAsAdmin,
+  assignClassroomToTermsAsAdmin,
+} from '@/app/admin/actions';
 import SingleKlijentPicker from '@/components/SingleKlijentPicker';
 
 const DAY_NAMES = ['Pon', 'Uto', 'Sre', 'Čet', 'Pet', 'Sub', 'Ned'];
@@ -76,6 +85,9 @@ type SwapContextValue = {
   bulkMode: boolean;
   isBulkSelected: (date: string, slot: number) => boolean;
   onToggleBulkSlot: (date: string, slot: number) => void;
+  assignMode: 'instruktor' | 'ucionica' | null;
+  isMarkedForAssign: (termId: string) => boolean;
+  onToggleAssignSelect: (termId: string) => void;
 };
 const SwapContext = createContext<SwapContextValue>({
   swapMode: false,
@@ -94,6 +106,9 @@ const SwapContext = createContext<SwapContextValue>({
   bulkMode: false,
   isBulkSelected: () => false,
   onToggleBulkSlot: () => {},
+  assignMode: null,
+  isMarkedForAssign: () => false,
+  onToggleAssignSelect: () => {},
 });
 
 type SwapFields = { termin: boolean; instruktor: boolean; ucionica: boolean; klijent: boolean };
@@ -173,6 +188,8 @@ export default function AdminCalendarView({
   maxTerminaPoSlotu = DEFAULT_MAX_TERMINA_PO_SLOTU,
   clients = [],
   termTypes = [],
+  instructorsList = [],
+  classroomsList = [],
 }: {
   terms: AdminTerm[];
   otkazaniTermini?: OtkazaniTerminCalendar[];
@@ -185,6 +202,9 @@ export default function AdminCalendarView({
   /** Za "Više termina" mod (masovno zakazivanje bez instruktora/učionice, preko zahteva). */
   clients?: { id: string; ime: string; prezime: string; godiste?: number | null; datumTestiranja?: string | null }[];
   termTypes?: { id: string; naziv: string; opis: string | null }[];
+  /** Za "Dodeli instruktora"/"Dodeli učionicu" module. */
+  instructorsList?: { id: string; ime: string; prezime: string }[];
+  classroomsList?: { id: string; naziv: string }[];
 }) {
   const router = useRouter();
   const [draggedTermId, setDraggedTermId] = useState<string | null>(null);
@@ -239,9 +259,14 @@ export default function AdminCalendarView({
   const [bulkSlots, setBulkSlots] = useState<Set<string>>(new Set());
   const [bulkLoading, setBulkLoading] = useState(false);
 
-  // Swap/Copy/Delete/Bulk su međusobno isključivi – uključivanje jednog gasi ostale da klikovi na
-  // kalendaru ne budu dvosmisleni.
-  const resetOtherModes = (keep: 'swap' | 'copy' | 'delete' | 'bulk') => {
+  const [assignMode, setAssignMode] = useState<'instruktor' | 'ucionica' | null>(null);
+  const [assignSelection, setAssignSelection] = useState<Set<string>>(new Set());
+  const [assignTargetId, setAssignTargetId] = useState('');
+  const [assignLoading, setAssignLoading] = useState(false);
+
+  // Swap/Copy/Delete/Bulk/Assign su međusobno isključivi – uključivanje jednog gasi ostale da
+  // klikovi na kalendaru ne budu dvosmisleni.
+  const resetOtherModes = (keep: 'swap' | 'copy' | 'delete' | 'bulk' | 'assign') => {
     if (keep !== 'swap') {
       setSwapMode(false);
       resetSwapSelection();
@@ -258,6 +283,11 @@ export default function AdminCalendarView({
     if (keep !== 'bulk') {
       setBulkMode(false);
       setBulkSlots(new Set());
+    }
+    if (keep !== 'assign') {
+      setAssignMode(null);
+      setAssignSelection(new Set());
+      setAssignTargetId('');
     }
   };
 
@@ -364,6 +394,46 @@ export default function AdminCalendarView({
     } else {
       toast.success(`Kreirano ${slots.length} zahtev(a) – predavači ih vide na svom Dashboard → Zahtevi.`);
     }
+  };
+
+  const toggleAssignMode = (mode: 'instruktor' | 'ucionica') => {
+    setAssignMode((v) => {
+      const next = v === mode ? null : mode;
+      if (next) resetOtherModes('assign');
+      return next;
+    });
+    setAssignSelection(new Set());
+    setAssignTargetId('');
+  };
+
+  const onToggleAssignSelect = (termId: string) => {
+    setAssignSelection((prev) => {
+      const next = new Set(prev);
+      if (next.has(termId)) next.delete(termId);
+      else next.add(termId);
+      return next;
+    });
+  };
+
+  const confirmAssign = async () => {
+    if (!assignMode || !assignTargetId || assignSelection.size === 0) return;
+    const ids = [...assignSelection];
+    const mode = assignMode;
+    setAssignSelection(new Set());
+    setAssignMode(null);
+    setAssignTargetId('');
+    setAssignLoading(true);
+    const { failed } =
+      mode === 'instruktor'
+        ? await assignInstructorToTermsAsAdmin(assignTargetId, ids)
+        : await assignClassroomToTermsAsAdmin(assignTargetId, ids);
+    setAssignLoading(false);
+    if (failed.length > 0) {
+      toast.error(`Nije dodeljeno ${failed.length}/${ids.length}.`);
+    } else {
+      toast.success(`Dodeljeno ${ids.length}.`);
+    }
+    router.refresh();
   };
 
   const onSelectCopySource = (term: AdminTerm) => {
@@ -501,6 +571,9 @@ export default function AdminCalendarView({
         bulkMode,
         isBulkSelected: (date: string, slot: number) => bulkSlots.has(`${date}|${slot}`),
         onToggleBulkSlot,
+        assignMode,
+        isMarkedForAssign: (termId: string) => assignSelection.has(termId),
+        onToggleAssignSelect,
       }}
     >
       <div className="mb-4 rounded-xl border border-stone-200 bg-white p-3">
@@ -559,6 +632,54 @@ export default function AdminCalendarView({
             {bulkMode ? 'Više termina: uključeno' : 'Više termina'}
           </button>
           {bulkLoading && <span className="text-sm text-stone-500">Zakazujem…</span>}
+          <button
+            type="button"
+            onClick={() => toggleAssignMode('instruktor')}
+            className={`px-3 py-1.5 rounded-lg text-sm font-medium ${
+              assignMode === 'instruktor' ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-stone-200 text-stone-700 hover:bg-stone-300'
+            }`}
+          >
+            {assignMode === 'instruktor' ? 'Dodeli instruktora: uključeno' : 'Dodeli instruktora'}
+          </button>
+          <button
+            type="button"
+            onClick={() => toggleAssignMode('ucionica')}
+            className={`px-3 py-1.5 rounded-lg text-sm font-medium ${
+              assignMode === 'ucionica' ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-stone-200 text-stone-700 hover:bg-stone-300'
+            }`}
+          >
+            {assignMode === 'ucionica' ? 'Dodeli učionicu: uključeno' : 'Dodeli učionicu'}
+          </button>
+          {assignMode && (
+            <>
+              <select
+                value={assignTargetId}
+                onChange={(e) => setAssignTargetId(e.target.value)}
+                className="rounded-lg border border-stone-300 px-3 py-1.5 text-sm text-stone-800 bg-white"
+              >
+                <option value="">
+                  {assignMode === 'instruktor' ? '— izaberite instruktora —' : '— izaberite učionicu —'}
+                </option>
+                {assignMode === 'instruktor'
+                  ? instructorsList.map((i) => (
+                      <option key={i.id} value={i.id}>{i.ime} {i.prezime}</option>
+                    ))
+                  : classroomsList.map((c) => (
+                      <option key={c.id} value={c.id}>{c.naziv}</option>
+                    ))}
+              </select>
+              <button
+                type="button"
+                onClick={confirmAssign}
+                disabled={!assignTargetId || assignSelection.size === 0}
+                className="px-3 py-1.5 rounded-lg text-sm font-medium bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Potvrdi dodelu ({assignSelection.size})
+              </button>
+              <span className="text-sm text-stone-400">kliknite termine na kalendaru da ih označite</span>
+            </>
+          )}
+          {assignLoading && <span className="text-sm text-stone-500">Dodeljujem…</span>}
           {swapMode && (
             <>
               <div className="flex items-center gap-3 flex-wrap text-sm text-stone-700">
@@ -865,13 +986,15 @@ function AdminCellContent({
         const instructorName = term.instructor
           ? `${term.instructor.ime} ${term.instructor.prezime}`
           : '—';
-        const classroomName = term.classroom?.naziv ?? 'Učionica';
+        const classroomName = term.classroom?.naziv ?? null;
         const tcRaw = term.term_category;
         const isTesting = Array.isArray(tcRaw) ? (tcRaw as {is_testing: boolean}[])[0]?.is_testing === true : tcRaw?.is_testing === true;
         const potentialClients = term.potential_clients ?? [];
         const swapSelected = swap.isSelected(term.id);
         const copySelected = swap.copySourceId === term.id;
         const deleteSelected = swap.isMarkedForDelete(term.id);
+        const assignSelected = swap.isMarkedForAssign(term.id);
+        const anyModeActive = swap.swapMode || swap.copyMode || swap.deleteMode || !!swap.assignMode;
 
         return (
           <Link
@@ -879,10 +1002,12 @@ function AdminCellContent({
             href={`/admin/termin/${term.id}`}
             className={`block rounded-lg border-2 p-2 text-sm transition-opacity hover:opacity-90${
               swapSelected || copySelected ? ' ring-2 ring-offset-1 ring-amber-500' : ''
-            }${deleteSelected ? ' ring-2 ring-offset-1 ring-red-600' : ''}`}
+            }${deleteSelected ? ' ring-2 ring-offset-1 ring-red-600' : ''}${
+              assignSelected ? ' ring-2 ring-offset-1 ring-blue-600' : ''
+            }`}
             style={{ borderColor: classroomColor, backgroundColor: bg, color: instructorColor }}
-            draggable={!swap.swapMode && !swap.copyMode && !swap.deleteMode}
-            onDragStart={() => !swap.swapMode && !swap.copyMode && !swap.deleteMode && setDraggedTermId(term.id)}
+            draggable={!anyModeActive}
+            onDragStart={() => !anyModeActive && setDraggedTermId(term.id)}
             onDragEnd={() => setDraggedTermId(null)}
             onClick={(e) => {
               if (swap.swapMode) {
@@ -894,12 +1019,15 @@ function AdminCellContent({
               } else if (swap.deleteMode) {
                 e.preventDefault();
                 swap.onToggleDeleteSelect(term.id);
+              } else if (swap.assignMode) {
+                e.preventDefault();
+                swap.onToggleAssignSelect(term.id);
               }
             }}
           >
             <span className="font-medium">{instructorName}</span>
-            <span className="ml-1 text-[0.7rem] uppercase tracking-wide opacity-80">
-              ({classroomName})
+            <span className={`ml-1 text-[0.7rem] uppercase tracking-wide ${classroomName ? 'opacity-80' : 'italic opacity-60'}`}>
+              ({classroomName ?? 'bez učionice'})
             </span>
             {isTesting ? (
               <div className="mt-1 border-t border-stone-200/80 pt-1">

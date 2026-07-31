@@ -183,6 +183,8 @@ export default async function AdminKalendarPage({
           datumTestiranja: (c as { datum_testiranja?: string | null }).datum_testiranja ?? null,
         }))}
         termTypes={termTypes}
+        instructorsList={(instructorsList ?? []).map((i) => ({ id: i.id, ime: i.ime ?? '', prezime: i.prezime ?? '' }))}
+        classroomsList={(classroomsList ?? []).map((c) => ({ id: c.id, naziv: c.naziv ?? '' }))}
       />
     </div>
   );

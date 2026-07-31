@@ -282,6 +282,76 @@ export async function createBulkZahteviAsAdmin(
   return { failed: skipped };
 }
 
+/**
+ * "Dodeli instruktora" mod na kalendaru: selektuje se više PostOJEĆIH termina, pa se svima
+ * odjednom dodeli isti instruktor. Termin koji ovaj instruktor već ima u tom datumu/slotu se
+ * preskače (javlja se kao greška za taj termin) – bez svop logike, ovo je za popunjavanje/izmenu,
+ * ne za zamenu mesta (za to postoji Swap).
+ */
+export async function assignInstructorToTermsAsAdmin(
+  instructorId: string,
+  termIds: string[]
+): Promise<{ failed: { termId: string; error: string }[] }> {
+  const { admin, error: authErr } = await requireAdmin();
+  if (authErr || !admin) return { failed: termIds.map((termId) => ({ termId, error: authErr ?? 'Niste ovlašćeni.' })) };
+
+  const results = await Promise.all(
+    termIds.map(async (termId) => {
+      const { data: term } = await admin.from('terms').select('date, slot_index, instructor_id').eq('id', termId).maybeSingle();
+      if (!term) return { termId, error: 'Termin nije pronađen.' };
+      if (term.instructor_id === instructorId) return { termId, error: null as string | null };
+      const { data: conflict } = await admin
+        .from('terms')
+        .select('id')
+        .eq('instructor_id', instructorId)
+        .eq('date', term.date)
+        .eq('slot_index', term.slot_index)
+        .neq('id', termId)
+        .maybeSingle();
+      if (conflict) return { termId, error: 'Instruktor je već zauzet u tom terminu.' };
+      const { error } = await admin.from('terms').update({ instructor_id: instructorId }).eq('id', termId);
+      if (error) return { termId, error: error.message };
+      // Automatski "blokirajući" slotovi dužeg časa prate instruktora roditeljskog termina.
+      await admin.from('terms').update({ instructor_id: instructorId }).eq('nastavak_of_term_id', termId).eq('napomena', AUTO_SPILLOVER_NAPOMENA);
+      return { termId, error: null as string | null };
+    })
+  );
+  revalidatePath('/admin/kalendar');
+  return { failed: results.filter((r): r is { termId: string; error: string } => r.error !== null) };
+}
+
+/** "Dodeli učionicu" mod – isto kao gore, za učionicu umesto instruktora. */
+export async function assignClassroomToTermsAsAdmin(
+  classroomId: string,
+  termIds: string[]
+): Promise<{ failed: { termId: string; error: string }[] }> {
+  const { admin, error: authErr } = await requireAdmin();
+  if (authErr || !admin) return { failed: termIds.map((termId) => ({ termId, error: authErr ?? 'Niste ovlašćeni.' })) };
+
+  const results = await Promise.all(
+    termIds.map(async (termId) => {
+      const { data: term } = await admin.from('terms').select('date, slot_index, classroom_id').eq('id', termId).maybeSingle();
+      if (!term) return { termId, error: 'Termin nije pronađen.' };
+      if (term.classroom_id === classroomId) return { termId, error: null as string | null };
+      const { data: conflict } = await admin
+        .from('terms')
+        .select('id')
+        .eq('classroom_id', classroomId)
+        .eq('date', term.date)
+        .eq('slot_index', term.slot_index)
+        .neq('id', termId)
+        .maybeSingle();
+      if (conflict) return { termId, error: 'Učionica je već zauzeta u tom terminu.' };
+      const { error } = await admin.from('terms').update({ classroom_id: classroomId }).eq('id', termId);
+      if (error) return { termId, error: error.message };
+      await admin.from('terms').update({ classroom_id: classroomId }).eq('nastavak_of_term_id', termId).eq('napomena', AUTO_SPILLOVER_NAPOMENA);
+      return { termId, error: null as string | null };
+    })
+  );
+  revalidatePath('/admin/kalendar');
+  return { failed: results.filter((r): r is { termId: string; error: string } => r.error !== null) };
+}
+
 export async function getAdminInstructorsList(): Promise<{ id: string; ime: string; prezime: string }[]> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
