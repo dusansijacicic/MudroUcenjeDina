@@ -84,6 +84,15 @@ export default async function AdminKalendarPage({
     getTermTypes(),
   ]);
 
+  // Globalno (bez obzira na trenutno prikazanu nedelju/dan) – da admin ne propusti zahtev van
+  // trenutnog prikaza. Samo datumi, radi lakog dugmeta "skoči na tu nedelju".
+  const { data: allPendingZahteviRaw } = await adminSupabase
+    .from('zahtevi_za_cas')
+    .select('requested_date')
+    .eq('status', 'pending')
+    .order('requested_date');
+  const allPendingZahteviDates = [...new Set((allPendingZahteviRaw ?? []).map((z) => String(z.requested_date).slice(0, 10)))];
+
   let terms: AdminTerm[] = (termsRaw ?? []).map((t) => {
     const instr = (t as {
       instructor?: { id: string; ime: string; prezime: string; color?: string | null } | Array<unknown>;
@@ -207,6 +216,7 @@ export default async function AdminKalendarPage({
         instructorsList={(instructorsList ?? []).map((i) => ({ id: i.id, ime: i.ime ?? '', prezime: i.prezime ?? '' }))}
         classroomsList={(classroomsList ?? []).map((c) => ({ id: c.id, naziv: c.naziv ?? '' }))}
         pendingZahtevi={pendingZahtevi}
+        allPendingZahteviDates={allPendingZahteviDates}
       />
     </div>
   );

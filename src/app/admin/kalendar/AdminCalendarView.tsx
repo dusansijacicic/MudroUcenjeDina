@@ -174,6 +174,18 @@ function swapTermLabel(term: AdminTerm): string {
   return `${dateLabel} ${time} · ${instructorName} · ${classroomName}`;
 }
 
+function getMonday(dateStr: string): string {
+  const d = new Date(dateStr + 'T12:00:00');
+  const dow = d.getDay();
+  d.setDate(d.getDate() - (dow === 0 ? 6 : dow - 1));
+  return d.toISOString().slice(0, 10);
+}
+
+function formatShortDate(dateStr: string): string {
+  const d = new Date(dateStr + 'T12:00:00');
+  return `${d.getDate()}.${d.getMonth() + 1}.`;
+}
+
 function getWeekDates(start: string): string[] {
   const dates: string[] = [];
   const d = new Date(start + 'T12:00:00');
@@ -213,6 +225,7 @@ export default function AdminCalendarView({
   instructorsList = [],
   classroomsList = [],
   pendingZahtevi: pendingZahteviProp = [],
+  allPendingZahteviDates = [],
 }: {
   terms: AdminTerm[];
   otkazaniTermini?: OtkazaniTerminCalendar[];
@@ -230,6 +243,8 @@ export default function AdminCalendarView({
   classroomsList?: { id: string; naziv: string }[];
   /** Zahtevi na čekanju (bez instruktora) – informativni prikaz na kalendaru. */
   pendingZahtevi?: PendingZahtevCalendar[];
+  /** SVI zahtevi na čekanju (bez obzira na trenutno prikazanu nedelju) – za notifikaciju gore. */
+  allPendingZahteviDates?: string[];
 }) {
   const router = useRouter();
   const [draggedTermId, setDraggedTermId] = useState<string | null>(null);
@@ -651,6 +666,24 @@ export default function AdminCalendarView({
         onToggleAssignZahtevSelect,
       }}
     >
+      {allPendingZahteviDates.length > 0 && (
+        <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-amber-400 bg-amber-50 px-4 py-2.5 text-sm text-amber-900 animate-pulse">
+          <span className="font-semibold">
+            ⚠ {allPendingZahteviDates.length} {allPendingZahteviDates.length === 1 ? 'termin' : 'termina'} bez instruktora/učionice:
+          </span>
+          <span className="flex flex-wrap gap-1.5">
+            {allPendingZahteviDates.map((d) => (
+              <Link
+                key={d}
+                href={`/admin/kalendar?view=nedelja&week=${getMonday(d)}`}
+                className="rounded-full bg-amber-200 px-2 py-0.5 font-medium text-amber-900 hover:bg-amber-300"
+              >
+                {formatShortDate(d)}
+              </Link>
+            ))}
+          </span>
+        </div>
+      )}
       <div className="mb-4 rounded-xl border border-stone-200 bg-white p-3">
         <div className="flex items-center gap-3 flex-wrap">
           <button
