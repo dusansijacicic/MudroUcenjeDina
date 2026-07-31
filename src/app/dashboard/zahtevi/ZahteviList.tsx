@@ -20,6 +20,7 @@ export type Zahtev = {
   note_from_instructor: string | null;
   created_at: string;
   client?: { ime: string; prezime: string } | null;
+  term_type?: { naziv: string } | null;
 };
 
 export default function ZahteviList({
@@ -102,6 +103,9 @@ export default function ZahteviList({
                     Želi termin: {dateStr} • {timeStr}
                     {isAny && <span className="text-amber-600"> (bilo koji instruktor)</span>}
                   </p>
+                  {z.term_type?.naziv && (
+                    <p className="text-sm text-stone-500">Vrsta časa: {z.term_type.naziv}</p>
+                  )}
                   {z.status !== 'pending' && (
                     <p className="text-xs text-stone-500 mt-1">Status: {z.status}</p>
                   )}

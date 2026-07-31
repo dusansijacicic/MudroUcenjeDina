@@ -235,6 +235,53 @@ export async function repeatTermAsAdmin(
   return { failed: results.filter((r): r is { date: string; error: string } => r.error !== null) };
 }
 
+/**
+ * "Više termina" mod na admin kalendaru: masovno zakazivanje za JEDNO dete preko više slotova
+ * odjednom, BEZ instruktora i učionice – admin ne bira kojim instruktorom, pa se za svaki izabrani
+ * slot pravi zahtev (zahtevi_za_cas, isti mehanizam kao kad učenik zatraži čas) koji bilo koji
+ * predavač vidi na svom Dashboard → Zahtevi i preuzima/potvrđuje. Ne dira terms/predavanja direktno.
+ */
+export async function createBulkZahteviAsAdmin(
+  clientId: string,
+  termTypeId: string | null,
+  slots: { date: string; slotIndex: number }[]
+): Promise<{ failed: { date: string; slotIndex: number; error: string }[] }> {
+  const { admin, error: authErr } = await requireAdmin();
+  if (authErr || !admin) return { failed: slots.map((s) => ({ ...s, error: authErr ?? 'Niste ovlašćeni.' })) };
+  if (slots.length === 0) return { failed: [] };
+
+  const { data: existing } = await admin
+    .from('zahtevi_za_cas')
+    .select('requested_date, requested_slot_index')
+    .eq('client_id', clientId)
+    .eq('status', 'pending')
+    .in('requested_date', [...new Set(slots.map((s) => s.date))]);
+  const existingKeys = new Set((existing ?? []).map((r) => `${r.requested_date}|${r.requested_slot_index}`));
+
+  const toInsert = slots.filter((s) => !existingKeys.has(`${s.date}|${s.slotIndex}`));
+  const skipped = slots
+    .filter((s) => existingKeys.has(`${s.date}|${s.slotIndex}`))
+    .map((s) => ({ ...s, error: 'Zahtev za ovo dete već postoji za taj termin.' }));
+
+  if (toInsert.length === 0) return { failed: skipped };
+
+  const { error } = await admin.from('zahtevi_za_cas').insert(
+    toInsert.map((s) => ({
+      client_id: clientId,
+      instructor_id: null,
+      requested_date: s.date,
+      requested_slot_index: s.slotIndex,
+      term_type_id: termTypeId,
+      status: 'pending',
+    }))
+  );
+  if (error) {
+    return { failed: [...skipped, ...toInsert.map((s) => ({ ...s, error: error.message }))] };
+  }
+  revalidatePath('/dashboard/zahtevi');
+  return { failed: skipped };
+}
+
 export async function getAdminInstructorsList(): Promise<{ id: string; ime: string; prezime: string }[]> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();

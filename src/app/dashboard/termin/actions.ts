@@ -7,6 +7,7 @@ import { termMozeNovoPredavanje, getMaxTerminaPoSlotu, jedanDeteMaksimalnoPoTerm
 import { revalidatePath } from 'next/cache';
 import { syncSpilloverForTerm } from '@/app/admin/actions';
 import { AUTO_SPILLOVER_NAPOMENA } from '@/lib/constants';
+import { SEEDED_TERM_CATEGORY_INDIVIDUAL_ID } from '@/lib/term-categories';
 
 export async function createPredavanje(
   termId: string,
@@ -472,4 +473,71 @@ export async function updateTermClassroom(
   revalidatePath('/dashboard');
   revalidatePath(`/dashboard/termin/${termId}`);
   return {};
+}
+
+/**
+ * "Više termina" mod na predavačevom kalendaru: masovno zakazivanje za JEDNO dete preko više
+ * slotova odjednom. Za razliku od admin varijante (koja pravi zahteve jer ne zna kog instruktora
+ * dodeliti), ovde je instruktor već poznat (sam predavač), pa se prave PRAVI termini/radionice
+ * direktno – bez učionice (dodaje se naknadno po potrebi, isto kao svugde).
+ */
+export async function createBulkTermsAsInstructor(
+  clientId: string,
+  termTypeId: string | null,
+  slots: { date: string; slotIndex: number }[]
+): Promise<{ failed: { date: string; slotIndex: number; error: string }[] }> {
+  const { instructor } = await getDashboardInstructor();
+  if (!instructor) return { failed: slots.map((s) => ({ ...s, error: 'Niste instruktor.' })) };
+  let admin;
+  try {
+    admin = createAdminClient();
+  } catch {
+    return { failed: slots.map((s) => ({ ...s, error: 'Server greška.' })) };
+  }
+  if (slots.length === 0) return { failed: [] };
+
+  const results = await Promise.all(
+    slots.map(async (s) => {
+      let termId: string;
+      const { data: existingTerm } = await admin
+        .from('terms')
+        .select('id')
+        .eq('instructor_id', instructor.id)
+        .eq('date', s.date)
+        .eq('slot_index', s.slotIndex)
+        .maybeSingle();
+      if (existingTerm) {
+        termId = existingTerm.id;
+      } else {
+        const { data: inserted, error: insErr } = await admin
+          .from('terms')
+          .insert({
+            instructor_id: instructor.id,
+            date: s.date,
+            slot_index: s.slotIndex,
+            term_category_id: SEEDED_TERM_CATEGORY_INDIVIDUAL_ID,
+          })
+          .select('id')
+          .single();
+        if (insErr || !inserted) return { ...s, error: insErr?.message ?? 'Greška pri kreiranju termina.' };
+        termId = inserted.id;
+      }
+
+      const limitCheck = await termMozeNovoPredavanje(termId);
+      if (!limitCheck.ok) return { ...s, error: `Maksimalan broj časova (${limitCheck.max}) je već dostignut u tom terminu.` };
+
+      const { data: dup } = await admin.from('predavanja').select('id').eq('term_id', termId).eq('client_id', clientId).maybeSingle();
+      if (dup) return { ...s, error: 'Ovo dete je već u tom terminu.' };
+
+      const { error: predErr } = await admin
+        .from('predavanja')
+        .insert({ term_id: termId, client_id: clientId, odrzano: false, placeno: false, term_type_id: termTypeId });
+      if (predErr) return { ...s, error: predErr.message };
+
+      await syncSpilloverForTerm(admin, termId);
+      return { ...s, error: null as string | null };
+    })
+  );
+  revalidatePath('/dashboard');
+  return { failed: results.filter((r): r is { date: string; slotIndex: number; error: string } => r.error !== null) };
 }

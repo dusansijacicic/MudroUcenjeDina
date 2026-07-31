@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { getDashboardInstructor } from '@/lib/dashboard';
 import { termMozeNovoPredavanje } from '@/lib/settings';
 import { SEEDED_TERM_CATEGORY_INDIVIDUAL_ID } from '@/lib/term-categories';
+import { syncSpilloverForTerm } from '@/app/admin/actions';
 import { revalidatePath } from 'next/cache';
 
 function getAdmin() {
@@ -115,13 +116,14 @@ export async function potvrdiZahtev(zahtevId: string): Promise<{ error?: string 
 
   const { data: predavanje, error: predErr } = await admin
     .from('predavanja')
-    .insert({ term_id: termId, client_id: zahtev.client_id, odrzano: false, placeno: false })
+    .insert({ term_id: termId, client_id: zahtev.client_id, odrzano: false, placeno: false, term_type_id: zahtev.term_type_id ?? null })
     .select('id')
     .single();
   if (predErr || !predavanje) {
     console.error('[zahtevi] potvrdiZahtev predavanje insert', predErr?.message);
     return { error: predErr?.message ?? 'Radionica nije kreirana.' };
   }
+  await syncSpilloverForTerm(admin, termId);
 
   const { error: upErr } = await admin
     .from('zahtevi_za_cas')
@@ -205,13 +207,14 @@ export async function promeniTerminZahtev(
 
   const { data: predavanje, error: predErr } = await admin
     .from('predavanja')
-    .insert({ term_id: termId, client_id: zahtev.client_id, odrzano: false, placeno: false })
+    .insert({ term_id: termId, client_id: zahtev.client_id, odrzano: false, placeno: false, term_type_id: zahtev.term_type_id ?? null })
     .select('id')
     .single();
   if (predErr || !predavanje) {
     console.error('[zahtevi] promeniTerminZahtev predavanje insert', predErr?.message);
     return { error: predErr?.message ?? 'Radionica nije kreirana.' };
   }
+  await syncSpilloverForTerm(admin, termId);
 
   const { error: upErr } = await admin
     .from('zahtevi_za_cas')

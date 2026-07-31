@@ -6,6 +6,7 @@ import AdminCalendarView, { type AdminTerm, type OtkazaniTerminCalendar } from '
 import AdminCalendarFilters from './AdminCalendarFilters';
 import AdminFromDashboardToast from '@/components/AdminFromDashboardToast';
 import { getMaxTerminaPoSlotu } from '@/lib/settings';
+import { getTermTypes } from '@/app/admin/actions';
 
 export default async function AdminKalendarPage({
   searchParams,
@@ -61,7 +62,7 @@ export default async function AdminKalendarPage({
   }
 
   const adminSupabase = createAdminClient();
-  const [{ data: termsRaw }, { data: instructorsList }, { data: classroomsList }, { data: clientsList }, { data: otkazaniRaw }, maxTerminaPoSlotu] = await Promise.all([
+  const [{ data: termsRaw }, { data: instructorsList }, { data: classroomsList }, { data: clientsList }, { data: otkazaniRaw }, maxTerminaPoSlotu, termTypes] = await Promise.all([
     adminSupabase
       .from('terms')
       .select('*, instructor:instructors(id, ime, prezime, color), classroom:classrooms(id, naziv, color), term_category:term_categories(id, naziv, is_testing), predavanja(*, client:clients(id, ime, prezime), term_type:term_types(naziv)), potential_clients(id, ime, prezime, ime_roditelja, mobilni_roditelja, status)')
@@ -71,9 +72,10 @@ export default async function AdminKalendarPage({
       .order('slot_index'),
     adminSupabase.from('instructors').select('id, ime, prezime, color').order('prezime').order('ime'),
     adminSupabase.from('classrooms').select('id, naziv').order('naziv'),
-    adminSupabase.from('clients').select('id, ime, prezime').order('ime').order('prezime'),
+    adminSupabase.from('clients').select('id, ime, prezime, godiste, datum_testiranja').order('ime').order('prezime'),
     adminSupabase.from('otkazani_termini').select('id, client_ime, client_prezime, instructor_id, instructor_ime, instructor_prezime, term_date, slot_index, term_type_naziv, placeno').gte('term_date', dateFrom).lte('term_date', dateTo),
     getMaxTerminaPoSlotu(),
+    getTermTypes(),
   ]);
 
   let terms: AdminTerm[] = (termsRaw ?? []).map((t) => {
@@ -173,6 +175,14 @@ export default async function AdminKalendarPage({
         singleDay={singleDay}
         monthStart={monthStart}
         maxTerminaPoSlotu={maxTerminaPoSlotu}
+        clients={(clientsList ?? []).map((c) => ({
+          id: c.id,
+          ime: c.ime ?? '',
+          prezime: c.prezime ?? '',
+          godiste: (c as { godiste?: number | null }).godiste ?? null,
+          datumTestiranja: (c as { datum_testiranja?: string | null }).datum_testiranja ?? null,
+        }))}
+        termTypes={termTypes}
       />
     </div>
   );

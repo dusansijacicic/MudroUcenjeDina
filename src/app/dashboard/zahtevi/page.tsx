@@ -14,7 +14,7 @@ export default async function DashboardZahteviPage() {
     const adminSupabase = createAdminClient();
     const { data, error } = await adminSupabase
       .from('zahtevi_za_cas')
-      .select('id, client_id, instructor_id, requested_date, requested_slot_index, status, note_from_instructor, created_at, client:clients(ime, prezime)')
+      .select('id, client_id, instructor_id, requested_date, requested_slot_index, status, note_from_instructor, created_at, client:clients(ime, prezime), term_type:term_types(naziv)')
       .or(`instructor_id.eq.${instructor.id},instructor_id.is.null`)
       .order('created_at', { ascending: false });
     if (error) {
@@ -25,7 +25,9 @@ export default async function DashboardZahteviPage() {
         const row = r as Record<string, unknown>;
         const client = row.client;
         const clientObj = Array.isArray(client) ? client[0] : client;
-        return { ...row, client: clientObj ?? null } as Zahtev;
+        const termType = row.term_type;
+        const termTypeObj = Array.isArray(termType) ? termType[0] : termType;
+        return { ...row, client: clientObj ?? null, term_type: termTypeObj ?? null } as Zahtev;
       });
     }
   } catch (e) {

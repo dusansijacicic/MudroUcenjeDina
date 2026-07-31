@@ -5,7 +5,8 @@ import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { TIME_SLOTS, AUTO_SPILLOVER_NAPOMENA } from '@/lib/constants';
 import Link from 'next/link';
-import { moveTermAsAdmin, swapTermsAsAdmin, copyTermAsAdmin, deleteTermsAsAdmin, deleteOtkazaniTermin } from '@/app/admin/actions';
+import { moveTermAsAdmin, swapTermsAsAdmin, copyTermAsAdmin, deleteTermsAsAdmin, deleteOtkazaniTermin, createBulkZahteviAsAdmin } from '@/app/admin/actions';
+import SingleKlijentPicker from '@/components/SingleKlijentPicker';
 
 const DAY_NAMES = ['Pon', 'Uto', 'Sre', 'Čet', 'Pet', 'Sub', 'Ned'];
 
@@ -72,6 +73,9 @@ type SwapContextValue = {
   onToggleDeleteSelect: (termId: string) => void;
   isOtkazaniMarkedForDelete: (id: string) => boolean;
   onToggleOtkazaniDeleteSelect: (id: string) => void;
+  bulkMode: boolean;
+  isBulkSelected: (date: string, slot: number) => boolean;
+  onToggleBulkSlot: (date: string, slot: number) => void;
 };
 const SwapContext = createContext<SwapContextValue>({
   swapMode: false,
@@ -87,6 +91,9 @@ const SwapContext = createContext<SwapContextValue>({
   onToggleDeleteSelect: () => {},
   isOtkazaniMarkedForDelete: () => false,
   onToggleOtkazaniDeleteSelect: () => {},
+  bulkMode: false,
+  isBulkSelected: () => false,
+  onToggleBulkSlot: () => {},
 });
 
 type SwapFields = { termin: boolean; instruktor: boolean; ucionica: boolean; klijent: boolean };
@@ -164,6 +171,8 @@ export default function AdminCalendarView({
   monthStart,
   view,
   maxTerminaPoSlotu = DEFAULT_MAX_TERMINA_PO_SLOTU,
+  clients = [],
+  termTypes = [],
 }: {
   terms: AdminTerm[];
   otkazaniTermini?: OtkazaniTerminCalendar[];
@@ -173,6 +182,9 @@ export default function AdminCalendarView({
   view: string;
   /** Iz Admin → Podešavanja; koliko paralelnih termina u istom vremenu */
   maxTerminaPoSlotu?: number;
+  /** Za "Više termina" mod (masovno zakazivanje bez instruktora/učionice, preko zahteva). */
+  clients?: { id: string; ime: string; prezime: string; godiste?: number | null; datumTestiranja?: string | null }[];
+  termTypes?: { id: string; naziv: string; opis: string | null }[];
 }) {
   const router = useRouter();
   const [draggedTermId, setDraggedTermId] = useState<string | null>(null);
@@ -221,18 +233,38 @@ export default function AdminCalendarView({
   const [deleteOtkazaniSelection, setDeleteOtkazaniSelection] = useState<Set<string>>(new Set());
   const [deleteLoading, setDeleteLoading] = useState(false);
 
-  // Swap/Copy/Delete su međusobno isključivi – uključivanje jednog gasi ostale da klikovi na
+  const [bulkMode, setBulkMode] = useState(false);
+  const [bulkClientId, setBulkClientId] = useState('');
+  const [bulkTermTypeId, setBulkTermTypeId] = useState('');
+  const [bulkSlots, setBulkSlots] = useState<Set<string>>(new Set());
+  const [bulkLoading, setBulkLoading] = useState(false);
+
+  // Swap/Copy/Delete/Bulk su međusobno isključivi – uključivanje jednog gasi ostale da klikovi na
   // kalendaru ne budu dvosmisleni.
+  const resetOtherModes = (keep: 'swap' | 'copy' | 'delete' | 'bulk') => {
+    if (keep !== 'swap') {
+      setSwapMode(false);
+      resetSwapSelection();
+    }
+    if (keep !== 'copy') {
+      setCopyMode(false);
+      setCopySource(null);
+    }
+    if (keep !== 'delete') {
+      setDeleteMode(false);
+      setDeleteSelection(new Set());
+      setDeleteOtkazaniSelection(new Set());
+    }
+    if (keep !== 'bulk') {
+      setBulkMode(false);
+      setBulkSlots(new Set());
+    }
+  };
+
   const toggleSwapMode = () => {
     setSwapMode((v) => {
       const next = !v;
-      if (next) {
-        setCopyMode(false);
-        setCopySource(null);
-        setDeleteMode(false);
-        setDeleteSelection(new Set());
-        setDeleteOtkazaniSelection(new Set());
-      }
+      if (next) resetOtherModes('swap');
       return next;
     });
     resetSwapSelection();
@@ -241,13 +273,7 @@ export default function AdminCalendarView({
   const toggleCopyMode = () => {
     setCopyMode((v) => {
       const next = !v;
-      if (next) {
-        setSwapMode(false);
-        resetSwapSelection();
-        setDeleteMode(false);
-        setDeleteSelection(new Set());
-        setDeleteOtkazaniSelection(new Set());
-      }
+      if (next) resetOtherModes('copy');
       return next;
     });
     setCopySource(null);
@@ -256,16 +282,20 @@ export default function AdminCalendarView({
   const toggleDeleteMode = () => {
     setDeleteMode((v) => {
       const next = !v;
-      if (next) {
-        setSwapMode(false);
-        resetSwapSelection();
-        setCopyMode(false);
-        setCopySource(null);
-      }
+      if (next) resetOtherModes('delete');
       return next;
     });
     setDeleteSelection(new Set());
     setDeleteOtkazaniSelection(new Set());
+  };
+
+  const toggleBulkMode = () => {
+    setBulkMode((v) => {
+      const next = !v;
+      if (next) resetOtherModes('bulk');
+      return next;
+    });
+    setBulkSlots(new Set());
   };
 
   const onToggleDeleteSelect = (termId: string) => {
@@ -306,6 +336,34 @@ export default function AdminCalendarView({
       toast.success(`Obrisano ${total}.`);
     }
     router.refresh();
+  };
+
+  const onToggleBulkSlot = (date: string, slot: number) => {
+    const key = `${date}|${slot}`;
+    setBulkSlots((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  const confirmBulk = async () => {
+    if (!bulkClientId || bulkSlots.size === 0) return;
+    const slots = [...bulkSlots].map((key) => {
+      const [date, slotStr] = key.split('|');
+      return { date, slotIndex: Number(slotStr) };
+    });
+    setBulkSlots(new Set());
+    setBulkMode(false);
+    setBulkLoading(true);
+    const { failed } = await createBulkZahteviAsAdmin(bulkClientId, bulkTermTypeId || null, slots);
+    setBulkLoading(false);
+    if (failed.length > 0) {
+      toast.error(`Nije zakazano ${failed.length}/${slots.length} – ${failed.map((f) => `${f.date} (${f.error})`).join('; ')}`);
+    } else {
+      toast.success(`Kreirano ${slots.length} zahtev(a) – predavači ih vide na svom Dashboard → Zahtevi.`);
+    }
   };
 
   const onSelectCopySource = (term: AdminTerm) => {
@@ -440,6 +498,9 @@ export default function AdminCalendarView({
         onToggleDeleteSelect,
         isOtkazaniMarkedForDelete: (id: string) => deleteOtkazaniSelection.has(id),
         onToggleOtkazaniDeleteSelect,
+        bulkMode,
+        isBulkSelected: (date: string, slot: number) => bulkSlots.has(`${date}|${slot}`),
+        onToggleBulkSlot,
       }}
     >
       <div className="mb-4 rounded-xl border border-stone-200 bg-white p-3">
@@ -488,6 +549,16 @@ export default function AdminCalendarView({
             </>
           )}
           {deleteLoading && <span className="text-sm text-stone-500">Brišem…</span>}
+          <button
+            type="button"
+            onClick={toggleBulkMode}
+            className={`px-3 py-1.5 rounded-lg text-sm font-medium ${
+              bulkMode ? 'bg-amber-600 text-white hover:bg-amber-700' : 'bg-stone-200 text-stone-700 hover:bg-stone-300'
+            }`}
+          >
+            {bulkMode ? 'Više termina: uključeno' : 'Više termina'}
+          </button>
+          {bulkLoading && <span className="text-sm text-stone-500">Zakazujem…</span>}
           {swapMode && (
             <>
               <div className="flex items-center gap-3 flex-wrap text-sm text-stone-700">
@@ -594,6 +665,43 @@ export default function AdminCalendarView({
             )}
           </div>
         )}
+        {bulkMode && (
+          <div className="mt-2 flex flex-wrap items-end gap-3 text-sm">
+            <div className="min-w-[220px]">
+              <label className="block text-xs font-medium text-stone-700 mb-1">Dete</label>
+              <SingleKlijentPicker
+                clients={clients}
+                value={bulkClientId}
+                onChange={setBulkClientId}
+                inputId="admin-bulk-klijent-search"
+              />
+            </div>
+            <div className="min-w-[200px]">
+              <label className="block text-xs font-medium text-stone-700 mb-1">Vrsta časa</label>
+              <select
+                value={bulkTermTypeId}
+                onChange={(e) => setBulkTermTypeId(e.target.value)}
+                className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm text-stone-800 bg-white"
+              >
+                <option value="">— (nije obavezno) —</option>
+                {termTypes.map((tt) => (
+                  <option key={tt.id} value={tt.id}>{tt.naziv}</option>
+                ))}
+              </select>
+            </div>
+            <button
+              type="button"
+              onClick={confirmBulk}
+              disabled={!bulkClientId || bulkSlots.size === 0}
+              className="px-3 py-1.5 rounded-lg text-sm font-medium bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Potvrdi ({bulkSlots.size})
+            </button>
+            <span className="text-stone-400 text-xs max-w-md">
+              Izaberite dete, pa kliknite termine na kalendaru (bilo prazne ili zauzete). Bez instruktora/učionice – pravi se zahtev koji bilo koji predavač preuzima na svom Dashboard → Zahtevi.
+            </span>
+          </div>
+        )}
       </div>
       {body}
     </SwapContext.Provider>
@@ -624,6 +732,26 @@ function AdminCellContent({
   const newTestHref = `${newTermHref}&cat=testing`;
   const slotCount = termsInSlot.length;
   const canAddParallelTerm = slotCount < maxTerminaPoSlotu;
+
+  if (swap.bulkMode) {
+    const bulkSelected = swap.isBulkSelected(emptyDate, emptySlot);
+    return (
+      <button
+        type="button"
+        onClick={() => swap.onToggleBulkSlot(emptyDate, emptySlot)}
+        className={`w-full min-h-[52px] rounded-lg border-2 p-2 text-left text-xs transition-colors ${
+          bulkSelected
+            ? 'border-emerald-600 bg-emerald-50 ring-2 ring-offset-1 ring-emerald-500'
+            : 'border-dashed border-stone-200 hover:border-emerald-400 hover:bg-emerald-50/50'
+        }`}
+      >
+        <span className="block text-stone-500">
+          {slotCount === 0 ? 'prazno' : `${slotCount} termin(a) ovde`}
+        </span>
+        {bulkSelected && <span className="block font-semibold text-emerald-700 mt-0.5">✓ izabrano</span>}
+      </button>
+    );
+  }
 
   const CancelledEntries = otkazaniInSlot.length > 0 ? (
     <div className="mt-1 space-y-1">
