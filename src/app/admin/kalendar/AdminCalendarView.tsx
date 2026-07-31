@@ -70,6 +70,8 @@ type SwapContextValue = {
   deleteMode: boolean;
   isMarkedForDelete: (termId: string) => boolean;
   onToggleDeleteSelect: (termId: string) => void;
+  isOtkazaniMarkedForDelete: (id: string) => boolean;
+  onToggleOtkazaniDeleteSelect: (id: string) => void;
 };
 const SwapContext = createContext<SwapContextValue>({
   swapMode: false,
@@ -83,6 +85,8 @@ const SwapContext = createContext<SwapContextValue>({
   deleteMode: false,
   isMarkedForDelete: () => false,
   onToggleDeleteSelect: () => {},
+  isOtkazaniMarkedForDelete: () => false,
+  onToggleOtkazaniDeleteSelect: () => {},
 });
 
 type SwapFields = { termin: boolean; instruktor: boolean; ucionica: boolean; klijent: boolean };
@@ -214,6 +218,7 @@ export default function AdminCalendarView({
 
   const [deleteMode, setDeleteMode] = useState(false);
   const [deleteSelection, setDeleteSelection] = useState<Set<string>>(new Set());
+  const [deleteOtkazaniSelection, setDeleteOtkazaniSelection] = useState<Set<string>>(new Set());
   const [deleteLoading, setDeleteLoading] = useState(false);
 
   // Swap/Copy/Delete su međusobno isključivi – uključivanje jednog gasi ostale da klikovi na
@@ -226,6 +231,7 @@ export default function AdminCalendarView({
         setCopySource(null);
         setDeleteMode(false);
         setDeleteSelection(new Set());
+        setDeleteOtkazaniSelection(new Set());
       }
       return next;
     });
@@ -240,6 +246,7 @@ export default function AdminCalendarView({
         resetSwapSelection();
         setDeleteMode(false);
         setDeleteSelection(new Set());
+        setDeleteOtkazaniSelection(new Set());
       }
       return next;
     });
@@ -258,6 +265,7 @@ export default function AdminCalendarView({
       return next;
     });
     setDeleteSelection(new Set());
+    setDeleteOtkazaniSelection(new Set());
   };
 
   const onToggleDeleteSelect = (termId: string) => {
@@ -269,20 +277,33 @@ export default function AdminCalendarView({
     });
   };
 
+  const onToggleOtkazaniDeleteSelect = (id: string) => {
+    setDeleteOtkazaniSelection((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
   const confirmDelete = async () => {
-    if (deleteSelection.size === 0) return;
-    if (!confirm(`Trajno obrisati ${deleteSelection.size} termin(a)? Ova akcija se ne može poništiti.`)) return;
-    const ids = [...deleteSelection];
+    const total = deleteSelection.size + deleteOtkazaniSelection.size;
+    if (total === 0) return;
+    if (!confirm(`Trajno obrisati ${total} termin(a) BEZ TRAGA (ne otkazivanje – ništa neće ostati na kalendaru)?`)) return;
+    const termIds = [...deleteSelection];
+    const otkazaniIds = [...deleteOtkazaniSelection];
     setTerms((list) => list.filter((t) => !deleteSelection.has(t.id)));
+    setOtkazaniTermini((list) => list.filter((ot) => !deleteOtkazaniSelection.has(ot.id)));
     setDeleteSelection(new Set());
+    setDeleteOtkazaniSelection(new Set());
     setDeleteMode(false);
     setDeleteLoading(true);
-    const { failed } = await deleteTermsAsAdmin(ids);
+    const { failed } = await deleteTermsAsAdmin(termIds, otkazaniIds);
     setDeleteLoading(false);
     if (failed.length > 0) {
-      toast.error(`Nije obrisano ${failed.length}/${ids.length} termina.`);
+      toast.error(`Nije obrisano ${failed.length}/${total}.`);
     } else {
-      toast.success(`Obrisano ${ids.length} termin(a).`);
+      toast.success(`Obrisano ${total}.`);
     }
     router.refresh();
   };
@@ -417,6 +438,8 @@ export default function AdminCalendarView({
         deleteMode,
         isMarkedForDelete: (termId: string) => deleteSelection.has(termId),
         onToggleDeleteSelect,
+        isOtkazaniMarkedForDelete: (id: string) => deleteOtkazaniSelection.has(id),
+        onToggleOtkazaniDeleteSelect,
       }}
     >
       <div className="mb-4 rounded-xl border border-stone-200 bg-white p-3">
@@ -454,12 +477,14 @@ export default function AdminCalendarView({
               <button
                 type="button"
                 onClick={confirmDelete}
-                disabled={deleteSelection.size === 0}
+                disabled={deleteSelection.size + deleteOtkazaniSelection.size === 0}
                 className="px-3 py-1.5 rounded-lg text-sm font-medium bg-red-600 text-white hover:bg-red-700 disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                Potvrdi brisanje ({deleteSelection.size})
+                Potvrdi brisanje ({deleteSelection.size + deleteOtkazaniSelection.size})
               </button>
-              <span className="text-sm text-stone-400">kliknite termine da ih označite, klik ponovo za deselekciju</span>
+              <span className="text-sm text-stone-400">
+                kliknite termine (i sive otkazane) da ih označite, klik ponovo za deselekciju – ovo je trajno brisanje BEZ TRAGA, ne otkazivanje
+              </span>
             </>
           )}
           {deleteLoading && <span className="text-sm text-stone-500">Brišem…</span>}
@@ -602,30 +627,46 @@ function AdminCellContent({
 
   const CancelledEntries = otkazaniInSlot.length > 0 ? (
     <div className="mt-1 space-y-1">
-      {otkazaniInSlot.map((ot) => (
-        <div key={ot.id} className="rounded-lg border border-stone-200 bg-stone-50 p-1.5 text-xs text-stone-400 opacity-70">
-          <div className="flex items-start justify-between gap-1">
-            <span className="line-through block">
-              {ot.client_ime}{ot.client_prezime ? ` ${ot.client_prezime}` : ''}
-            </span>
-            <button
-              type="button"
-              title="Trajno obriši"
-              onClick={(e) => {
-                e.preventDefault();
-                swap.onDeleteOtkazani(ot.id);
-              }}
-              className="shrink-0 leading-none text-stone-400 hover:text-red-600"
-            >
-              ✕
-            </button>
+      {otkazaniInSlot.map((ot) => {
+        const otkazaniSelected = swap.deleteMode && swap.isOtkazaniMarkedForDelete(ot.id);
+        return (
+          <div
+            key={ot.id}
+            role={swap.deleteMode ? 'button' : undefined}
+            onClick={() => {
+              if (swap.deleteMode) swap.onToggleOtkazaniDeleteSelect(ot.id);
+            }}
+            className={`rounded-lg border p-1.5 text-xs text-stone-400 opacity-70${
+              swap.deleteMode ? ' cursor-pointer' : ''
+            }${
+              otkazaniSelected ? ' border-red-500 ring-2 ring-offset-1 ring-red-500 bg-red-50' : ' border-stone-200 bg-stone-50'
+            }`}
+          >
+            <div className="flex items-start justify-between gap-1">
+              <span className="line-through block">
+                {ot.client_ime}{ot.client_prezime ? ` ${ot.client_prezime}` : ''}
+              </span>
+              {!swap.deleteMode && (
+                <button
+                  type="button"
+                  title="Trajno obriši"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    swap.onDeleteOtkazani(ot.id);
+                  }}
+                  className="shrink-0 leading-none text-stone-400 hover:text-red-600"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+            {ot.instructor_ime && (
+              <span className="block text-[11px]">{ot.instructor_ime} {ot.instructor_prezime ?? ''}</span>
+            )}
+            <span className="text-[10px] uppercase tracking-wide">otkazano{ot.placeno ? ' · naplaćeno' : ''}</span>
           </div>
-          {ot.instructor_ime && (
-            <span className="block text-[11px]">{ot.instructor_ime} {ot.instructor_prezime ?? ''}</span>
-          )}
-          <span className="text-[10px] uppercase tracking-wide">otkazano{ot.placeno ? ' · naplaćeno' : ''}</span>
-        </div>
-      ))}
+        );
+      })}
     </div>
   ) : null;
 

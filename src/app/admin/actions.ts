@@ -732,6 +732,7 @@ export async function moveTermAsAdmin(
   return {};
 }
 
+/** "Otkazivanje" – čuva istorijski trag u otkazani_termini (prikazuje se sivo na kalendaru) pre brisanja. */
 export async function deleteTermAsAdmin(termId: string): Promise<{ error?: string }> {
   const { admin, error: authErr } = await requireAdmin();
   if (authErr || !admin) return { error: authErr ?? 'Niste ovlašćeni.' };
@@ -752,21 +753,49 @@ export async function deleteTermAsAdmin(termId: string): Promise<{ error?: strin
 }
 
 /**
- * Briše više termina odjednom (Delete mod na kalendaru) – JEDAN poziv serveru koji iznutra
- * paralelizuje brisanje (nezavisni termini, različiti redovi), umesto da klijent zove
- * deleteTermAsAdmin N puta preko mreže (isti problem kao kod repeatTermAsAdmin).
+ * "Brisanje" (bez traga) – za razliku od deleteTermAsAdmin (Otkazivanje) NE upisuje u
+ * otkazani_termini, pa posle ovoga na kalendaru ne ostaje ništa, ni sivi zapis. predavanja se brišu
+ * automatski (ON DELETE CASCADE na predavanja.term_id).
  */
-export async function deleteTermsAsAdmin(termIds: string[]): Promise<{ failed: { termId: string; error: string }[] }> {
-  const { error: authErr } = await requireAdmin();
-  if (authErr) return { failed: termIds.map((termId) => ({ termId, error: authErr })) };
+export async function permanentlyDeleteTermAsAdmin(termId: string): Promise<{ error?: string }> {
+  const { admin, error: authErr } = await requireAdmin();
+  if (authErr || !admin) return { error: authErr ?? 'Niste ovlašćeni.' };
 
-  const results = await Promise.all(
-    termIds.map(async (termId) => {
-      const res = await deleteTermAsAdmin(termId);
-      return { termId, error: res.error ?? null };
-    })
-  );
-  return { failed: results.filter((r): r is { termId: string; error: string } => r.error !== null) };
+  await admin.from('terms').delete().eq('nastavak_of_term_id', termId).eq('napomena', AUTO_SPILLOVER_NAPOMENA);
+  const { error } = await admin.from('terms').delete().eq('id', termId);
+  if (error) return { error: error.message };
+  revalidatePath('/admin/kalendar');
+  return {};
+}
+
+/**
+ * Briše više termina i/ili otkazanih (istorijskih) zapisa odjednom (Delete mod na kalendaru) – JEDAN
+ * poziv serveru koji iznutra paralelizuje brisanje (nezavisni redovi), umesto da klijent zove
+ * pojedinačne akcije N puta preko mreže (isti problem kao kod repeatTermAsAdmin). Termini se brišu
+ * BEZ TRAGA (permanentlyDeleteTermAsAdmin) – ovo je namerno drugačije od "Otkaži termin".
+ */
+export async function deleteTermsAsAdmin(
+  termIds: string[],
+  otkazaniIds: string[] = []
+): Promise<{ failed: { id: string; error: string }[] }> {
+  const { error: authErr } = await requireAdmin();
+  if (authErr) return { failed: [...termIds, ...otkazaniIds].map((id) => ({ id, error: authErr })) };
+
+  const [termResults, otkazaniResults] = await Promise.all([
+    Promise.all(
+      termIds.map(async (id) => {
+        const res = await permanentlyDeleteTermAsAdmin(id);
+        return { id, error: res.error ?? null };
+      })
+    ),
+    Promise.all(
+      otkazaniIds.map(async (id) => {
+        const res = await deleteOtkazaniTermin(id);
+        return { id, error: res.error ?? null };
+      })
+    ),
+  ]);
+  return { failed: [...termResults, ...otkazaniResults].filter((r): r is { id: string; error: string } => r.error !== null) };
 }
 
 /**
@@ -1579,6 +1608,21 @@ export async function addPotentialClient(
   if (error || !data) return { error: error?.message ?? 'Greška.' };
   revalidatePath(`/admin/termin/${termId}`);
   return { id: data.id };
+}
+
+/** Dodaje više potencijalnih klijenata odjednom (npr. braća/sestre) na već kreiran termin testiranja,
+ * u jednom upitu – koristi se pri kreiranju termina umesto naknadnog dodavanja jedan-po-jedan. */
+export async function addPotentialClientsAsAdmin(
+  termId: string,
+  list: { ime: string; prezime: string | null; ime_roditelja: string | null; mobilni_roditelja: string | null; razred: string | null }[]
+): Promise<{ error?: string }> {
+  const { admin, error: authErr } = await requireAdmin();
+  if (authErr || !admin) return { error: authErr ?? 'Samo admin.' };
+  if (list.length === 0) return {};
+  const { error } = await admin.from('potential_clients').insert(list.map((p) => ({ term_id: termId, ...p })));
+  if (error) return { error: error.message };
+  revalidatePath(`/admin/termin/${termId}`);
+  return {};
 }
 
 export async function updatePotentialClient(
