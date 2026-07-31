@@ -76,7 +76,7 @@ export default async function AdminKalendarPage({
     adminSupabase.from('otkazani_termini').select('id, client_ime, client_prezime, instructor_id, instructor_ime, instructor_prezime, term_date, slot_index, term_type_naziv, placeno').gte('term_date', dateFrom).lte('term_date', dateTo),
     adminSupabase
       .from('zahtevi_za_cas')
-      .select('id, requested_date, requested_slot_index, client:clients(ime, prezime), term_type:term_types(naziv)')
+      .select('id, requested_date, requested_slot_index, client:clients(ime, prezime), term_type:term_types(naziv), classroom:classrooms(naziv)')
       .eq('status', 'pending')
       .gte('requested_date', dateFrom)
       .lte('requested_date', dateTo),
@@ -119,6 +119,7 @@ export default async function AdminKalendarPage({
   const pendingZahtevi = (zahteviRaw ?? []).map((z) => {
     const client = Array.isArray(z.client) ? z.client[0] : z.client;
     const termType = Array.isArray(z.term_type) ? z.term_type[0] : z.term_type;
+    const classroom = Array.isArray(z.classroom) ? z.classroom[0] : z.classroom;
     return {
       id: z.id,
       date: String(z.requested_date).slice(0, 10),
@@ -126,6 +127,7 @@ export default async function AdminKalendarPage({
       client_ime: (client as { ime?: string } | null)?.ime ?? '',
       client_prezime: (client as { prezime?: string } | null)?.prezime ?? null,
       term_type_naziv: (termType as { naziv?: string } | null)?.naziv ?? null,
+      classroom_naziv: (classroom as { naziv?: string } | null)?.naziv ?? null,
     };
   });
 

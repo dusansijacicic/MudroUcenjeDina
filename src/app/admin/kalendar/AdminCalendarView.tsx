@@ -15,6 +15,7 @@ import {
   assignInstructorToTermsAsAdmin,
   assignClassroomToTermsAsAdmin,
   assignInstructorToZahteviAsAdmin,
+  assignClassroomToZahteviAsAdmin,
 } from '@/app/admin/actions';
 import SingleKlijentPicker from '@/components/SingleKlijentPicker';
 
@@ -41,6 +42,7 @@ export type PendingZahtevCalendar = {
   client_ime: string;
   client_prezime?: string | null;
   term_type_naziv?: string | null;
+  classroom_naziv?: string | null;
 };
 
 export type PotentialClientCalendar = {
@@ -463,8 +465,10 @@ export default function AdminCalendarView({
           ? assignInstructorToTermsAsAdmin(assignTargetId, termIds)
           : assignClassroomToTermsAsAdmin(assignTargetId, termIds)
         : Promise.resolve({ failed: [] }),
-      zahtevIds.length > 0 && mode === 'instruktor'
-        ? assignInstructorToZahteviAsAdmin(assignTargetId, zahtevIds)
+      zahtevIds.length > 0
+        ? mode === 'instruktor'
+          ? assignInstructorToZahteviAsAdmin(assignTargetId, zahtevIds)
+          : assignClassroomToZahteviAsAdmin(assignTargetId, zahtevIds)
         : Promise.resolve({ failed: [] }),
     ]);
     setAssignLoading(false);
@@ -996,17 +1000,13 @@ function AdminCellContent({
   const PendingZahteviEntries = pendingZahteviInSlot.length > 0 ? (
     <div className="mt-1 space-y-1">
       {pendingZahteviInSlot.map((z) => {
-        const zahtevSelected = swap.assignMode === 'instruktor' && swap.isZahtevMarkedForAssign(z.id);
+        const zahtevSelected = zahtevClickable && swap.isZahtevMarkedForAssign(z.id);
         return (
           <div
             key={z.id}
             role={zahtevClickable ? 'button' : undefined}
             onClick={() => {
-              if (swap.assignMode === 'instruktor') {
-                swap.onToggleAssignZahtevSelect(z.id);
-              } else if (swap.assignMode === 'ucionica') {
-                toast.error('Ovaj zahtev prvo mora dobiti instruktora (preko "Dodeli instruktora") pre nego što može dobiti učionicu.');
-              }
+              if (zahtevClickable) swap.onToggleAssignZahtevSelect(z.id);
             }}
             className={`rounded-lg border border-dashed p-1.5 text-xs text-stone-500${
               zahtevClickable ? ' cursor-pointer' : ''
@@ -1018,6 +1018,7 @@ function AdminCellContent({
               {z.client_ime}{z.client_prezime ? ` ${z.client_prezime}` : ''}
             </span>
             {z.term_type_naziv && <span className="block text-[11px]">{z.term_type_naziv}</span>}
+            {z.classroom_naziv && <span className="block text-[11px]">🏫 {z.classroom_naziv}</span>}
             <span className="text-[10px] uppercase tracking-wide">zahtev · čeka predavača</span>
           </div>
         );

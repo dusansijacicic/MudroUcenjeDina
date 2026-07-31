@@ -16,6 +16,31 @@ function getAdmin() {
   }
 }
 
+/** Ako je zahtevu unapred dodeljena učionica (nezavisno od redosleda), prenosi je na termin ako je
+ * nema – tiho preskače ako je u međuvremenu zauzeta (ne blokira potvrdu zahteva). */
+async function applyZahtevClassroom(
+  admin: ReturnType<typeof createAdminClient>,
+  classroomId: string | null,
+  termId: string,
+  dateStr: string,
+  slot: number
+) {
+  if (!classroomId) return;
+  const { data: termNow } = await admin.from('terms').select('classroom_id').eq('id', termId).single();
+  if (!termNow || termNow.classroom_id) return;
+  const { data: conflict } = await admin
+    .from('terms')
+    .select('id')
+    .eq('classroom_id', classroomId)
+    .eq('date', dateStr)
+    .eq('slot_index', slot)
+    .neq('id', termId)
+    .maybeSingle();
+  if (!conflict) {
+    await admin.from('terms').update({ classroom_id: classroomId }).eq('id', termId);
+  }
+}
+
 export async function preuzmiZahtev(zahtevId: string): Promise<{ error?: string }> {
   console.log('[zahtevi] preuzmiZahtev', zahtevId);
   const { instructor } = await getDashboardInstructor();
@@ -109,6 +134,8 @@ export async function potvrdiZahtev(zahtevId: string): Promise<{ error?: string 
     termId = inserted.id;
   }
 
+  await applyZahtevClassroom(admin, zahtev.classroom_id ?? null, termId, dateStr, slot);
+
   const limitCheck = await termMozeNovoPredavanje(termId);
   if (!limitCheck.ok) {
     return { error: `U ovom terminu je već dostignut maksimalan broj časova (${limitCheck.max}). Trenutno: ${limitCheck.count}.` };
@@ -199,6 +226,8 @@ export async function promeniTerminZahtev(
     }
     termId = inserted.id;
   }
+
+  await applyZahtevClassroom(admin, zahtev.classroom_id ?? null, termId, dateStr, slot);
 
   const limitCheck = await termMozeNovoPredavanje(termId);
   if (!limitCheck.ok) {

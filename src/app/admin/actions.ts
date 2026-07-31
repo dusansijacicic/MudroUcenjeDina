@@ -390,6 +390,25 @@ export async function assignInstructorToZahtevAsAdmin(zahtevId: string, instruct
     termId = inserted.id;
   }
 
+  // Ako je zahtev unapred dobio učionicu (bilo kojim redosledom, pre ili posle instruktora) i termin
+  // je nema, pokušaj da je prenese – tiho preskoči ako je u međuvremenu zauzeta (ne blokira potvrdu).
+  if (zahtev.classroom_id) {
+    const { data: termNow } = await admin.from('terms').select('classroom_id').eq('id', termId).single();
+    if (termNow && !termNow.classroom_id) {
+      const { data: roomConflict } = await admin
+        .from('terms')
+        .select('id')
+        .eq('classroom_id', zahtev.classroom_id)
+        .eq('date', dateStr)
+        .eq('slot_index', slot)
+        .neq('id', termId)
+        .maybeSingle();
+      if (!roomConflict) {
+        await admin.from('terms').update({ classroom_id: zahtev.classroom_id }).eq('id', termId);
+      }
+    }
+  }
+
   const limitCheck = await termMozeNovoPredavanje(termId);
   if (!limitCheck.ok) return { error: `Maksimalan broj časova (${limitCheck.max}) je već dostignut u tom terminu.` };
 
@@ -423,6 +442,64 @@ export async function assignInstructorToZahteviAsAdmin(
   const results = await Promise.all(
     zahtevIds.map(async (zahtevId) => {
       const res = await assignInstructorToZahtevAsAdmin(zahtevId, instructorId);
+      return { zahtevId, error: res.error ?? null };
+    })
+  );
+  return { failed: results.filter((r): r is { zahtevId: string; error: string } => r.error !== null) };
+}
+
+/**
+ * Dodeljuje učionicu zahtevu – nezavisno od redosleda, može i pre nego što zahtev dobije
+ * instruktora. Ako zahtev već ima kreiran termin (već potvrđen), učionica se odmah prenosi tamo;
+ * inače se samo pamti na zahtevu i prenosi kasnije kad se zahtev potvrdi (bilo kojim putem).
+ */
+export async function assignClassroomToZahtevAsAdmin(zahtevId: string, classroomId: string): Promise<{ error?: string }> {
+  const { admin, error: authErr } = await requireAdmin();
+  if (authErr || !admin) return { error: authErr ?? 'Niste ovlašćeni.' };
+
+  const { data: zahtev } = await admin
+    .from('zahtevi_za_cas')
+    .select('status, requested_date, requested_slot_index, created_term_id')
+    .eq('id', zahtevId)
+    .single();
+  if (!zahtev) return { error: 'Zahtev nije pronađen.' };
+
+  const dateStr = String(zahtev.requested_date).slice(0, 10);
+  const slot = Math.min(15, Math.max(0, zahtev.requested_slot_index));
+  const { data: conflict } = await admin
+    .from('terms')
+    .select('id')
+    .eq('classroom_id', classroomId)
+    .eq('date', dateStr)
+    .eq('slot_index', slot)
+    .maybeSingle();
+  if (conflict && conflict.id !== zahtev.created_term_id) {
+    return { error: 'Učionica je već zauzeta u tom terminu.' };
+  }
+
+  const { error } = await admin.from('zahtevi_za_cas').update({ classroom_id: classroomId }).eq('id', zahtevId);
+  if (error) return { error: error.message };
+
+  if (zahtev.created_term_id) {
+    await admin.from('terms').update({ classroom_id: classroomId }).eq('id', zahtev.created_term_id);
+  }
+
+  revalidatePath('/admin/kalendar');
+  revalidatePath('/dashboard/zahtevi');
+  return {};
+}
+
+/** Batch verzija gornje. */
+export async function assignClassroomToZahteviAsAdmin(
+  classroomId: string,
+  zahtevIds: string[]
+): Promise<{ failed: { zahtevId: string; error: string }[] }> {
+  const { error: authErr } = await requireAdmin();
+  if (authErr) return { failed: zahtevIds.map((zahtevId) => ({ zahtevId, error: authErr })) };
+
+  const results = await Promise.all(
+    zahtevIds.map(async (zahtevId) => {
+      const res = await assignClassroomToZahtevAsAdmin(zahtevId, classroomId);
       return { zahtevId, error: res.error ?? null };
     })
   );
