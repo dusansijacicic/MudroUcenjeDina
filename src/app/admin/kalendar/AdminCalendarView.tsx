@@ -96,6 +96,8 @@ type SwapContextValue = {
   onToggleDeleteSelect: (termId: string) => void;
   isOtkazaniMarkedForDelete: (id: string) => boolean;
   onToggleOtkazaniDeleteSelect: (id: string) => void;
+  isZahtevMarkedForDelete: (zahtevId: string) => boolean;
+  onToggleZahtevDeleteSelect: (zahtevId: string) => void;
   bulkMode: boolean;
   isBulkSelected: (date: string, slot: number) => boolean;
   onToggleBulkSlot: (date: string, slot: number) => void;
@@ -119,6 +121,8 @@ const SwapContext = createContext<SwapContextValue>({
   onToggleDeleteSelect: () => {},
   isOtkazaniMarkedForDelete: () => false,
   onToggleOtkazaniDeleteSelect: () => {},
+  isZahtevMarkedForDelete: () => false,
+  onToggleZahtevDeleteSelect: () => {},
   bulkMode: false,
   isBulkSelected: () => false,
   onToggleBulkSlot: () => {},
@@ -208,7 +212,7 @@ export default function AdminCalendarView({
   termTypes = [],
   instructorsList = [],
   classroomsList = [],
-  pendingZahtevi = [],
+  pendingZahtevi: pendingZahteviProp = [],
 }: {
   terms: AdminTerm[];
   otkazaniTermini?: OtkazaniTerminCalendar[];
@@ -244,6 +248,11 @@ export default function AdminCalendarView({
     setOtkazaniTermini(otkazaniTerminiProp);
   }, [otkazaniTerminiProp]);
 
+  const [pendingZahtevi, setPendingZahtevi] = useState(pendingZahteviProp);
+  useEffect(() => {
+    setPendingZahtevi(pendingZahteviProp);
+  }, [pendingZahteviProp]);
+
   const handleDeleteOtkazani = async (id: string) => {
     if (!confirm('Trajno obrisati ovaj otkazani termin sa kalendara?')) return;
     const prev = otkazaniTermini;
@@ -272,6 +281,7 @@ export default function AdminCalendarView({
   const [deleteMode, setDeleteMode] = useState(false);
   const [deleteSelection, setDeleteSelection] = useState<Set<string>>(new Set());
   const [deleteOtkazaniSelection, setDeleteOtkazaniSelection] = useState<Set<string>>(new Set());
+  const [deleteZahteviSelection, setDeleteZahteviSelection] = useState<Set<string>>(new Set());
   const [deleteLoading, setDeleteLoading] = useState(false);
 
   const [bulkMode, setBulkMode] = useState(false);
@@ -301,6 +311,7 @@ export default function AdminCalendarView({
       setDeleteMode(false);
       setDeleteSelection(new Set());
       setDeleteOtkazaniSelection(new Set());
+      setDeleteZahteviSelection(new Set());
     }
     if (keep !== 'bulk') {
       setBulkMode(false);
@@ -340,6 +351,7 @@ export default function AdminCalendarView({
     });
     setDeleteSelection(new Set());
     setDeleteOtkazaniSelection(new Set());
+    setDeleteZahteviSelection(new Set());
   };
 
   const toggleBulkMode = () => {
@@ -369,19 +381,31 @@ export default function AdminCalendarView({
     });
   };
 
+  const onToggleZahtevDeleteSelect = (id: string) => {
+    setDeleteZahteviSelection((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
   const confirmDelete = async () => {
-    const total = deleteSelection.size + deleteOtkazaniSelection.size;
+    const total = deleteSelection.size + deleteOtkazaniSelection.size + deleteZahteviSelection.size;
     if (total === 0) return;
     if (!confirm(`Trajno obrisati ${total} termin(a) BEZ TRAGA (ne otkazivanje – ništa neće ostati na kalendaru)?`)) return;
     const termIds = [...deleteSelection];
     const otkazaniIds = [...deleteOtkazaniSelection];
+    const zahtevIds = [...deleteZahteviSelection];
     setTerms((list) => list.filter((t) => !deleteSelection.has(t.id)));
     setOtkazaniTermini((list) => list.filter((ot) => !deleteOtkazaniSelection.has(ot.id)));
+    setPendingZahtevi((list) => list.filter((z) => !deleteZahteviSelection.has(z.id)));
     setDeleteSelection(new Set());
     setDeleteOtkazaniSelection(new Set());
+    setDeleteZahteviSelection(new Set());
     setDeleteMode(false);
     setDeleteLoading(true);
-    const { failed } = await deleteTermsAsAdmin(termIds, otkazaniIds);
+    const { failed } = await deleteTermsAsAdmin(termIds, otkazaniIds, zahtevIds);
     setDeleteLoading(false);
     if (failed.length > 0) {
       toast.error(`Nije obrisano ${failed.length}/${total}.`);
@@ -615,6 +639,8 @@ export default function AdminCalendarView({
         onToggleDeleteSelect,
         isOtkazaniMarkedForDelete: (id: string) => deleteOtkazaniSelection.has(id),
         onToggleOtkazaniDeleteSelect,
+        isZahtevMarkedForDelete: (id: string) => deleteZahteviSelection.has(id),
+        onToggleZahtevDeleteSelect,
         bulkMode,
         isBulkSelected: (date: string, slot: number) => bulkSlots.has(`${date}|${slot}`),
         onToggleBulkSlot,
@@ -660,13 +686,13 @@ export default function AdminCalendarView({
               <button
                 type="button"
                 onClick={confirmDelete}
-                disabled={deleteSelection.size + deleteOtkazaniSelection.size === 0}
+                disabled={deleteSelection.size + deleteOtkazaniSelection.size + deleteZahteviSelection.size === 0}
                 className="px-3 py-1.5 rounded-lg text-sm font-medium bg-red-600 text-white hover:bg-red-700 disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                Potvrdi brisanje ({deleteSelection.size + deleteOtkazaniSelection.size})
+                Potvrdi brisanje ({deleteSelection.size + deleteOtkazaniSelection.size + deleteZahteviSelection.size})
               </button>
               <span className="text-sm text-stone-400">
-                kliknite termine (i sive otkazane) da ih označite, klik ponovo za deselekciju – ovo je trajno brisanje BEZ TRAGA, ne otkazivanje
+                kliknite termine (i sive otkazane/zahteve) da ih označite, klik ponovo za deselekciju – ovo je trajno brisanje BEZ TRAGA, ne otkazivanje
               </span>
             </>
           )}
@@ -996,22 +1022,29 @@ function AdminCellContent({
     </div>
   ) : null;
 
-  const zahtevClickable = swap.assignMode !== null;
+  const zahtevAssignClickable = swap.assignMode !== null;
+  const zahtevClickable = zahtevAssignClickable || swap.deleteMode;
   const PendingZahteviEntries = pendingZahteviInSlot.length > 0 ? (
     <div className="mt-1 space-y-1">
       {pendingZahteviInSlot.map((z) => {
-        const zahtevSelected = zahtevClickable && swap.isZahtevMarkedForAssign(z.id);
+        const zahtevAssignSelected = zahtevAssignClickable && swap.isZahtevMarkedForAssign(z.id);
+        const zahtevDeleteSelected = swap.deleteMode && swap.isZahtevMarkedForDelete(z.id);
         return (
           <div
             key={z.id}
             role={zahtevClickable ? 'button' : undefined}
             onClick={() => {
-              if (zahtevClickable) swap.onToggleAssignZahtevSelect(z.id);
+              if (swap.deleteMode) swap.onToggleZahtevDeleteSelect(z.id);
+              else if (zahtevAssignClickable) swap.onToggleAssignZahtevSelect(z.id);
             }}
             className={`rounded-lg border border-dashed p-1.5 text-xs text-stone-500${
               zahtevClickable ? ' cursor-pointer' : ''
             }${
-              zahtevSelected ? ' border-blue-600 ring-2 ring-offset-1 ring-blue-500 bg-blue-50' : ' border-stone-300 bg-stone-100'
+              zahtevDeleteSelected
+                ? ' border-red-600 ring-2 ring-offset-1 ring-red-500 bg-red-50'
+                : zahtevAssignSelected
+                ? ' border-blue-600 ring-2 ring-offset-1 ring-blue-500 bg-blue-50'
+                : ' border-stone-300 bg-stone-100'
             }`}
           >
             <span className="block font-medium text-stone-600">

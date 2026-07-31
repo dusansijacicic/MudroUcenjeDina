@@ -1047,12 +1047,13 @@ export async function permanentlyDeleteTermAsAdmin(termId: string): Promise<{ er
  */
 export async function deleteTermsAsAdmin(
   termIds: string[],
-  otkazaniIds: string[] = []
+  otkazaniIds: string[] = [],
+  zahtevIds: string[] = []
 ): Promise<{ failed: { id: string; error: string }[] }> {
-  const { error: authErr } = await requireAdmin();
-  if (authErr) return { failed: [...termIds, ...otkazaniIds].map((id) => ({ id, error: authErr })) };
+  const { admin, error: authErr } = await requireAdmin();
+  if (authErr || !admin) return { failed: [...termIds, ...otkazaniIds, ...zahtevIds].map((id) => ({ id, error: authErr ?? 'Niste ovlašćeni.' })) };
 
-  const [termResults, otkazaniResults] = await Promise.all([
+  const [termResults, otkazaniResults, zahtevResults] = await Promise.all([
     Promise.all(
       termIds.map(async (id) => {
         const res = await permanentlyDeleteTermAsAdmin(id);
@@ -1065,8 +1066,15 @@ export async function deleteTermsAsAdmin(
         return { id, error: res.error ?? null };
       })
     ),
+    Promise.all(
+      zahtevIds.map(async (id) => {
+        const { error } = await admin.from('zahtevi_za_cas').delete().eq('id', id);
+        return { id, error: error?.message ?? null };
+      })
+    ),
   ]);
-  return { failed: [...termResults, ...otkazaniResults].filter((r): r is { id: string; error: string } => r.error !== null) };
+  if (zahtevIds.length > 0) revalidatePath('/dashboard/zahtevi');
+  return { failed: [...termResults, ...otkazaniResults, ...zahtevResults].filter((r): r is { id: string; error: string } => r.error !== null) };
 }
 
 /**
