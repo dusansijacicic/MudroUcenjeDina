@@ -126,7 +126,7 @@ export default async function AdminKalendarPrintPage({
         tabela je na ekranu izgledala izbledelo. Plain hex ovde rešava oba problema odjednom.
       */}
       <div id="print-table-wrap" className="overflow-x-auto" style={{ backgroundColor: '#ffffff', color: '#000000' }}>
-        <table className="w-full border-collapse text-[11px] leading-tight" style={{ color: '#000000' }}>
+        <table className="w-full border-collapse leading-tight" style={{ color: '#000000', fontSize: '20px' }}>
           <thead>
             <tr>
               <th className="p-1 w-14" style={{ border: '1px solid #94a3b8', backgroundColor: '#f1f5f9', color: '#000000' }}>
@@ -161,7 +161,7 @@ export default async function AdminKalendarPrintPage({
                         <span style={{ color: '#94a3b8' }}>—</span>
                       ) : (
                         entries.map((e, i) => (
-                          <div key={i} className="whitespace-nowrap" style={{ color: '#000000' }}>
+                          <div key={i} style={{ color: '#000000' }}>
                             <span className="font-semibold">{e.instructorInitials}</span> {e.clientName}
                           </div>
                         ))
