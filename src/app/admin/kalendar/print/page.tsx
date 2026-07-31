@@ -119,15 +119,23 @@ export default async function AdminKalendarPrintPage({
 
       <DateRangeForm initialFrom={dateFrom} initialTo={dateTo} />
 
-      <div id="print-table-wrap" className="overflow-x-auto">
-        <table className="w-full border-collapse text-[10px] leading-tight">
+      {/*
+        Boje su namerno INLINE (ne Tailwind klase) unutar #print-table-wrap: Tailwind v4 generiše
+        boje preko oklch()/lab(), a html2canvas (koristi ga DownloadPdfButton) ume da parsira samo
+        standardne rgb/hex vrednosti – sa Tailwind klasama je bacao "unsupported color function" i
+        tabela je na ekranu izgledala izbledelo. Plain hex ovde rešava oba problema odjednom.
+      */}
+      <div id="print-table-wrap" className="overflow-x-auto" style={{ backgroundColor: '#ffffff', color: '#000000' }}>
+        <table className="w-full border-collapse text-[11px] leading-tight" style={{ color: '#000000' }}>
           <thead>
             <tr>
-              <th className="border border-stone-400 p-1 w-14 bg-stone-100">Vreme</th>
+              <th className="p-1 w-14" style={{ border: '1px solid #94a3b8', backgroundColor: '#f1f5f9', color: '#000000' }}>
+                Vreme
+              </th>
               {dates.map((d) => {
                 const dow = new Date(d + 'T12:00:00').getDay();
                 return (
-                  <th key={d} className="border border-stone-400 p-1 bg-stone-100">
+                  <th key={d} className="p-1" style={{ border: '1px solid #94a3b8', backgroundColor: '#f1f5f9', color: '#000000' }}>
                     {DAY_NAMES_SHORT[dow === 0 ? 6 : dow - 1]}
                     <br />
                     {new Date(d + 'T12:00:00').toLocaleDateString('sr-Latn-RS')}
@@ -139,16 +147,21 @@ export default async function AdminKalendarPrintPage({
           <tbody>
             {TIME_SLOTS.map((time, slotIndex) => (
               <tr key={slotIndex}>
-                <td className="border border-stone-400 p-1 font-medium text-center align-middle bg-stone-50">{time}</td>
+                <td
+                  className="p-1 font-medium text-center align-middle"
+                  style={{ border: '1px solid #94a3b8', backgroundColor: '#f8fafc', color: '#000000' }}
+                >
+                  {time}
+                </td>
                 {dates.map((d) => {
                   const entries = grid.get(`${d}|${slotIndex}`) ?? [];
                   return (
-                    <td key={d} className="border border-stone-400 p-1 align-top">
+                    <td key={d} className="p-1 align-top" style={{ border: '1px solid #94a3b8', color: '#000000' }}>
                       {entries.length === 0 ? (
-                        <span className="text-stone-300">—</span>
+                        <span style={{ color: '#94a3b8' }}>—</span>
                       ) : (
                         entries.map((e, i) => (
-                          <div key={i} className="whitespace-nowrap">
+                          <div key={i} className="whitespace-nowrap" style={{ color: '#000000' }}>
                             <span className="font-semibold">{e.instructorInitials}</span> {e.clientName}
                           </div>
                         ))
