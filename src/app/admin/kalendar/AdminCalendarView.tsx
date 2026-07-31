@@ -790,6 +790,12 @@ export default function AdminCalendarView({
             </>
           )}
           {assignLoading && <span className="text-sm text-stone-500">Dodeljujem…</span>}
+          <Link
+            href={`/admin/kalendar/print?week=${startOfWeek}`}
+            className="ml-auto px-3 py-1.5 rounded-lg text-sm font-medium bg-stone-100 text-stone-600 hover:bg-stone-200"
+          >
+            🖨 Print pregled
+          </Link>
           {swapMode && (
             <>
               <div className="flex items-center gap-3 flex-wrap text-sm text-stone-700">

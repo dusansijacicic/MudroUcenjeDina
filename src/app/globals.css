@@ -204,3 +204,14 @@ input:focus, select:focus, textarea:focus {
 .hover-lift:active {
   transform: translateY(0);
 }
+
+/* Print pregled nedelje (Admin → Kalendar → Print) – sakriva sve osim same tabele. */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  @page {
+    size: landscape;
+    margin: 10mm;
+  }
+}

@@ -49,7 +49,7 @@ export default function AdminNav() {
     }`;
   };
   return (
-    <header className="bg-stone-800 text-white border-b border-stone-700 shadow-lg animate-fade-in sticky top-0 z-20">
+    <header className="no-print bg-stone-800 text-white border-b border-stone-700 shadow-lg animate-fade-in sticky top-0 z-20">
       <div className="w-[90%] mx-auto px-4">
         <div className="flex items-center justify-end py-2 md:hidden">
           <button
