@@ -8,6 +8,7 @@ import type { Predavanje } from '@/types/database';
 import { deleteTermAsAdmin, getTermCategories } from '@/app/admin/actions';
 import { jedanKlijentIzJoina, nazivKategorijeIzJoina, isTestingCategoryJoin } from '@/lib/term-categories';
 import AdminTermMetaForm from '@/app/admin/termin/AdminTermMetaForm';
+import AddPotentialClientsInline from './AddPotentialClientsInline';
 import type { PotentialClientRow, PotentialClientStatus } from '@/app/admin/actions';
 
 const STATUS_LABEL: Record<PotentialClientStatus, string> = {
@@ -146,12 +147,7 @@ export default async function AdminTerminDetailPage({
               Potencijalni klijenti
               <span className="ml-2 text-stone-400 font-normal text-sm">({potentialClients.length})</span>
             </h2>
-            <Link
-              href={`/admin/termin/${termId}/testiranje/novi`}
-              className="inline-flex items-center rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700"
-            >
-              + Dodaj
-            </Link>
+            <AddPotentialClientsInline termId={termId} />
           </div>
           <div className="rounded-xl border border-stone-200 bg-white divide-y divide-stone-100">
             {potentialClients.length === 0 ? (

@@ -3,10 +3,11 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
-import { createTermAsAdmin, createPredavanjeAsAdmin, repeatTermAsAdmin, getTakenForSlot, getTermsForNastavak } from '../../actions';
+import { createTermAsAdmin, createPredavanjeAsAdmin, repeatTermAsAdmin, addPotentialClientsAsAdmin, getTakenForSlot, getTermsForNastavak } from '../../actions';
 import type { TermForNastavak } from '../../actions';
 import GrupniKlijentiPicker from '@/components/GrupniKlijentiPicker';
 import SingleKlijentPicker from '@/components/SingleKlijentPicker';
+import PotentialClientRowsInput, { emptyPotentialClientDraft, draftsToPayload, type PotentialClientDraft } from '../PotentialClientRowsInput';
 import { TIME_SLOTS } from '@/lib/constants';
 import { findDefaultCitanjeTermTypeId } from '@/lib/term-types';
 
@@ -115,6 +116,8 @@ export default function AdminTerminForm({
   const [termTypeId, setTermTypeId] = useState(() => findDefaultCitanjeTermTypeId(termTypes) ?? termTypes[0]?.id ?? '');
   /** 0 = samo za danas (default). Ponavlja se svaki naredni kalendarski dan (ne isti dan u nedelji). */
   const [repeatDays, setRepeatDays] = useState(0);
+  /** Za kategoriju Testiranje: deca za upis direktno pri kreiranju termina (umesto naknadno). */
+  const [potentialRows, setPotentialRows] = useState<PotentialClientDraft[]>([emptyPotentialClientDraft()]);
   const selectedProgramId = termTypes.find((tt) => tt.id === termTypeId)?.program_id ?? null;
   const completedIds = useMemo(() => {
     if (!selectedProgramId) return new Set<string>();
@@ -240,6 +243,12 @@ export default function AdminTerminForm({
           );
           if (predavanjeResult.error) { setError(predavanjeResult.error); return; }
         }
+      } else {
+        const potentialPayload = draftsToPayload(potentialRows);
+        if (potentialPayload.length > 0) {
+          const pcResult = await addPotentialClientsAsAdmin(termResult.termId, potentialPayload);
+          if (pcResult.error) { setError(pcResult.error); return; }
+        }
       }
 
       // "Zakaži isti termin i narednih N dana" – samo za obične (ne testiranje/nastavak) termine.
@@ -265,12 +274,8 @@ export default function AdminTerminForm({
         }
       }
 
-      if (isTestingCat) {
-        router.push(`/admin/termin/${termResult.termId}/testiranje/novi`);
-      } else {
-        const monday = getMonday(new Date(date + 'T12:00:00'));
-        router.push(`/admin/kalendar?week=${monday}`);
-      }
+      const monday = getMonday(new Date(date + 'T12:00:00'));
+      router.push(`/admin/kalendar?week=${monday}`);
       router.refresh();
     } finally {
       setLoading(false);
@@ -400,7 +405,7 @@ export default function AdminTerminForm({
 
         {isTestingCat && (
           <p className="text-xs text-stone-500">
-            Termin testiranja — posle kreiranja dodajte potencijalne klijente na stranici termina.
+            Termin testiranja — upišite decu ispod, ili preskočite i dodajte kasnije na stranici termina.
           </p>
         )}
         {isNastavakCat && (
@@ -547,7 +552,15 @@ export default function AdminTerminForm({
             </div>
           )}
         </div>
-      ) : null}
+      ) : (
+        <div>
+          <p className="text-sm font-medium text-stone-800 mb-1">Deca za testiranje</p>
+          <p className="text-xs text-stone-500 mb-3">
+            Opciono – ako znate ko dolazi, upišite odmah (može i više dece, npr. braća/sestre). Ime je jedino obavezno; ostalo se može dopuniti kasnije na stranici termina.
+          </p>
+          <PotentialClientRowsInput rows={potentialRows} onChange={setPotentialRows} disabled={loading} />
+        </div>
+      )}
 
       {!isTestingCat && !isNastavakCat && (
         <div>
