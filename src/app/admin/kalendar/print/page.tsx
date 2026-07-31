@@ -82,11 +82,16 @@ export default async function AdminKalendarPrintPage({
   type CellEntry = { instructorInitials: string; clientName: string };
   // key: `${date}|${slotIndex}`, value: sve radionice u tom danu/slotu (jedan ili više paralelnih termina)
   const grid = new Map<string, CellEntry[]>();
+  const instructorCounts = new Map<string, number>();
+  const clientCounts = new Map<string, number>();
   for (const t of termsRaw ?? []) {
     const isAutoSpillover = !!t.nastavak_of_term_id && t.napomena === AUTO_SPILLOVER_NAPOMENA;
     if (isAutoSpillover) continue;
     const instr = Array.isArray(t.instructor) ? t.instructor[0] : t.instructor;
-    const instrInitials = initials((instr as { ime?: string } | null)?.ime, (instr as { prezime?: string } | null)?.prezime);
+    const instrIme = (instr as { ime?: string } | null)?.ime;
+    const instrPrezime = (instr as { prezime?: string } | null)?.prezime;
+    const instrInitials = initials(instrIme, instrPrezime);
+    const instrName = `${instrIme ?? ''} ${instrPrezime ?? ''}`.trim() || '—';
     const preds = (t.predavanja ?? []) as { client: { ime: string; prezime: string } | { ime: string; prezime: string }[] | null }[];
     for (const p of preds) {
       const c = Array.isArray(p.client) ? p.client[0] : p.client;
@@ -97,8 +102,13 @@ export default async function AdminKalendarPrintPage({
       const list = grid.get(key) ?? [];
       list.push({ instructorInitials: instrInitials, clientName });
       grid.set(key, list);
+      instructorCounts.set(instrName, (instructorCounts.get(instrName) ?? 0) + 1);
+      clientCounts.set(clientName, (clientCounts.get(clientName) ?? 0) + 1);
     }
   }
+  const instructorStats = [...instructorCounts.entries()].sort((a, b) => b[1] - a[1]);
+  const clientStats = [...clientCounts.entries()].sort((a, b) => b[1] - a[1]);
+  const totalCasova = [...clientCounts.values()].reduce((sum, n) => sum + n, 0);
 
   const rangeLabel = `${new Date(dateFrom + 'T12:00:00').toLocaleDateString('sr-Latn-RS')} – ${new Date(dateTo + 'T12:00:00').toLocaleDateString('sr-Latn-RS')}`;
 
@@ -126,6 +136,33 @@ export default async function AdminKalendarPrintPage({
         tabela je na ekranu izgledala izbledelo. Plain hex ovde rešava oba problema odjednom.
       */}
       <div id="print-table-wrap" className="overflow-x-auto" style={{ backgroundColor: '#ffffff', color: '#000000' }}>
+        <div style={{ color: '#000000', fontSize: '13px', marginBottom: '14px', padding: '10px', border: '1px solid #94a3b8', borderRadius: '6px' }}>
+          <div style={{ fontWeight: 700, fontSize: '15px', marginBottom: '6px' }}>
+            Period: {rangeLabel} — ukupno {totalCasova} {totalCasova === 1 ? 'čas' : 'časova'}
+          </div>
+          <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap' }}>
+            <div style={{ flex: '1 1 260px' }}>
+              <div style={{ fontWeight: 700, marginBottom: '4px' }}>Predavači (broj časova)</div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, auto)', columnGap: '16px' }}>
+                {instructorStats.map(([name, count]) => (
+                  <div key={name} style={{ whiteSpace: 'nowrap' }}>
+                    {name}: {count}
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div style={{ flex: '2 1 400px' }}>
+              <div style={{ fontWeight: 700, marginBottom: '4px' }}>Deca (broj časova)</div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, auto)', columnGap: '16px' }}>
+                {clientStats.map(([name, count]) => (
+                  <div key={name} style={{ whiteSpace: 'nowrap' }}>
+                    {name}: {count}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
         <table
           className="w-full border-collapse leading-tight"
           style={{ color: '#000000', fontSize: '20px', tableLayout: 'fixed' }}
