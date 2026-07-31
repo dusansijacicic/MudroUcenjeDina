@@ -794,7 +794,7 @@ export default function AdminCalendarView({
             href={`/admin/kalendar/print?week=${startOfWeek}`}
             className="ml-auto px-3 py-1.5 rounded-lg text-sm font-medium bg-stone-100 text-stone-600 hover:bg-stone-200"
           >
-            🖨 Print pregled
+            🖨 Print / PDF
           </Link>
           {swapMode && (
             <>
