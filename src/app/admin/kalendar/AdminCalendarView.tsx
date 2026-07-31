@@ -674,7 +674,7 @@ export default function AdminCalendarView({
               bulkMode ? 'bg-amber-600 text-white hover:bg-amber-700' : 'bg-stone-200 text-stone-700 hover:bg-stone-300'
             }`}
           >
-            {bulkMode ? 'Više termina: uključeno' : 'Više termina'}
+            {bulkMode ? 'Zakaži više časova: uključeno' : 'Zakaži više časova'}
           </button>
           {bulkLoading && <span className="text-sm text-stone-500">Zakazujem…</span>}
           <button
@@ -992,20 +992,24 @@ function AdminCellContent({
     </div>
   ) : null;
 
-  const zahtevAssignable = swap.assignMode === 'instruktor';
+  const zahtevClickable = swap.assignMode !== null;
   const PendingZahteviEntries = pendingZahteviInSlot.length > 0 ? (
     <div className="mt-1 space-y-1">
       {pendingZahteviInSlot.map((z) => {
-        const zahtevSelected = zahtevAssignable && swap.isZahtevMarkedForAssign(z.id);
+        const zahtevSelected = swap.assignMode === 'instruktor' && swap.isZahtevMarkedForAssign(z.id);
         return (
           <div
             key={z.id}
-            role={zahtevAssignable ? 'button' : undefined}
+            role={zahtevClickable ? 'button' : undefined}
             onClick={() => {
-              if (zahtevAssignable) swap.onToggleAssignZahtevSelect(z.id);
+              if (swap.assignMode === 'instruktor') {
+                swap.onToggleAssignZahtevSelect(z.id);
+              } else if (swap.assignMode === 'ucionica') {
+                toast.error('Ovaj zahtev prvo mora dobiti instruktora (preko "Dodeli instruktora") pre nego što može dobiti učionicu.');
+              }
             }}
             className={`rounded-lg border border-dashed p-1.5 text-xs text-stone-500${
-              zahtevAssignable ? ' cursor-pointer' : ''
+              zahtevClickable ? ' cursor-pointer' : ''
             }${
               zahtevSelected ? ' border-blue-600 ring-2 ring-offset-1 ring-blue-500 bg-blue-50' : ' border-stone-300 bg-stone-100'
             }`}
