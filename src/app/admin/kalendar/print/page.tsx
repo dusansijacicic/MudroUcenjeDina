@@ -175,7 +175,7 @@ export default async function AdminKalendarPrintPage({
         <div id="print-table-only">
         <table
           className="w-full border-collapse leading-tight"
-          style={{ color: '#000000', fontSize: '20px', tableLayout: 'fixed' }}
+          style={{ color: '#000000', fontSize: '12px', tableLayout: 'fixed' }}
         >
           <colgroup>
             <col style={{ width: '7%' }} />
