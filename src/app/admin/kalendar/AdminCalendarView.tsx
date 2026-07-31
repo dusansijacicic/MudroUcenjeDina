@@ -14,6 +14,7 @@ import {
   createBulkZahteviAsAdmin,
   assignInstructorToTermsAsAdmin,
   assignClassroomToTermsAsAdmin,
+  assignInstructorToZahteviAsAdmin,
 } from '@/app/admin/actions';
 import SingleKlijentPicker from '@/components/SingleKlijentPicker';
 
@@ -99,6 +100,8 @@ type SwapContextValue = {
   assignMode: 'instruktor' | 'ucionica' | null;
   isMarkedForAssign: (termId: string) => boolean;
   onToggleAssignSelect: (termId: string) => void;
+  isZahtevMarkedForAssign: (zahtevId: string) => boolean;
+  onToggleAssignZahtevSelect: (zahtevId: string) => void;
 };
 const SwapContext = createContext<SwapContextValue>({
   swapMode: false,
@@ -120,6 +123,8 @@ const SwapContext = createContext<SwapContextValue>({
   assignMode: null,
   isMarkedForAssign: () => false,
   onToggleAssignSelect: () => {},
+  isZahtevMarkedForAssign: () => false,
+  onToggleAssignZahtevSelect: () => {},
 });
 
 type SwapFields = { termin: boolean; instruktor: boolean; ucionica: boolean; klijent: boolean };
@@ -275,6 +280,7 @@ export default function AdminCalendarView({
 
   const [assignMode, setAssignMode] = useState<'instruktor' | 'ucionica' | null>(null);
   const [assignSelection, setAssignSelection] = useState<Set<string>>(new Set());
+  const [assignZahteviSelection, setAssignZahteviSelection] = useState<Set<string>>(new Set());
   const [assignTargetId, setAssignTargetId] = useState('');
   const [assignLoading, setAssignLoading] = useState(false);
 
@@ -301,6 +307,7 @@ export default function AdminCalendarView({
     if (keep !== 'assign') {
       setAssignMode(null);
       setAssignSelection(new Set());
+      setAssignZahteviSelection(new Set());
       setAssignTargetId('');
     }
   };
@@ -417,6 +424,7 @@ export default function AdminCalendarView({
       return next;
     });
     setAssignSelection(new Set());
+    setAssignZahteviSelection(new Set());
     setAssignTargetId('');
   };
 
@@ -429,23 +437,42 @@ export default function AdminCalendarView({
     });
   };
 
+  const onToggleAssignZahtevSelect = (zahtevId: string) => {
+    setAssignZahteviSelection((prev) => {
+      const next = new Set(prev);
+      if (next.has(zahtevId)) next.delete(zahtevId);
+      else next.add(zahtevId);
+      return next;
+    });
+  };
+
   const confirmAssign = async () => {
-    if (!assignMode || !assignTargetId || assignSelection.size === 0) return;
-    const ids = [...assignSelection];
+    const total = assignSelection.size + assignZahteviSelection.size;
+    if (!assignMode || !assignTargetId || total === 0) return;
+    const termIds = [...assignSelection];
+    const zahtevIds = [...assignZahteviSelection];
     const mode = assignMode;
     setAssignSelection(new Set());
+    setAssignZahteviSelection(new Set());
     setAssignMode(null);
     setAssignTargetId('');
     setAssignLoading(true);
-    const { failed } =
-      mode === 'instruktor'
-        ? await assignInstructorToTermsAsAdmin(assignTargetId, ids)
-        : await assignClassroomToTermsAsAdmin(assignTargetId, ids);
+    const [termRes, zahtevRes] = await Promise.all([
+      termIds.length > 0
+        ? mode === 'instruktor'
+          ? assignInstructorToTermsAsAdmin(assignTargetId, termIds)
+          : assignClassroomToTermsAsAdmin(assignTargetId, termIds)
+        : Promise.resolve({ failed: [] }),
+      zahtevIds.length > 0 && mode === 'instruktor'
+        ? assignInstructorToZahteviAsAdmin(assignTargetId, zahtevIds)
+        : Promise.resolve({ failed: [] }),
+    ]);
     setAssignLoading(false);
-    if (failed.length > 0) {
-      toast.error(`Nije dodeljeno ${failed.length}/${ids.length}.`);
+    const failedCount = termRes.failed.length + zahtevRes.failed.length;
+    if (failedCount > 0) {
+      toast.error(`Nije dodeljeno ${failedCount}/${total}.`);
     } else {
-      toast.success(`Dodeljeno ${ids.length}.`);
+      toast.success(`Dodeljeno ${total}.`);
     }
     router.refresh();
   };
@@ -590,6 +617,8 @@ export default function AdminCalendarView({
         assignMode,
         isMarkedForAssign: (termId: string) => assignSelection.has(termId),
         onToggleAssignSelect,
+        isZahtevMarkedForAssign: (zahtevId: string) => assignZahteviSelection.has(zahtevId),
+        onToggleAssignZahtevSelect,
       }}
     >
       <div className="mb-4 rounded-xl border border-stone-200 bg-white p-3">
@@ -687,12 +716,14 @@ export default function AdminCalendarView({
               <button
                 type="button"
                 onClick={confirmAssign}
-                disabled={!assignTargetId || assignSelection.size === 0}
+                disabled={!assignTargetId || assignSelection.size + assignZahteviSelection.size === 0}
                 className="px-3 py-1.5 rounded-lg text-sm font-medium bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                Potvrdi dodelu ({assignSelection.size})
+                Potvrdi dodelu ({assignSelection.size + assignZahteviSelection.size})
               </button>
-              <span className="text-sm text-stone-400">kliknite termine na kalendaru da ih označite</span>
+              <span className="text-sm text-stone-400">
+                kliknite termine na kalendaru da ih označite{assignMode === 'instruktor' ? ' (uključujući sive zahteve)' : ''}
+              </span>
             </>
           )}
           {assignLoading && <span className="text-sm text-stone-500">Dodeljujem…</span>}
@@ -839,6 +870,30 @@ export default function AdminCalendarView({
             </span>
           </div>
         )}
+        {assignMode && (assignSelection.size > 0 || assignZahteviSelection.size > 0) && (
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {[...assignSelection].map((id) => {
+              const t = terms.find((x) => x.id === id);
+              if (!t) return null;
+              return (
+                <span key={id} className="rounded-full bg-blue-50 border border-blue-300 px-2 py-0.5 text-xs text-blue-800">
+                  {swapTermLabel(t)}
+                </span>
+              );
+            })}
+            {[...assignZahteviSelection].map((id) => {
+              const z = pendingZahtevi.find((x) => x.id === id);
+              if (!z) return null;
+              const d = new Date(z.date + 'T12:00:00');
+              const time = TIME_SLOTS[z.slot_index] ?? `slot ${z.slot_index}`;
+              return (
+                <span key={id} className="rounded-full bg-stone-100 border border-stone-300 px-2 py-0.5 text-xs text-stone-700">
+                  {d.getDate()}.{d.getMonth() + 1}. {time} · {z.client_ime}{z.client_prezime ? ` ${z.client_prezime}` : ''} (zahtev)
+                </span>
+              );
+            })}
+          </div>
+        )}
       </div>
       {body}
     </SwapContext.Provider>
@@ -937,17 +992,32 @@ function AdminCellContent({
     </div>
   ) : null;
 
+  const zahtevAssignable = swap.assignMode === 'instruktor';
   const PendingZahteviEntries = pendingZahteviInSlot.length > 0 ? (
     <div className="mt-1 space-y-1">
-      {pendingZahteviInSlot.map((z) => (
-        <div key={z.id} className="rounded-lg border border-dashed border-blue-300 bg-blue-50 p-1.5 text-xs text-blue-700">
-          <span className="block font-medium">
-            {z.client_ime}{z.client_prezime ? ` ${z.client_prezime}` : ''}
-          </span>
-          {z.term_type_naziv && <span className="block text-[11px]">{z.term_type_naziv}</span>}
-          <span className="text-[10px] uppercase tracking-wide text-blue-500">zahtev · čeka predavača</span>
-        </div>
-      ))}
+      {pendingZahteviInSlot.map((z) => {
+        const zahtevSelected = zahtevAssignable && swap.isZahtevMarkedForAssign(z.id);
+        return (
+          <div
+            key={z.id}
+            role={zahtevAssignable ? 'button' : undefined}
+            onClick={() => {
+              if (zahtevAssignable) swap.onToggleAssignZahtevSelect(z.id);
+            }}
+            className={`rounded-lg border border-dashed p-1.5 text-xs text-stone-500${
+              zahtevAssignable ? ' cursor-pointer' : ''
+            }${
+              zahtevSelected ? ' border-blue-600 ring-2 ring-offset-1 ring-blue-500 bg-blue-50' : ' border-stone-300 bg-stone-100'
+            }`}
+          >
+            <span className="block font-medium text-stone-600">
+              {z.client_ime}{z.client_prezime ? ` ${z.client_prezime}` : ''}
+            </span>
+            {z.term_type_naziv && <span className="block text-[11px]">{z.term_type_naziv}</span>}
+            <span className="text-[10px] uppercase tracking-wide">zahtev · čeka predavača</span>
+          </div>
+        );
+      })}
     </div>
   ) : null;
 

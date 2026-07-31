@@ -3,6 +3,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import type { TermCategoryRow } from '@/lib/term-categories';
+import { SEEDED_TERM_CATEGORY_INDIVIDUAL_ID } from '@/lib/term-categories';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { INSTRUCTOR_COLORS, isTermInPast, slotsNeeded, AUTO_SPILLOVER_NAPOMENA } from '@/lib/constants';
@@ -350,6 +351,82 @@ export async function assignClassroomToTermsAsAdmin(
   );
   revalidatePath('/admin/kalendar');
   return { failed: results.filter((r): r is { termId: string; error: string } => r.error !== null) };
+}
+
+/**
+ * "Dodeli instruktora" primenjen na zahtev (a ne na postojeći termin) – ovo je zapravo isto što i
+ * predavačevo potvrdiZahtev, samo pokreće admin i BIRA kog instruktora, umesto da instruktor
+ * potvrđuje svoj sopstveni zahtev. Pretvara zahtev u pravi termin+radionicu (bez učionice – to se
+ * dodeljuje posebno, "Dodeli učionicu").
+ */
+export async function assignInstructorToZahtevAsAdmin(zahtevId: string, instructorId: string): Promise<{ error?: string }> {
+  const { admin, error: authErr } = await requireAdmin();
+  if (authErr || !admin) return { error: authErr ?? 'Niste ovlašćeni.' };
+
+  const { data: zahtev } = await admin.from('zahtevi_za_cas').select('*').eq('id', zahtevId).single();
+  if (!zahtev) return { error: 'Zahtev nije pronađen.' };
+  if (zahtev.status !== 'pending') return { error: 'Zahtev nije na čekanju.' };
+
+  const dateStr = String(zahtev.requested_date).slice(0, 10);
+  const slot = Math.min(15, Math.max(0, zahtev.requested_slot_index));
+
+  let termId: string;
+  const { data: existing } = await admin
+    .from('terms')
+    .select('id')
+    .eq('instructor_id', instructorId)
+    .eq('date', dateStr)
+    .eq('slot_index', slot)
+    .maybeSingle();
+  if (existing) {
+    termId = existing.id;
+  } else {
+    const { data: inserted, error: insErr } = await admin
+      .from('terms')
+      .insert({ instructor_id: instructorId, date: dateStr, slot_index: slot, term_category_id: SEEDED_TERM_CATEGORY_INDIVIDUAL_ID })
+      .select('id')
+      .single();
+    if (insErr || !inserted) return { error: insErr?.message ?? 'Termin nije kreiran.' };
+    termId = inserted.id;
+  }
+
+  const limitCheck = await termMozeNovoPredavanje(termId);
+  if (!limitCheck.ok) return { error: `Maksimalan broj časova (${limitCheck.max}) je već dostignut u tom terminu.` };
+
+  const { data: predavanje, error: predErr } = await admin
+    .from('predavanja')
+    .insert({ term_id: termId, client_id: zahtev.client_id, odrzano: false, placeno: false, term_type_id: zahtev.term_type_id ?? null })
+    .select('id')
+    .single();
+  if (predErr || !predavanje) return { error: predErr?.message ?? 'Radionica nije kreirana.' };
+
+  await syncSpilloverForTerm(admin, termId);
+
+  await admin
+    .from('zahtevi_za_cas')
+    .update({ status: 'confirmed', resolved_at: new Date().toISOString(), created_term_id: termId, created_predavanje_id: predavanje.id })
+    .eq('id', zahtevId);
+
+  revalidatePath('/admin/kalendar');
+  revalidatePath('/dashboard/zahtevi');
+  return {};
+}
+
+/** Batch verzija gornje – jedan poziv serveru za sve selektovane zahteve. */
+export async function assignInstructorToZahteviAsAdmin(
+  instructorId: string,
+  zahtevIds: string[]
+): Promise<{ failed: { zahtevId: string; error: string }[] }> {
+  const { error: authErr } = await requireAdmin();
+  if (authErr) return { failed: zahtevIds.map((zahtevId) => ({ zahtevId, error: authErr })) };
+
+  const results = await Promise.all(
+    zahtevIds.map(async (zahtevId) => {
+      const res = await assignInstructorToZahtevAsAdmin(zahtevId, instructorId);
+      return { zahtevId, error: res.error ?? null };
+    })
+  );
+  return { failed: results.filter((r): r is { zahtevId: string; error: string } => r.error !== null) };
 }
 
 export async function getAdminInstructorsList(): Promise<{ id: string; ime: string; prezime: string }[]> {
