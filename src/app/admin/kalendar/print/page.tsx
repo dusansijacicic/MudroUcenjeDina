@@ -74,12 +74,12 @@ export default async function AdminKalendarPrintPage({
   const { data: termsRaw } = await admin
     .from('terms')
     .select(
-      'date, slot_index, nastavak_of_term_id, napomena, instructor:instructors(ime, prezime), predavanja(client:clients(ime, prezime))'
+      'date, slot_index, nastavak_of_term_id, napomena, instructor:instructors(ime, prezime), classroom:classrooms(naziv), predavanja(client:clients(ime, prezime))'
     )
     .gte('date', dateFrom)
     .lte('date', dateTo);
 
-  type CellEntry = { instructorInitials: string; clientName: string };
+  type CellEntry = { instructorInitials: string; clientName: string; classroomNaziv: string | null };
   // key: `${date}|${slotIndex}`, value: sve radionice u tom danu/slotu (jedan ili više paralelnih termina)
   const grid = new Map<string, CellEntry[]>();
   const instructorCounts = new Map<string, number>();
@@ -92,6 +92,8 @@ export default async function AdminKalendarPrintPage({
     const instrPrezime = (instr as { prezime?: string } | null)?.prezime;
     const instrInitials = initials(instrIme, instrPrezime);
     const instrName = `${instrIme ?? ''} ${instrPrezime ?? ''}`.trim() || '—';
+    const classroomRaw = Array.isArray(t.classroom) ? t.classroom[0] : t.classroom;
+    const classroomNaziv = (classroomRaw as { naziv?: string } | null)?.naziv ?? null;
     const preds = (t.predavanja ?? []) as { client: { ime: string; prezime: string } | { ime: string; prezime: string }[] | null }[];
     for (const p of preds) {
       const c = Array.isArray(p.client) ? p.client[0] : p.client;
@@ -100,11 +102,20 @@ export default async function AdminKalendarPrintPage({
       if (!clientName) continue;
       const key = `${t.date}|${t.slot_index}`;
       const list = grid.get(key) ?? [];
-      list.push({ instructorInitials: instrInitials, clientName });
+      list.push({ instructorInitials: instrInitials, clientName, classroomNaziv });
       grid.set(key, list);
       instructorCounts.set(instrName, (instructorCounts.get(instrName) ?? 0) + 1);
       clientCounts.set(clientName, (clientCounts.get(clientName) ?? 0) + 1);
     }
+  }
+  // Isti redosled učionica u svakoj ćeliji (npr. uvek 1-Buzan pa 2-Sperry) – bez učionice na kraju.
+  for (const list of grid.values()) {
+    list.sort((a, b) => {
+      if (!a.classroomNaziv && !b.classroomNaziv) return 0;
+      if (!a.classroomNaziv) return 1;
+      if (!b.classroomNaziv) return -1;
+      return a.classroomNaziv.localeCompare(b.classroomNaziv, 'sr-Latn-RS');
+    });
   }
   const instructorStats = [...instructorCounts.entries()].sort((a, b) => b[1] - a[1]);
   const clientStats = [...clientCounts.entries()].sort((a, b) => b[1] - a[1]);

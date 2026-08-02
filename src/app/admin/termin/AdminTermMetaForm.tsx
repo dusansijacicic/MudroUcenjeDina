@@ -68,7 +68,7 @@ export default function AdminTermMetaForm({
             {termCategories.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.naziv}
-                {c.jedan_klijent_po_terminu ? ' (jedno dete)' : ' (grupa)'}
+                {(c.is_testing || c.is_nastavak) ? '' : c.jedan_klijent_po_terminu ? ' (jedno dete)' : ' (grupa)'}
               </option>
             ))}
           </select>
