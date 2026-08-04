@@ -12,6 +12,7 @@ import {
   deleteTermsAsAdmin,
   deleteOtkazaniTermin,
   createBulkZahteviAsAdmin,
+  createBulkTermsAsAdmin,
   assignInstructorToTermsAsAdmin,
   assignClassroomToTermsAsAdmin,
   assignInstructorToZahteviAsAdmin,
@@ -339,6 +340,10 @@ export default function AdminCalendarView({
   const [bulkMode, setBulkMode] = useState(false);
   const [bulkClientId, setBulkClientId] = useState('');
   const [bulkTermTypeId, setBulkTermTypeId] = useState('');
+  // Prazno = bez instruktora/učionice – pravi se zahtev (kao do sad). Ako se izabere instruktor,
+  // pravi se pravi termin (učionica ostaje opciona i u tom slučaju).
+  const [bulkInstructorChoice, setBulkInstructorChoice] = useState('');
+  const [bulkClassroomChoice, setBulkClassroomChoice] = useState('');
   const [bulkSlots, setBulkSlots] = useState<Set<string>>(new Set());
   const [bulkLoading, setBulkLoading] = useState(false);
 
@@ -421,6 +426,8 @@ export default function AdminCalendarView({
       return next;
     });
     setBulkSlots(new Set());
+    setBulkInstructorChoice('');
+    setBulkClassroomChoice('');
   };
 
   const onToggleDeleteSelect = (termId: string) => {
@@ -491,16 +498,31 @@ export default function AdminCalendarView({
       const [date, slotStr] = key.split('|');
       return { date, slotIndex: Number(slotStr) };
     });
+    const instructorId = bulkInstructorChoice;
+    const classroomId = bulkClassroomChoice || null;
     setBulkSlots(new Set());
     setBulkMode(false);
+    setBulkInstructorChoice('');
+    setBulkClassroomChoice('');
     setBulkLoading(true);
-    const { failed } = await createBulkZahteviAsAdmin(bulkClientId, bulkTermTypeId || null, slots);
-    setBulkLoading(false);
-    if (failed.length > 0) {
-      toast.error(`Nije zakazano ${failed.length}/${slots.length} – ${failed.map((f) => `${f.date} (${f.error})`).join('; ')}`);
+    if (instructorId) {
+      const { failed } = await createBulkTermsAsAdmin(bulkClientId, instructorId, classroomId, bulkTermTypeId || null, slots);
+      setBulkLoading(false);
+      if (failed.length > 0) {
+        toast.error(`Nije zakazano ${failed.length}/${slots.length} – ${failed.map((f) => `${f.date} (${f.error})`).join('; ')}`);
+      } else {
+        toast.success(`Zakazano ${slots.length} termin(a).`);
+      }
     } else {
-      toast.success(`Kreirano ${slots.length} zahtev(a) – predavači ih vide na svom Dashboard → Zahtevi.`);
+      const { failed } = await createBulkZahteviAsAdmin(bulkClientId, bulkTermTypeId || null, slots);
+      setBulkLoading(false);
+      if (failed.length > 0) {
+        toast.error(`Nije zakazano ${failed.length}/${slots.length} – ${failed.map((f) => `${f.date} (${f.error})`).join('; ')}`);
+      } else {
+        toast.success(`Kreirano ${slots.length} zahtev(a) – predavači ih vide na svom Dashboard → Zahtevi.`);
+      }
     }
+    router.refresh();
   };
 
   const toggleAssignMode = () => {
@@ -1088,6 +1110,34 @@ export default function AdminCalendarView({
                 ))}
               </select>
             </div>
+            <div className="min-w-[180px]">
+              <label className="block text-xs font-medium text-stone-700 mb-1">Instruktor</label>
+              <select
+                value={bulkInstructorChoice}
+                onChange={(e) => setBulkInstructorChoice(e.target.value)}
+                className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm text-stone-800 bg-white"
+              >
+                <option value="">bez instruktora (zahtev)</option>
+                {instructorsList.map((i) => (
+                  <option key={i.id} value={i.id}>{i.ime} {i.prezime}</option>
+                ))}
+              </select>
+            </div>
+            {bulkInstructorChoice && (
+              <div className="min-w-[160px]">
+                <label className="block text-xs font-medium text-stone-700 mb-1">Učionica</label>
+                <select
+                  value={bulkClassroomChoice}
+                  onChange={(e) => setBulkClassroomChoice(e.target.value)}
+                  className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm text-stone-800 bg-white"
+                >
+                  <option value="">bez učionice</option>
+                  {classroomsList.map((c) => (
+                    <option key={c.id} value={c.id}>{c.naziv}</option>
+                  ))}
+                </select>
+              </div>
+            )}
             <button
               type="button"
               onClick={confirmBulk}
@@ -1097,7 +1147,7 @@ export default function AdminCalendarView({
               Potvrdi ({bulkSlots.size})
             </button>
             <span className="text-stone-400 text-xs max-w-md">
-              Izaberite dete, pa kliknite termine na kalendaru (bilo prazne ili zauzete). Bez instruktora/učionice – pravi se zahtev koji bilo koji predavač preuzima na svom Dashboard → Zahtevi.
+              Izaberite dete, pa kliknite termine na kalendaru (bilo prazne ili zauzete). Bez instruktora – pravi se zahtev koji bilo koji predavač preuzima na svom Dashboard → Zahtevi. Sa izabranim instruktorom (i opciono učionicom) – odmah se zakazuju pravi termini, isti instruktor/učionica/vrsta časa za sve izabrane slotove.
             </span>
           </div>
         )}

@@ -284,6 +284,86 @@ export async function createBulkZahteviAsAdmin(
 }
 
 /**
+ * "Zakaži više časova" SA izabranim instruktorom (i opciono učionicom) – umesto zahteva koje bilo
+ * koji predavač preuzima (createBulkZahteviAsAdmin), odmah kreira prave termine: za svaki izabrani
+ * slot pronalazi POSTOJEĆI termin tog instruktora u tom datumu/slotu (ako ga ima) ili pravi nov, pa
+ * dodaje radionicu za dete – isti instruktor/učionica/vrsta časa za sve slotove odjednom.
+ */
+export async function createBulkTermsAsAdmin(
+  clientId: string,
+  instructorId: string,
+  classroomId: string | null,
+  termTypeId: string | null,
+  slots: { date: string; slotIndex: number }[]
+): Promise<{ failed: { date: string; slotIndex: number; error: string }[] }> {
+  const { admin, error: authErr } = await requireAdmin();
+  if (authErr || !admin) return { failed: slots.map((s) => ({ ...s, error: authErr ?? 'Niste ovlašćeni.' })) };
+  if (slots.length === 0) return { failed: [] };
+
+  const results = await Promise.all(
+    slots.map(async (s) => {
+      const slot = Math.min(15, Math.max(0, s.slotIndex));
+      const dateStr = s.date.slice(0, 10);
+
+      const { data: existing } = await admin
+        .from('terms')
+        .select('id, classroom_id')
+        .eq('instructor_id', instructorId)
+        .eq('date', dateStr)
+        .eq('slot_index', slot)
+        .maybeSingle();
+
+      let termId: string;
+      if (existing) {
+        termId = existing.id;
+        if (classroomId && !existing.classroom_id) {
+          const { data: roomConflict } = await admin
+            .from('terms')
+            .select('id')
+            .eq('classroom_id', classroomId)
+            .eq('date', dateStr)
+            .eq('slot_index', slot)
+            .neq('id', termId)
+            .maybeSingle();
+          if (!roomConflict) {
+            await admin.from('terms').update({ classroom_id: classroomId }).eq('id', termId);
+          }
+        }
+      } else {
+        if (classroomId) {
+          const { data: roomConflict } = await admin
+            .from('terms')
+            .select('id')
+            .eq('classroom_id', classroomId)
+            .eq('date', dateStr)
+            .eq('slot_index', slot)
+            .maybeSingle();
+          if (roomConflict) return { ...s, error: 'Učionica je već zauzeta u tom terminu.' };
+        }
+        const { data: inserted, error: insErr } = await admin
+          .from('terms')
+          .insert({
+            instructor_id: instructorId,
+            date: dateStr,
+            slot_index: slot,
+            classroom_id: classroomId,
+            term_category_id: SEEDED_TERM_CATEGORY_INDIVIDUAL_ID,
+          })
+          .select('id')
+          .single();
+        if (insErr || !inserted) return { ...s, error: insErr?.message ?? 'Termin nije kreiran.' };
+        termId = inserted.id;
+      }
+
+      const predRes = await createPredavanjeAsAdmin(termId, clientId, false, false, null, termTypeId);
+      if (predRes.error) return { ...s, error: predRes.error };
+      return { ...s, error: null as string | null };
+    })
+  );
+  return { failed: results.filter((r): r is { date: string; slotIndex: number; error: string } => r.error !== null) };
+}
+
+/**
  * "Dodeli instruktora" mod na kalendaru: selektuje se više PostOJEĆIH termina, pa se svima
  * odjednom dodeli isti instruktor. Termin koji ovaj instruktor već ima u tom datumu/slotu se
  * preskače (javlja se kao greška za taj termin) – bez svop logike, ovo je za popunjavanje/izmenu,
