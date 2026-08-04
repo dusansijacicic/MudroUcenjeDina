@@ -1504,7 +1504,7 @@ function AdminWeekView({
     <tbody>
       {TIME_SLOTS.map((time, slotIndex) => (
         <tr key={slotIndex} className="border-b border-stone-100">
-          <td className="p-2 text-stone-500 font-medium w-16">{time}</td>
+          <td className="sticky left-0 z-10 bg-white p-2 text-stone-500 font-medium w-16">{time}</td>
           {dates.map((date, idx) => {
             const termsInSlot = termsByKey(terms, date, slotIndex);
             const otkazaniInSlot = otkazaniTermini.filter((ot) => ot.term_date === date && ot.slot_index === slotIndex);
@@ -1549,7 +1549,7 @@ function AdminWeekView({
         <table className="w-full min-w-[1400px] text-sm">
           <thead>
             <tr className="border-b border-stone-100 bg-stone-50/60">
-              <th className="w-16 p-2" rowSpan={2} />
+              <th className="sticky left-0 z-20 bg-stone-50 w-16 p-2" rowSpan={2} />
               <th colSpan={7} className="px-2 py-1.5 text-center text-xs font-semibold text-stone-500 uppercase tracking-wide border-r border-stone-200">
                 Ova nedelja — {formatWeekLabel(startOfWeek)}
               </th>
@@ -1582,7 +1582,7 @@ function AdminWeekView({
         <table className="w-full min-w-[700px] text-sm">
           <thead>
             <tr className="border-b border-stone-200 bg-stone-50/60">
-              <th className="w-16 p-2" />
+              <th className="sticky left-0 z-20 bg-stone-50 w-16 p-2" />
               {week1Dates.map((date) => {
                 const d = new Date(date + 'T12:00:00');
                 return (
