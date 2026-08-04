@@ -16,6 +16,8 @@ import {
   assignClassroomToTermsAsAdmin,
   assignInstructorToZahteviAsAdmin,
   assignClassroomToZahteviAsAdmin,
+  assignTermTypeToTermsAsAdmin,
+  assignTermTypeToZahteviAsAdmin,
 } from '@/app/admin/actions';
 import SingleKlijentPicker from '@/components/SingleKlijentPicker';
 
@@ -343,9 +345,11 @@ export default function AdminCalendarView({
   const [assignMode, setAssignMode] = useState(false);
   const [assignSelection, setAssignSelection] = useState<Set<string>>(new Set());
   const [assignZahteviSelection, setAssignZahteviSelection] = useState<Set<string>>(new Set());
-  // Prazno = "bez instruktora"/"bez učionice" – ne menja se to polje, menja se samo ono drugo (ako je izabrano).
+  // Prazno = "bez instruktora"/"bez učionice"/"ne menjaj vrstu" – ne menja se to polje, menja se
+  // samo ono što jeste izabrano.
   const [assignInstructorChoice, setAssignInstructorChoice] = useState('');
   const [assignClassroomChoice, setAssignClassroomChoice] = useState('');
+  const [assignTermTypeChoice, setAssignTermTypeChoice] = useState('');
   const [assignLoading, setAssignLoading] = useState(false);
 
   // Swap/Copy/Delete/Bulk/Assign su međusobno isključivi – uključivanje jednog gasi ostale da
@@ -376,6 +380,7 @@ export default function AdminCalendarView({
       setAssignZahteviSelection(new Set());
       setAssignInstructorChoice('');
       setAssignClassroomChoice('');
+      setAssignTermTypeChoice('');
     }
   };
 
@@ -508,6 +513,7 @@ export default function AdminCalendarView({
     setAssignZahteviSelection(new Set());
     setAssignInstructorChoice('');
     setAssignClassroomChoice('');
+    setAssignTermTypeChoice('');
   };
 
   const onToggleAssignSelect = (termId: string) => {
@@ -535,22 +541,26 @@ export default function AdminCalendarView({
     const total = assignSelection.size + assignZahteviSelection.size;
     const hasInstructor = !!assignInstructorChoice;
     const hasClassroom = !!assignClassroomChoice;
-    if (total === 0 || (!hasInstructor && !hasClassroom)) return;
+    const hasTermType = !!assignTermTypeChoice;
+    if (total === 0 || (!hasInstructor && !hasClassroom && !hasTermType)) return;
     const termIds = [...assignSelection];
     const zahtevIds = [...assignZahteviSelection];
     const instructorId = assignInstructorChoice;
     const classroomId = assignClassroomChoice;
+    const termTypeId = assignTermTypeChoice;
     setAssignSelection(new Set());
     setAssignZahteviSelection(new Set());
     setAssignMode(false);
     setAssignInstructorChoice('');
     setAssignClassroomChoice('');
+    setAssignTermTypeChoice('');
     setAssignLoading(true);
 
     const termCalls: Promise<{ failed: { termId: string; error: string }[] }>[] = [];
     if (termIds.length > 0) {
       if (hasInstructor) termCalls.push(assignInstructorToTermsAsAdmin(instructorId, termIds));
       if (hasClassroom) termCalls.push(assignClassroomToTermsAsAdmin(classroomId, termIds));
+      if (hasTermType) termCalls.push(assignTermTypeToTermsAsAdmin(termTypeId, termIds));
     }
     let zahtevFailed: { zahtevId: string; error: string }[] = [];
     if (zahtevIds.length > 0) {
@@ -560,6 +570,10 @@ export default function AdminCalendarView({
       }
       if (hasInstructor) {
         const res = await assignInstructorToZahteviAsAdmin(instructorId, zahtevIds);
+        zahtevFailed = zahtevFailed.concat(res.failed);
+      }
+      if (hasTermType) {
+        const res = await assignTermTypeToZahteviAsAdmin(termTypeId, zahtevIds);
         zahtevFailed = zahtevFailed.concat(res.failed);
       }
     }
@@ -829,7 +843,7 @@ export default function AdminCalendarView({
               assignMode ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-stone-200 text-stone-700 hover:bg-stone-300'
             }`}
           >
-            {assignMode ? 'Dodeli instruktora/učionicu: uključeno' : 'Dodeli instruktora/učionicu'}
+            {assignMode ? 'Dodeli instruktora/učionicu/vrstu: uključeno' : 'Dodeli instruktora/učionicu/vrstu'}
           </button>
           {assignMode && (
             <>
@@ -853,11 +867,21 @@ export default function AdminCalendarView({
                   <option key={c.id} value={c.id}>{c.naziv}</option>
                 ))}
               </select>
+              <select
+                value={assignTermTypeChoice}
+                onChange={(e) => setAssignTermTypeChoice(e.target.value)}
+                className="rounded-lg border border-stone-300 px-3 py-1.5 text-sm text-stone-800 bg-white"
+              >
+                <option value="">ne menjaj vrstu časa</option>
+                {termTypes.map((tt) => (
+                  <option key={tt.id} value={tt.id}>{tt.naziv}</option>
+                ))}
+              </select>
               <button
                 type="button"
                 onClick={confirmAssign}
                 disabled={
-                  (!assignInstructorChoice && !assignClassroomChoice) ||
+                  (!assignInstructorChoice && !assignClassroomChoice && !assignTermTypeChoice) ||
                   assignSelection.size + assignZahteviSelection.size === 0
                 }
                 className="px-3 py-1.5 rounded-lg text-sm font-medium bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed"
@@ -865,7 +889,7 @@ export default function AdminCalendarView({
                 Potvrdi dodelu ({assignSelection.size + assignZahteviSelection.size})
               </button>
               <span className="text-sm text-stone-400">
-                izaberite instruktora i/ili učionicu (može i samo jedno), pa kliknite termine na kalendaru da ih označite
+                izaberite instruktora i/ili učionicu i/ili vrstu časa (može bilo koja kombinacija), pa kliknite termine na kalendaru da ih označite
               </span>
             </>
           )}

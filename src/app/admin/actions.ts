@@ -506,6 +506,41 @@ export async function assignClassroomToZahteviAsAdmin(
   return { failed: results.filter((r): r is { zahtevId: string; error: string } => r.error !== null) };
 }
 
+/**
+ * "Dodeli vrstu časa" mod – isto kao instruktor/učionica gore, samo menja term_type_id na SVIM
+ * radionicama (predavanja) unutar svakog izabranog termina odjednom (bez provere konflikta – vrsta
+ * časa se ne "zauzima").
+ */
+export async function assignTermTypeToTermsAsAdmin(
+  termTypeId: string | null,
+  termIds: string[]
+): Promise<{ failed: { termId: string; error: string }[] }> {
+  const { admin, error: authErr } = await requireAdmin();
+  if (authErr || !admin) return { failed: termIds.map((termId) => ({ termId, error: authErr ?? 'Niste ovlašćeni.' })) };
+  if (termIds.length === 0) return { failed: [] };
+
+  const { error } = await admin.from('predavanja').update({ term_type_id: termTypeId }).in('term_id', termIds);
+  if (error) return { failed: termIds.map((termId) => ({ termId, error: error.message })) };
+  revalidatePath('/admin/kalendar');
+  return { failed: [] };
+}
+
+/** Batch verzija za zahteve – menja term_type_id direktno na zahtevu na čekanju. */
+export async function assignTermTypeToZahteviAsAdmin(
+  termTypeId: string | null,
+  zahtevIds: string[]
+): Promise<{ failed: { zahtevId: string; error: string }[] }> {
+  const { admin, error: authErr } = await requireAdmin();
+  if (authErr || !admin) return { failed: zahtevIds.map((zahtevId) => ({ zahtevId, error: authErr ?? 'Niste ovlašćeni.' })) };
+  if (zahtevIds.length === 0) return { failed: [] };
+
+  const { error } = await admin.from('zahtevi_za_cas').update({ term_type_id: termTypeId }).in('id', zahtevIds);
+  if (error) return { failed: zahtevIds.map((zahtevId) => ({ zahtevId, error: error.message })) };
+  revalidatePath('/admin/kalendar');
+  revalidatePath('/dashboard/zahtevi');
+  return { failed: [] };
+}
+
 export async function getAdminInstructorsList(): Promise<{ id: string; ime: string; prezime: string }[]> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
