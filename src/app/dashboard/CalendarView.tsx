@@ -542,16 +542,18 @@ function CalendarWeek({
         </table>
       </div>
 
-      {/* Tablet + telefon (<lg): cela nedelja, 7 kolona, horizontalni skrol po potrebi. */}
-      <div className="lg:hidden overflow-x-auto rounded-xl border border-stone-200 bg-white">
+      {/* Tablet + telefon (<lg): cela nedelja, 7 kolona, horizontalni skrol po potrebi. Sopstveni
+          vertikalni skrol (max-h + overflow-y) da bi "sticky top" lepio zaglavlje za VRH OVOG
+          OKVIRA, nezavisno od sticky nav-a iznad. */}
+      <div className="lg:hidden overflow-auto max-h-[70vh] rounded-xl border border-stone-200 bg-white">
         <table className="w-full min-w-[700px] text-sm">
           <thead>
             <tr className="border-b border-stone-200 bg-stone-50/60">
-              <th className="sticky left-0 z-20 bg-stone-50 w-16 p-2" />
+              <th className="sticky left-0 top-0 z-30 bg-stone-50 w-16 p-2" />
               {week1Dates.map((date) => {
                 const d = new Date(date + 'T12:00:00');
                 return (
-                  <th key={date} className="p-2 text-center text-stone-600 font-medium min-w-[90px]">
+                  <th key={date} className="sticky top-0 z-20 bg-stone-50 p-2 text-center text-stone-600 font-medium min-w-[90px]">
                     <div>{DAY_NAMES[d.getDay() === 0 ? 6 : d.getDay() - 1]}</div>
                     <div className="text-stone-400">{d.getDate()}.{d.getMonth() + 1}.</div>
                   </th>
