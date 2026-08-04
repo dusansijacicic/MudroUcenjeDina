@@ -94,6 +94,28 @@ function hexWithAlpha(hex: string, alpha: number) {
   return `${hex}${n}`;
 }
 
+/** Ponedeljak nedelje kojoj pripada dati datum. */
+function getMonday(dateStr: string): string {
+  const d = new Date(dateStr + 'T12:00:00');
+  const day = d.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  d.setDate(d.getDate() + diff);
+  return d.toISOString().slice(0, 10);
+}
+
+/** Skraćeno ime instruktora (inicijali) za tablet/telefon kartice. */
+function shortInstructorLabel(ime: string, prezime: string): string {
+  const a = (ime ?? '').trim().charAt(0).toUpperCase();
+  const b = (prezime ?? '').trim().charAt(0).toUpperCase();
+  return `${a}${b}` || '—';
+}
+
+/** Skraćeno ime učionice (npr. "1-Buzan" → "1") za tablet/telefon. */
+function shortClassroomLabel(naziv: string): string {
+  const idx = naziv.indexOf('-');
+  return idx > 0 ? naziv.slice(0, idx) : naziv;
+}
+
 export default function CalendarView({
   view,
   terms,
@@ -289,7 +311,10 @@ function CellContent({
           onDragEnd={() => setDraggedTermId(null)}
         >
           {term.classroom && (
-            <span className="text-xs block mb-0.5 text-stone-500">{term.classroom.naziv}</span>
+            <span className="text-xs block mb-0.5 text-stone-500">
+              <span className="lg:hidden">{shortClassroomLabel(term.classroom.naziv)}</span>
+              <span className="hidden lg:inline">{term.classroom.naziv}</span>
+            </span>
           )}
           {isTesting ? (
             <div>
@@ -360,9 +385,15 @@ function CellContent({
             style={{ borderColor: otBorder, backgroundColor: otBg, color: otTextColor }}
           >
             {ot.classroom && (
-              <span className="block text-stone-500 font-medium">{ot.classroom.naziv}</span>
+              <span className="block text-stone-500 font-medium">
+                <span className="lg:hidden">{shortClassroomLabel(ot.classroom.naziv)}</span>
+                <span className="hidden lg:inline">{ot.classroom.naziv}</span>
+              </span>
             )}
-            <span className="font-medium">{iname}</span>
+            <span className="font-medium">
+              <span className="lg:hidden">{ot.instructor ? shortInstructorLabel(ot.instructor.ime, ot.instructor.prezime) : '—'}</span>
+              <span className="hidden lg:inline">{iname}</span>
+            </span>
             {preds.length > 0 && (
               <ul className="mt-1 space-y-0.5 pl-0 list-none">
                 {preds.map((p) => (
@@ -429,6 +460,41 @@ function CalendarWeek({
     return `${d1.getDate()}.${d1.getMonth() + 1}. – ${end2.getDate()}.${end2.getMonth() + 1}.${end2.getFullYear()}`;
   })();
 
+  // Deljeno telo tabele – zove se i za 14 dana (desktop, obe nedelje) i za 7 (tablet, samo ova nedelja).
+  const renderBody = (dates: string[]) => (
+    <tbody>
+      {TIME_SLOTS.map((time, slotIndex) => (
+        <tr key={slotIndex} className="border-b border-stone-200 last:border-b-0">
+          <td className="p-2 text-stone-600 font-semibold bg-stone-50/70 w-16">{time}</td>
+          {dates.map((date, idx) => {
+            const term = termByKey(terms, date, slotIndex);
+            const otherTermsInSlot = otherTermsByKey(otherTerms, date, slotIndex);
+            return (
+              <td key={date} className={`p-1 align-top${idx === 7 ? ' border-l-2 border-stone-300' : ''}`}>
+                <CellContent
+                  term={term}
+                  otherTermsInSlot={otherTermsInSlot}
+                  instructorId={instructorId}
+                  instructorColor={instructorColor}
+                  emptyDate={date}
+                  emptySlot={slotIndex}
+                  draggedTermId={draggedTermId}
+                  setDraggedTermId={setDraggedTermId}
+                  onDropCell={onDropCell}
+                />
+              </td>
+            );
+          })}
+        </tr>
+      ))}
+    </tbody>
+  );
+
+  const [selectedDay, setSelectedDay] = useState(() => {
+    const today = new Date().toISOString().slice(0, 10);
+    return allDates.includes(today) ? today : week1Dates[0];
+  });
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -448,7 +514,9 @@ function CalendarWeek({
           </Link>
         </div>
       </div>
-      <div className="overflow-x-auto rounded-xl border border-stone-200 bg-white">
+
+      {/* Desktop (lg+): obe nedelje, netaknuto. */}
+      <div className="hidden lg:block overflow-x-auto rounded-xl border border-stone-200 bg-white">
         <table className="w-full min-w-[1400px] text-sm">
           <thead>
             <tr className="border-b border-stone-100 bg-stone-50/60">
@@ -475,33 +543,44 @@ function CalendarWeek({
               })}
             </tr>
           </thead>
-          <tbody>
-            {TIME_SLOTS.map((time, slotIndex) => (
-              <tr key={slotIndex} className="border-b border-stone-200 last:border-b-0">
-                <td className="p-2 text-stone-600 font-semibold bg-stone-50/70 w-16">{time}</td>
-                {allDates.map((date, idx) => {
-                  const term = termByKey(terms, date, slotIndex);
-                  const otherTermsInSlot = otherTermsByKey(otherTerms, date, slotIndex);
-                  return (
-                    <td key={date} className={`p-1 align-top${idx === 7 ? ' border-l-2 border-stone-300' : ''}`}>
-                      <CellContent
-                        term={term}
-                        otherTermsInSlot={otherTermsInSlot}
-                        instructorId={instructorId}
-                        instructorColor={instructorColor}
-                        emptyDate={date}
-                        emptySlot={slotIndex}
-                        draggedTermId={draggedTermId}
-                        setDraggedTermId={setDraggedTermId}
-                        onDropCell={onDropCell}
-                      />
-                    </td>
-                  );
-                })}
-              </tr>
-            ))}
-          </tbody>
+          {renderBody(allDates)}
         </table>
+      </div>
+
+      {/* Tablet (md do lg): samo ova nedelja, 7 kolona. */}
+      <div className="hidden md:block lg:hidden overflow-x-auto rounded-xl border border-stone-200 bg-white">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-stone-200 bg-stone-50/60">
+              <th className="w-16 p-2" />
+              {week1Dates.map((date) => {
+                const d = new Date(date + 'T12:00:00');
+                return (
+                  <th key={date} className="p-2 text-center text-stone-600 font-medium">
+                    <div>{DAY_NAMES[d.getDay() === 0 ? 6 : d.getDay() - 1]}</div>
+                    <div className="text-stone-400">{d.getDate()}.{d.getMonth() + 1}.</div>
+                  </th>
+                );
+              })}
+            </tr>
+          </thead>
+          {renderBody(week1Dates)}
+        </table>
+      </div>
+
+      {/* Telefon (<md): traka dana + jedan dan ispod. */}
+      <div className="md:hidden">
+        <DateStrip dates={week1Dates} selectedDate={selectedDay} onSelect={setSelectedDay} />
+        <DayAgenda
+          date={selectedDay}
+          terms={terms}
+          otherTerms={otherTerms}
+          instructorId={instructorId}
+          instructorColor={instructorColor}
+          draggedTermId={draggedTermId}
+          setDraggedTermId={setDraggedTermId}
+          onDropCell={onDropCell}
+        />
       </div>
     </div>
   );
@@ -543,10 +622,13 @@ function CalendarDay({
     x.setDate(x.getDate() + 1);
     return x.toISOString().slice(0, 10);
   })();
+  const weekStart = getMonday(date);
+  const weekDates = getWeekDates(weekStart);
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      {/* Desktop/tablet (md+): strelice napred/nazad. */}
+      <div className="hidden md:flex items-center justify-between">
         <span className="font-medium text-stone-700 capitalize">{label}</span>
         <div className="flex gap-2">
           <Link
@@ -563,30 +645,92 @@ function CalendarDay({
           </Link>
         </div>
       </div>
-      <div className="rounded-xl border border-stone-200 bg-white divide-y-2 divide-stone-200">
-        {TIME_SLOTS.map((time, slotIndex) => {
-          const term = termByKey(terms, date, slotIndex);
-          const otherTermsInSlot = otherTermsByKey(otherTerms, date, slotIndex);
-          return (
-            <div key={slotIndex} className="flex items-stretch gap-4 p-3">
-              <div className="w-16 shrink-0 text-stone-500 font-medium">{time}</div>
-              <div className="flex-1 min-w-0">
-                <CellContent
-                  term={term}
-                  otherTermsInSlot={otherTermsInSlot}
-                  instructorId={instructorId}
-                  instructorColor={instructorColor}
-                  emptyDate={date}
-                  emptySlot={slotIndex}
-                  draggedTermId={draggedTermId}
-                  setDraggedTermId={() => {}}
-                  onDropCell={onDropCell}
-                />
-              </div>
-            </div>
-          );
-        })}
+      {/* Telefon (<md): traka dana cele nedelje – tap = prava navigacija (samo taj dan je učitan). */}
+      <div className="md:hidden space-y-2">
+        <span className="font-medium text-stone-700 capitalize text-sm">{label}</span>
+        <DateStrip
+          dates={weekDates}
+          selectedDate={date}
+          makeHref={(d) => `/dashboard?view=dan&day=${d}${linkSuffix}`}
+        />
       </div>
+      <DayAgenda
+        date={date}
+        terms={terms}
+        otherTerms={otherTerms}
+        instructorId={instructorId}
+        instructorColor={instructorColor}
+        draggedTermId={draggedTermId}
+        setDraggedTermId={() => {}}
+        onDropCell={onDropCell}
+      />
+    </div>
+  );
+}
+
+function DayAgenda({
+  date, terms, otherTerms, instructorId, instructorColor, draggedTermId, setDraggedTermId, onDropCell,
+}: {
+  date: string;
+  terms: RawTerm[];
+  otherTerms: OtherTerm[];
+  instructorId: string;
+  instructorColor: string;
+  draggedTermId: string | null;
+  setDraggedTermId: (id: string | null) => void;
+  onDropCell: (date: string, slot: number) => void | Promise<void>;
+}) {
+  return (
+    <div className="rounded-xl border border-stone-200 bg-white divide-y-2 divide-stone-200">
+      {TIME_SLOTS.map((time, slotIndex) => {
+        const term = termByKey(terms, date, slotIndex);
+        const otherTermsInSlot = otherTermsByKey(otherTerms, date, slotIndex);
+        return (
+          <div key={slotIndex} className="flex items-stretch gap-4 p-3">
+            <div className="w-16 shrink-0 text-stone-500 font-medium">{time}</div>
+            <div className="flex-1 min-w-0">
+              <CellContent
+                term={term}
+                otherTermsInSlot={otherTermsInSlot}
+                instructorId={instructorId}
+                instructorColor={instructorColor}
+                emptyDate={date}
+                emptySlot={slotIndex}
+                draggedTermId={draggedTermId}
+                setDraggedTermId={setDraggedTermId}
+                onDropCell={onDropCell}
+              />
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function DateStrip({
+  dates, selectedDate, onSelect, makeHref,
+}: {
+  dates: string[];
+  selectedDate: string;
+  onSelect?: (date: string) => void;
+  makeHref?: (date: string) => string;
+}) {
+  return (
+    <div className="flex gap-2 overflow-x-auto pb-1 snap-x snap-mandatory">
+      {dates.map((d) => {
+        const dt = new Date(d + 'T12:00:00');
+        const dayName = DAY_NAMES[dt.getDay() === 0 ? 6 : dt.getDay() - 1];
+        const label = `${dayName} ${dt.getDate()}.${dt.getMonth() + 1}.`;
+        const selected = d === selectedDate;
+        const className = `shrink-0 snap-center rounded-lg px-3 min-h-[44px] flex items-center justify-center text-sm font-medium ${
+          selected ? 'bg-amber-600 text-white' : 'bg-stone-100 text-stone-700 hover:bg-stone-200'
+        }`;
+        if (makeHref) {
+          return <Link key={d} href={makeHref(d)} className={className}>{label}</Link>;
+        }
+        return <button key={d} type="button" onClick={() => onSelect?.(d)} className={className}>{label}</button>;
+      })}
     </div>
   );
 }

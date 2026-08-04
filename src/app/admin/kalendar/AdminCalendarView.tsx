@@ -169,6 +169,20 @@ function applySwapOptimistically(terms: AdminTerm[], aId: string, bId: string, f
   return terms.map((t) => (t.id === aId ? newA : t.id === bId ? newB : t));
 }
 
+/** Skraćeno ime instruktora (inicijali) za tablet/telefon kartice – isti obrazac kao print/PDF. */
+function shortInstructorLabel(ime: string, prezime: string): string {
+  const a = (ime ?? '').trim().charAt(0).toUpperCase();
+  const b = (prezime ?? '').trim().charAt(0).toUpperCase();
+  return `${a}${b}` || '—';
+}
+
+/** Skraćeno ime učionice (npr. "1-Buzan" → "1") za tablet/telefon – učionice se ovde uglavnom
+ * i pominju po broju. Bez crtice u nazivu, vraća naziv nepromenjen. */
+function shortClassroomLabel(naziv: string): string {
+  const idx = naziv.indexOf('-');
+  return idx > 0 ? naziv.slice(0, idx) : naziv;
+}
+
 function swapTermLabel(term: AdminTerm): string {
   const d = new Date(term.date + 'T12:00:00');
   const dateLabel = `${d.getDate()}.${d.getMonth() + 1}.`;
@@ -757,7 +771,7 @@ export default function AdminCalendarView({
           <button
             type="button"
             onClick={toggleSwapMode}
-            className={`px-3 py-1.5 rounded-lg text-sm font-medium ${
+            className={`px-3 py-1.5 min-h-[44px] md:min-h-0 rounded-lg text-sm font-medium ${
               swapMode ? 'bg-amber-600 text-white hover:bg-amber-700' : 'bg-stone-200 text-stone-700 hover:bg-stone-300'
             }`}
           >
@@ -766,7 +780,7 @@ export default function AdminCalendarView({
           <button
             type="button"
             onClick={toggleCopyMode}
-            className={`px-3 py-1.5 rounded-lg text-sm font-medium ${
+            className={`px-3 py-1.5 min-h-[44px] md:min-h-0 rounded-lg text-sm font-medium ${
               copyMode ? 'bg-amber-600 text-white hover:bg-amber-700' : 'bg-stone-200 text-stone-700 hover:bg-stone-300'
             }`}
           >
@@ -776,7 +790,7 @@ export default function AdminCalendarView({
           <button
             type="button"
             onClick={toggleDeleteMode}
-            className={`px-3 py-1.5 rounded-lg text-sm font-medium ${
+            className={`px-3 py-1.5 min-h-[44px] md:min-h-0 rounded-lg text-sm font-medium ${
               deleteMode ? 'bg-red-600 text-white hover:bg-red-700' : 'bg-stone-200 text-stone-700 hover:bg-stone-300'
             }`}
           >
@@ -801,7 +815,7 @@ export default function AdminCalendarView({
           <button
             type="button"
             onClick={toggleBulkMode}
-            className={`px-3 py-1.5 rounded-lg text-sm font-medium ${
+            className={`px-3 py-1.5 min-h-[44px] md:min-h-0 rounded-lg text-sm font-medium ${
               bulkMode ? 'bg-amber-600 text-white hover:bg-amber-700' : 'bg-stone-200 text-stone-700 hover:bg-stone-300'
             }`}
           >
@@ -811,7 +825,7 @@ export default function AdminCalendarView({
           <button
             type="button"
             onClick={toggleAssignMode}
-            className={`px-3 py-1.5 rounded-lg text-sm font-medium ${
+            className={`px-3 py-1.5 min-h-[44px] md:min-h-0 rounded-lg text-sm font-medium ${
               assignMode ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-stone-200 text-stone-700 hover:bg-stone-300'
             }`}
           >
@@ -858,7 +872,7 @@ export default function AdminCalendarView({
           {assignLoading && <span className="text-sm text-stone-500">Dodeljujem…</span>}
           <Link
             href={`/admin/kalendar/print?week=${startOfWeek}`}
-            className="ml-auto px-3 py-1.5 rounded-lg text-sm font-medium bg-stone-100 text-stone-600 hover:bg-stone-200"
+            className="hidden md:inline-flex ml-auto px-3 py-1.5 rounded-lg text-sm font-medium bg-stone-100 text-stone-600 hover:bg-stone-200"
           >
             🖨 Print / PDF
           </Link>
@@ -1334,9 +1348,17 @@ function AdminCellContent({
               }
             }}
           >
-            <span className="font-medium">{instructorName}</span>
+            <span className="font-medium">
+              <span className="lg:hidden">
+                {term.instructor ? shortInstructorLabel(term.instructor.ime, term.instructor.prezime) : '—'}
+              </span>
+              <span className="hidden lg:inline">{instructorName}</span>
+            </span>
             <span className={`ml-1 text-[0.7rem] uppercase tracking-wide ${classroomName ? 'opacity-80' : 'italic opacity-60'}`}>
-              ({classroomName ?? 'bez učionice'})
+              (
+              <span className="lg:hidden">{classroomName ? shortClassroomLabel(classroomName) : 'bez uč.'}</span>
+              <span className="hidden lg:inline">{classroomName ?? 'bez učionice'}</span>
+              )
             </span>
             {isTesting ? (
               <div className="mt-1 border-t border-stone-200/80 pt-1">
@@ -1476,6 +1498,43 @@ function AdminWeekView({
     return `${d1.getDate()}.${d1.getMonth() + 1}. – ${end2.getDate()}.${end2.getMonth() + 1}.${end2.getFullYear()}`;
   })();
 
+  // Deljeno telo tabele (redovi po vremenu) – zove se i za 14 dana (desktop, obe nedelje) i za 7
+  // (tablet, samo ova nedelja) sa istim AdminCellContent po ćeliji.
+  const renderBody = (dates: string[]) => (
+    <tbody>
+      {TIME_SLOTS.map((time, slotIndex) => (
+        <tr key={slotIndex} className="border-b border-stone-100">
+          <td className="p-2 text-stone-500 font-medium w-16">{time}</td>
+          {dates.map((date, idx) => {
+            const termsInSlot = termsByKey(terms, date, slotIndex);
+            const otkazaniInSlot = otkazaniTermini.filter((ot) => ot.term_date === date && ot.slot_index === slotIndex);
+            const pendingZahteviInSlot = pendingZahtevi.filter((z) => z.date === date && z.slot_index === slotIndex);
+            return (
+              <td key={date} className={`p-1 align-top${idx === 7 ? ' border-l-2 border-stone-300' : ''}`}>
+                <AdminCellContent
+                  termsInSlot={termsInSlot}
+                  otkazaniInSlot={otkazaniInSlot}
+                  pendingZahteviInSlot={pendingZahteviInSlot}
+                  emptyDate={date}
+                  emptySlot={slotIndex}
+                  draggedTermId={draggedTermId}
+                  setDraggedTermId={setDraggedTermId}
+                  onDropCell={onDropCell}
+                  maxTerminaPoSlotu={maxTerminaPoSlotu}
+                />
+              </td>
+            );
+          })}
+        </tr>
+      ))}
+    </tbody>
+  );
+
+  const [selectedDay, setSelectedDay] = useState(() => {
+    const today = new Date().toISOString().slice(0, 10);
+    return allDates.includes(today) ? today : week1Dates[0];
+  });
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -1489,7 +1548,9 @@ function AdminWeekView({
           </Link>
         </div>
       </div>
-      <div className="overflow-x-auto rounded-xl border border-stone-200 bg-white">
+
+      {/* Desktop (lg+): obe nedelje, netaknuto. */}
+      <div className="hidden lg:block overflow-x-auto rounded-xl border border-stone-200 bg-white">
         <table className="w-full min-w-[1400px] text-sm">
           <thead>
             <tr className="border-b border-stone-100 bg-stone-50/60">
@@ -1516,34 +1577,44 @@ function AdminWeekView({
               })}
             </tr>
           </thead>
-          <tbody>
-            {TIME_SLOTS.map((time, slotIndex) => (
-              <tr key={slotIndex} className="border-b border-stone-100">
-                <td className="p-2 text-stone-500 font-medium w-16">{time}</td>
-                {allDates.map((date, idx) => {
-                  const termsInSlot = termsByKey(terms, date, slotIndex);
-                  const otkazaniInSlot = otkazaniTermini.filter((ot) => ot.term_date === date && ot.slot_index === slotIndex);
-                  const pendingZahteviInSlot = pendingZahtevi.filter((z) => z.date === date && z.slot_index === slotIndex);
-                  return (
-                    <td key={date} className={`p-1 align-top${idx === 7 ? ' border-l-2 border-stone-300' : ''}`}>
-                      <AdminCellContent
-                        termsInSlot={termsInSlot}
-                        otkazaniInSlot={otkazaniInSlot}
-                        pendingZahteviInSlot={pendingZahteviInSlot}
-                        emptyDate={date}
-                        emptySlot={slotIndex}
-                        draggedTermId={draggedTermId}
-                        setDraggedTermId={setDraggedTermId}
-                        onDropCell={onDropCell}
-                        maxTerminaPoSlotu={maxTerminaPoSlotu}
-                      />
-                    </td>
-                  );
-                })}
-              </tr>
-            ))}
-          </tbody>
+          {renderBody(allDates)}
         </table>
+      </div>
+
+      {/* Tablet (md do lg): samo ova nedelja, 7 kolona. */}
+      <div className="hidden md:block lg:hidden overflow-x-auto rounded-xl border border-stone-200 bg-white">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-stone-200 bg-stone-50/60">
+              <th className="w-16 p-2" />
+              {week1Dates.map((date) => {
+                const d = new Date(date + 'T12:00:00');
+                return (
+                  <th key={date} className="p-2 text-center text-stone-600 font-medium">
+                    <div>{DAY_NAMES[d.getDay() === 0 ? 6 : d.getDay() - 1]}</div>
+                    <div className="text-stone-400">{d.getDate()}.{d.getMonth() + 1}.</div>
+                  </th>
+                );
+              })}
+            </tr>
+          </thead>
+          {renderBody(week1Dates)}
+        </table>
+      </div>
+
+      {/* Telefon (<md): traka dana + jedan dan ispod. */}
+      <div className="md:hidden">
+        <AdminDateStrip dates={week1Dates} selectedDate={selectedDay} onSelect={setSelectedDay} />
+        <AdminDayAgenda
+          date={selectedDay}
+          terms={terms}
+          otkazaniTermini={otkazaniTermini}
+          pendingZahtevi={pendingZahtevi}
+          draggedTermId={draggedTermId}
+          setDraggedTermId={setDraggedTermId}
+          onDropCell={onDropCell}
+          maxTerminaPoSlotu={maxTerminaPoSlotu}
+        />
       </div>
     </div>
   );
@@ -1586,10 +1657,13 @@ function AdminDayView({
     x.setDate(x.getDate() + 1);
     return x.toISOString().slice(0, 10);
   })();
+  const weekStart = getMonday(date);
+  const weekDates = getWeekDates(weekStart);
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      {/* Desktop/tablet (md+): strelice napred/nazad. */}
+      <div className="hidden md:flex items-center justify-between">
         <span className="font-medium text-stone-700 capitalize">{label}</span>
         <div className="flex gap-2">
           <Link href={`${base}?view=dan&day=${prevDay}${linkSuffix}`} className="px-3 py-1.5 rounded-lg bg-stone-200 text-stone-700 text-sm hover:bg-stone-300">
@@ -1600,31 +1674,114 @@ function AdminDayView({
           </Link>
         </div>
       </div>
-      <div className="rounded-xl border border-stone-200 bg-white divide-y divide-stone-100">
-        {TIME_SLOTS.map((time, slotIndex) => {
-          const termsInSlot = termsByKey(terms, date, slotIndex);
-          const otkazaniInSlot = otkazaniTermini.filter((ot) => ot.term_date === date && ot.slot_index === slotIndex);
-          const pendingZahteviInSlot = pendingZahtevi.filter((z) => z.date === date && z.slot_index === slotIndex);
-          return (
-            <div key={slotIndex} className="flex items-stretch gap-4 p-3">
-              <div className="w-16 shrink-0 text-stone-500 font-medium">{time}</div>
-              <div className="flex-1 min-w-0">
-                <AdminCellContent
-                  termsInSlot={termsInSlot}
-                  otkazaniInSlot={otkazaniInSlot}
-                  pendingZahteviInSlot={pendingZahteviInSlot}
-                  emptyDate={date}
-                  emptySlot={slotIndex}
-                  draggedTermId={draggedTermId}
-                  setDraggedTermId={() => {}}
-                  onDropCell={onDropCell}
-                  maxTerminaPoSlotu={maxTerminaPoSlotu}
-                />
-              </div>
-            </div>
-          );
-        })}
+      {/* Telefon (<md): traka dana cele nedelje – tap = prava navigacija (samo taj dan je učitan). */}
+      <div className="md:hidden space-y-2">
+        <span className="font-medium text-stone-700 capitalize text-sm">{label}</span>
+        <AdminDateStrip
+          dates={weekDates}
+          selectedDate={date}
+          makeHref={(d) => `${base}?view=dan&day=${d}${linkSuffix}`}
+        />
       </div>
+      <AdminDayAgenda
+        date={date}
+        terms={terms}
+        otkazaniTermini={otkazaniTermini}
+        pendingZahtevi={pendingZahtevi}
+        draggedTermId={draggedTermId}
+        setDraggedTermId={() => {}}
+        onDropCell={onDropCell}
+        maxTerminaPoSlotu={maxTerminaPoSlotu}
+      />
+    </div>
+  );
+}
+
+function AdminDayAgenda({
+  date,
+  terms,
+  otkazaniTermini,
+  pendingZahtevi,
+  draggedTermId,
+  setDraggedTermId,
+  onDropCell,
+  maxTerminaPoSlotu,
+}: {
+  date: string;
+  terms: AdminTerm[];
+  otkazaniTermini: OtkazaniTerminCalendar[];
+  pendingZahtevi: PendingZahtevCalendar[];
+  draggedTermId: string | null;
+  setDraggedTermId: (id: string | null) => void;
+  onDropCell: (date: string, slot: number) => void | Promise<void>;
+  maxTerminaPoSlotu: number;
+}) {
+  return (
+    <div className="rounded-xl border border-stone-200 bg-white divide-y divide-stone-100">
+      {TIME_SLOTS.map((time, slotIndex) => {
+        const termsInSlot = termsByKey(terms, date, slotIndex);
+        const otkazaniInSlot = otkazaniTermini.filter((ot) => ot.term_date === date && ot.slot_index === slotIndex);
+        const pendingZahteviInSlot = pendingZahtevi.filter((z) => z.date === date && z.slot_index === slotIndex);
+        return (
+          <div key={slotIndex} className="flex items-stretch gap-4 p-3">
+            <div className="w-16 shrink-0 text-stone-500 font-medium">{time}</div>
+            <div className="flex-1 min-w-0">
+              <AdminCellContent
+                termsInSlot={termsInSlot}
+                otkazaniInSlot={otkazaniInSlot}
+                pendingZahteviInSlot={pendingZahteviInSlot}
+                emptyDate={date}
+                emptySlot={slotIndex}
+                draggedTermId={draggedTermId}
+                setDraggedTermId={setDraggedTermId}
+                onDropCell={onDropCell}
+                maxTerminaPoSlotu={maxTerminaPoSlotu}
+              />
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Horizontalna "traka" dana – tap menja izabrani dan. Dva moda: onSelect (podaci već učitani,
+ * samo se menja lokalni state, npr. u AdminWeekView) ili makeHref (prava navigacija, npr. u
+ * AdminDayView gde je učitan samo trenutni dan). */
+function AdminDateStrip({
+  dates,
+  selectedDate,
+  onSelect,
+  makeHref,
+}: {
+  dates: string[];
+  selectedDate: string;
+  onSelect?: (date: string) => void;
+  makeHref?: (date: string) => string;
+}) {
+  return (
+    <div className="flex gap-2 overflow-x-auto pb-1 snap-x snap-mandatory">
+      {dates.map((d) => {
+        const dt = new Date(d + 'T12:00:00');
+        const dayName = DAY_NAMES[dt.getDay() === 0 ? 6 : dt.getDay() - 1];
+        const label = `${dayName} ${dt.getDate()}.${dt.getMonth() + 1}.`;
+        const selected = d === selectedDate;
+        const className = `shrink-0 snap-center rounded-lg px-3 min-h-[44px] flex items-center justify-center text-sm font-medium ${
+          selected ? 'bg-amber-600 text-white' : 'bg-stone-100 text-stone-700 hover:bg-stone-200'
+        }`;
+        if (makeHref) {
+          return (
+            <Link key={d} href={makeHref(d)} className={className}>
+              {label}
+            </Link>
+          );
+        }
+        return (
+          <button key={d} type="button" onClick={() => onSelect?.(d)} className={className}>
+            {label}
+          </button>
+        );
+      })}
     </div>
   );
 }
