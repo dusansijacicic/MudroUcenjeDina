@@ -73,8 +73,20 @@ function termByKey(terms: RawTerm[], date: string, slot: number) {
   return terms.find((t) => t.date === date && t.slot_index === slot);
 }
 
+/** Isti redosled učionica u svakom slotu (npr. uvek 1-Buzan pa 2-Sperry) – bez učionice na kraju. */
+function sortByClassroom(terms: OtherTerm[]): OtherTerm[] {
+  return [...terms].sort((a, b) => {
+    const an = a.classroom?.naziv;
+    const bn = b.classroom?.naziv;
+    if (!an && !bn) return 0;
+    if (!an) return 1;
+    if (!bn) return -1;
+    return an.localeCompare(bn, 'sr-Latn-RS');
+  });
+}
+
 function otherTermsByKey(terms: OtherTerm[], date: string, slot: number): OtherTerm[] {
-  return terms.filter((t) => t.date === date && t.slot_index === slot);
+  return sortByClassroom(terms.filter((t) => t.date === date && t.slot_index === slot));
 }
 
 function hexWithAlpha(hex: string, alpha: number) {

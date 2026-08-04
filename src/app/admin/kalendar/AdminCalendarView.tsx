@@ -8,7 +8,7 @@ import Link from 'next/link';
 import {
   moveTermAsAdmin,
   swapTermsAsAdmin,
-  copyTermAsAdmin,
+  copyTermToSlotsAsAdmin,
   deleteTermsAsAdmin,
   deleteOtkazaniTermin,
   createBulkZahteviAsAdmin,
@@ -90,7 +90,8 @@ type SwapContextValue = {
   copyMode: boolean;
   copySourceId: string | null;
   onSelectCopySource: (term: AdminTerm) => void;
-  onSelectCopyTarget: (date: string, slot: number) => void;
+  isCopyTargetSelected: (date: string, slot: number) => boolean;
+  onToggleCopyTarget: (date: string, slot: number) => void;
   deleteMode: boolean;
   isMarkedForDelete: (termId: string) => boolean;
   onToggleDeleteSelect: (termId: string) => void;
@@ -101,11 +102,12 @@ type SwapContextValue = {
   bulkMode: boolean;
   isBulkSelected: (date: string, slot: number) => boolean;
   onToggleBulkSlot: (date: string, slot: number) => void;
-  assignMode: 'instruktor' | 'ucionica' | null;
+  assignMode: boolean;
   isMarkedForAssign: (termId: string) => boolean;
   onToggleAssignSelect: (termId: string) => void;
   isZahtevMarkedForAssign: (zahtevId: string) => boolean;
   onToggleAssignZahtevSelect: (zahtevId: string) => void;
+  highlightPendingZahtevi: boolean;
 };
 const SwapContext = createContext<SwapContextValue>({
   swapMode: false,
@@ -115,7 +117,8 @@ const SwapContext = createContext<SwapContextValue>({
   copyMode: false,
   copySourceId: null,
   onSelectCopySource: () => {},
-  onSelectCopyTarget: () => {},
+  isCopyTargetSelected: () => false,
+  onToggleCopyTarget: () => {},
   deleteMode: false,
   isMarkedForDelete: () => false,
   onToggleDeleteSelect: () => {},
@@ -123,10 +126,11 @@ const SwapContext = createContext<SwapContextValue>({
   onToggleOtkazaniDeleteSelect: () => {},
   isZahtevMarkedForDelete: () => false,
   onToggleZahtevDeleteSelect: () => {},
+  highlightPendingZahtevi: false,
   bulkMode: false,
   isBulkSelected: () => false,
   onToggleBulkSlot: () => {},
-  assignMode: null,
+  assignMode: false,
   isMarkedForAssign: () => false,
   onToggleAssignSelect: () => {},
   isZahtevMarkedForAssign: () => false,
@@ -204,8 +208,20 @@ function formatWeekLabel(start: string): string {
   return `${d.getDate()}.${d.getMonth() + 1}. – ${end.getDate()}.${end.getMonth() + 1}.${end.getFullYear()}`;
 }
 
+/** Isti redosled učionica u svakom slotu (npr. uvek 1-Buzan pa 2-Sperry) – bez učionice na kraju. */
+function sortByClassroom(terms: AdminTerm[]): AdminTerm[] {
+  return [...terms].sort((a, b) => {
+    const an = a.classroom?.naziv;
+    const bn = b.classroom?.naziv;
+    if (!an && !bn) return 0;
+    if (!an) return 1;
+    if (!bn) return -1;
+    return an.localeCompare(bn, 'sr-Latn-RS');
+  });
+}
+
 function termsByKey(terms: AdminTerm[], date: string, slot: number): AdminTerm[] {
-  return terms.filter((t) => t.date === date && t.slot_index === slot);
+  return sortByClassroom(terms.filter((t) => t.date === date && t.slot_index === slot));
 }
 
 const DEFAULT_COLOR = '#0d9488';
@@ -268,6 +284,8 @@ export default function AdminCalendarView({
     setPendingZahtevi(pendingZahteviProp);
   }, [pendingZahteviProp]);
 
+  const [highlightPendingZahtevi, setHighlightPendingZahtevi] = useState(false);
+
   const handleDeleteOtkazani = async (id: string) => {
     if (!confirm('Trajno obrisati ovaj otkazani termin sa kalendara?')) return;
     const prev = otkazaniTermini;
@@ -291,6 +309,9 @@ export default function AdminCalendarView({
 
   const [copyMode, setCopyMode] = useState(false);
   const [copySource, setCopySource] = useState<{ termId: string; label: string } | null>(null);
+  const [copyFields, setCopyFields] = useState({ instruktor: true, ucionica: true, klijent: true });
+  const [copyTermTypeId, setCopyTermTypeId] = useState('');
+  const [copyTargets, setCopyTargets] = useState<Set<string>>(new Set());
   const [copyLoading, setCopyLoading] = useState(false);
 
   const [deleteMode, setDeleteMode] = useState(false);
@@ -305,10 +326,12 @@ export default function AdminCalendarView({
   const [bulkSlots, setBulkSlots] = useState<Set<string>>(new Set());
   const [bulkLoading, setBulkLoading] = useState(false);
 
-  const [assignMode, setAssignMode] = useState<'instruktor' | 'ucionica' | null>(null);
+  const [assignMode, setAssignMode] = useState(false);
   const [assignSelection, setAssignSelection] = useState<Set<string>>(new Set());
   const [assignZahteviSelection, setAssignZahteviSelection] = useState<Set<string>>(new Set());
-  const [assignTargetId, setAssignTargetId] = useState('');
+  // Prazno = "bez instruktora"/"bez učionice" – ne menja se to polje, menja se samo ono drugo (ako je izabrano).
+  const [assignInstructorChoice, setAssignInstructorChoice] = useState('');
+  const [assignClassroomChoice, setAssignClassroomChoice] = useState('');
   const [assignLoading, setAssignLoading] = useState(false);
 
   // Swap/Copy/Delete/Bulk/Assign su međusobno isključivi – uključivanje jednog gasi ostale da
@@ -321,6 +344,7 @@ export default function AdminCalendarView({
     if (keep !== 'copy') {
       setCopyMode(false);
       setCopySource(null);
+      setCopyTargets(new Set());
     }
     if (keep !== 'delete') {
       setDeleteMode(false);
@@ -333,10 +357,11 @@ export default function AdminCalendarView({
       setBulkSlots(new Set());
     }
     if (keep !== 'assign') {
-      setAssignMode(null);
+      setAssignMode(false);
       setAssignSelection(new Set());
       setAssignZahteviSelection(new Set());
-      setAssignTargetId('');
+      setAssignInstructorChoice('');
+      setAssignClassroomChoice('');
     }
   };
 
@@ -356,6 +381,7 @@ export default function AdminCalendarView({
       return next;
     });
     setCopySource(null);
+    setCopyTargets(new Set());
   };
 
   const toggleDeleteMode = () => {
@@ -458,15 +484,16 @@ export default function AdminCalendarView({
     }
   };
 
-  const toggleAssignMode = (mode: 'instruktor' | 'ucionica') => {
+  const toggleAssignMode = () => {
     setAssignMode((v) => {
-      const next = v === mode ? null : mode;
+      const next = !v;
       if (next) resetOtherModes('assign');
       return next;
     });
     setAssignSelection(new Set());
     setAssignZahteviSelection(new Set());
-    setAssignTargetId('');
+    setAssignInstructorChoice('');
+    setAssignClassroomChoice('');
   };
 
   const onToggleAssignSelect = (termId: string) => {
@@ -487,31 +514,44 @@ export default function AdminCalendarView({
     });
   };
 
+  // "Bez instruktora"/"bez učionice" (prazno) znači da se to polje NE dira – menja se samo ono drugo
+  // koje jeste izabrano. Zahtevi: učionica se šalje PRE instruktora, tako da – ako se zahtev ovim
+  // potvrđuje u pravi termin (jer je instruktor izabran) – ta učionica stigne pre konverzije.
   const confirmAssign = async () => {
     const total = assignSelection.size + assignZahteviSelection.size;
-    if (!assignMode || !assignTargetId || total === 0) return;
+    const hasInstructor = !!assignInstructorChoice;
+    const hasClassroom = !!assignClassroomChoice;
+    if (total === 0 || (!hasInstructor && !hasClassroom)) return;
     const termIds = [...assignSelection];
     const zahtevIds = [...assignZahteviSelection];
-    const mode = assignMode;
+    const instructorId = assignInstructorChoice;
+    const classroomId = assignClassroomChoice;
     setAssignSelection(new Set());
     setAssignZahteviSelection(new Set());
-    setAssignMode(null);
-    setAssignTargetId('');
+    setAssignMode(false);
+    setAssignInstructorChoice('');
+    setAssignClassroomChoice('');
     setAssignLoading(true);
-    const [termRes, zahtevRes] = await Promise.all([
-      termIds.length > 0
-        ? mode === 'instruktor'
-          ? assignInstructorToTermsAsAdmin(assignTargetId, termIds)
-          : assignClassroomToTermsAsAdmin(assignTargetId, termIds)
-        : Promise.resolve({ failed: [] }),
-      zahtevIds.length > 0
-        ? mode === 'instruktor'
-          ? assignInstructorToZahteviAsAdmin(assignTargetId, zahtevIds)
-          : assignClassroomToZahteviAsAdmin(assignTargetId, zahtevIds)
-        : Promise.resolve({ failed: [] }),
-    ]);
+
+    const termCalls: Promise<{ failed: { termId: string; error: string }[] }>[] = [];
+    if (termIds.length > 0) {
+      if (hasInstructor) termCalls.push(assignInstructorToTermsAsAdmin(instructorId, termIds));
+      if (hasClassroom) termCalls.push(assignClassroomToTermsAsAdmin(classroomId, termIds));
+    }
+    let zahtevFailed: { zahtevId: string; error: string }[] = [];
+    if (zahtevIds.length > 0) {
+      if (hasClassroom) {
+        const res = await assignClassroomToZahteviAsAdmin(classroomId, zahtevIds);
+        zahtevFailed = zahtevFailed.concat(res.failed);
+      }
+      if (hasInstructor) {
+        const res = await assignInstructorToZahteviAsAdmin(instructorId, zahtevIds);
+        zahtevFailed = zahtevFailed.concat(res.failed);
+      }
+    }
+    const termResults = await Promise.all(termCalls);
     setAssignLoading(false);
-    const failedCount = termRes.failed.length + zahtevRes.failed.length;
+    const failedCount = termResults.reduce((sum, r) => sum + r.failed.length, 0) + zahtevFailed.length;
     if (failedCount > 0) {
       toast.error(`Nije dodeljeno ${failedCount}/${total}.`);
     } else {
@@ -522,22 +562,42 @@ export default function AdminCalendarView({
 
   const onSelectCopySource = (term: AdminTerm) => {
     setCopySource({ termId: term.id, label: swapTermLabel(term) });
+    setCopyTargets(new Set());
+    setCopyTermTypeId('');
   };
 
-  const onSelectCopyTarget = async (date: string, slot: number) => {
+  const onToggleCopyTarget = (date: string, slot: number) => {
     if (!copySource) return;
+    const key = `${date}|${slot}`;
+    setCopyTargets((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  const copyFieldsAnyChecked = copyFields.instruktor || copyFields.ucionica || copyFields.klijent;
+
+  const confirmCopy = async () => {
+    if (!copySource || copyTargets.size === 0 || !copyFieldsAnyChecked) return;
     const sourceId = copySource.termId;
+    const targets = [...copyTargets].map((key) => {
+      const [date, slotStr] = key.split('|');
+      return { date, slotIndex: Number(slotStr) };
+    });
     setCopySource(null);
+    setCopyTargets(new Set());
     setCopyMode(false);
     setCopyLoading(true);
-    const res = await copyTermAsAdmin(sourceId, date, slot);
+    const { failed } = await copyTermToSlotsAsAdmin(sourceId, targets, copyFields, copyTermTypeId || undefined);
     setCopyLoading(false);
-    if (res.error) {
-      toast.error(res.error);
+    if (failed.length > 0) {
+      toast.error(`Nije kopirano ${failed.length}/${targets.length} – ${failed.map((f) => `${f.date} (${f.error})`).join('; ')}`);
     } else {
-      toast.success('Termin kopiran.');
+      toast.success(`Kopirano ${targets.length}.`);
     }
-    if (res.termId) router.refresh();
+    router.refresh();
   };
 
   const onSelectTerm = (term: AdminTerm) => {
@@ -648,7 +708,8 @@ export default function AdminCalendarView({
         copyMode,
         copySourceId: copySource?.termId ?? null,
         onSelectCopySource,
-        onSelectCopyTarget,
+        isCopyTargetSelected: (date: string, slot: number) => copyTargets.has(`${date}|${slot}`),
+        onToggleCopyTarget,
         deleteMode,
         isMarkedForDelete: (termId: string) => deleteSelection.has(termId),
         onToggleDeleteSelect,
@@ -664,13 +725,20 @@ export default function AdminCalendarView({
         onToggleAssignSelect,
         isZahtevMarkedForAssign: (zahtevId: string) => assignZahteviSelection.has(zahtevId),
         onToggleAssignZahtevSelect,
+        highlightPendingZahtevi,
       }}
     >
       {allPendingZahteviDates.length > 0 && (
         <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-amber-400 bg-amber-50 px-4 py-2.5 text-sm text-amber-900 animate-pulse">
-          <span className="font-semibold">
-            ⚠ {allPendingZahteviDates.length} {allPendingZahteviDates.length === 1 ? 'termin' : 'termina'} bez instruktora/učionice:
-          </span>
+          <button
+            type="button"
+            onClick={() => setHighlightPendingZahtevi((v) => !v)}
+            className="font-semibold underline decoration-dotted hover:text-amber-700"
+            title="Klikni da obeležiš/skloniš obeležavanje ovih na kalendaru"
+          >
+            ⚠ {allPendingZahteviDates.length} {allPendingZahteviDates.length === 1 ? 'termin' : 'termina'} bez instruktora/učionice
+            {highlightPendingZahtevi ? ' (obeleženo – klikni da skloniš)' : ':'}
+          </button>
           <span className="flex flex-wrap gap-1.5">
             {allPendingZahteviDates.map((d) => (
               <Link
@@ -742,50 +810,48 @@ export default function AdminCalendarView({
           {bulkLoading && <span className="text-sm text-stone-500">Zakazujem…</span>}
           <button
             type="button"
-            onClick={() => toggleAssignMode('instruktor')}
+            onClick={toggleAssignMode}
             className={`px-3 py-1.5 rounded-lg text-sm font-medium ${
-              assignMode === 'instruktor' ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-stone-200 text-stone-700 hover:bg-stone-300'
+              assignMode ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-stone-200 text-stone-700 hover:bg-stone-300'
             }`}
           >
-            {assignMode === 'instruktor' ? 'Dodeli instruktora: uključeno' : 'Dodeli instruktora'}
-          </button>
-          <button
-            type="button"
-            onClick={() => toggleAssignMode('ucionica')}
-            className={`px-3 py-1.5 rounded-lg text-sm font-medium ${
-              assignMode === 'ucionica' ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-stone-200 text-stone-700 hover:bg-stone-300'
-            }`}
-          >
-            {assignMode === 'ucionica' ? 'Dodeli učionicu: uključeno' : 'Dodeli učionicu'}
+            {assignMode ? 'Dodeli instruktora/učionicu: uključeno' : 'Dodeli instruktora/učionicu'}
           </button>
           {assignMode && (
             <>
               <select
-                value={assignTargetId}
-                onChange={(e) => setAssignTargetId(e.target.value)}
+                value={assignInstructorChoice}
+                onChange={(e) => setAssignInstructorChoice(e.target.value)}
                 className="rounded-lg border border-stone-300 px-3 py-1.5 text-sm text-stone-800 bg-white"
               >
-                <option value="">
-                  {assignMode === 'instruktor' ? '— izaberite instruktora —' : '— izaberite učionicu —'}
-                </option>
-                {assignMode === 'instruktor'
-                  ? instructorsList.map((i) => (
-                      <option key={i.id} value={i.id}>{i.ime} {i.prezime}</option>
-                    ))
-                  : classroomsList.map((c) => (
-                      <option key={c.id} value={c.id}>{c.naziv}</option>
-                    ))}
+                <option value="">bez instruktora</option>
+                {instructorsList.map((i) => (
+                  <option key={i.id} value={i.id}>{i.ime} {i.prezime}</option>
+                ))}
+              </select>
+              <select
+                value={assignClassroomChoice}
+                onChange={(e) => setAssignClassroomChoice(e.target.value)}
+                className="rounded-lg border border-stone-300 px-3 py-1.5 text-sm text-stone-800 bg-white"
+              >
+                <option value="">bez učionice</option>
+                {classroomsList.map((c) => (
+                  <option key={c.id} value={c.id}>{c.naziv}</option>
+                ))}
               </select>
               <button
                 type="button"
                 onClick={confirmAssign}
-                disabled={!assignTargetId || assignSelection.size + assignZahteviSelection.size === 0}
+                disabled={
+                  (!assignInstructorChoice && !assignClassroomChoice) ||
+                  assignSelection.size + assignZahteviSelection.size === 0
+                }
                 className="px-3 py-1.5 rounded-lg text-sm font-medium bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 Potvrdi dodelu ({assignSelection.size + assignZahteviSelection.size})
               </button>
               <span className="text-sm text-stone-400">
-                kliknite termine na kalendaru da ih označite{assignMode === 'instruktor' ? ' (uključujući sive zahteve)' : ''}
+                izaberite instruktora i/ili učionicu (može i samo jedno), pa kliknite termine na kalendaru da ih označite
               </span>
             </>
           )}
@@ -881,24 +947,82 @@ export default function AdminCalendarView({
           </div>
         )}
         {copyMode && (
-          <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
-            <span className="text-stone-500">Kopiraj iz:</span>
-            {copySource ? (
-              <>
-                <span className="rounded-lg bg-amber-50 border border-amber-300 px-2 py-1 text-stone-800">
-                  {copySource.label}
-                </span>
-                <span className="text-stone-400">kliknite prazan (ili slobodan) slot da kopirate termin tamo</span>
+          <div className="mt-2 flex flex-col gap-2 text-sm">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-stone-500">Kopiraj iz:</span>
+              {copySource ? (
+                <>
+                  <span className="rounded-lg bg-amber-50 border border-amber-300 px-2 py-1 text-stone-800">
+                    {copySource.label}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCopySource(null);
+                      setCopyTargets(new Set());
+                    }}
+                    className="px-3 py-1.5 rounded-lg text-sm font-medium bg-stone-100 text-stone-600 hover:bg-stone-200"
+                  >
+                    Otkaži izbor
+                  </button>
+                </>
+              ) : (
+                <span className="text-stone-400">kliknite termin na kalendaru koji želite da kopirate</span>
+              )}
+            </div>
+            {copySource && (
+              <div className="flex flex-wrap items-end gap-3">
+                <div className="flex items-center gap-3 flex-wrap text-stone-700">
+                  <label className="flex items-center gap-1.5">
+                    <input
+                      type="checkbox"
+                      checked={copyFields.instruktor}
+                      onChange={(e) => setCopyFields((f) => ({ ...f, instruktor: e.target.checked }))}
+                    />
+                    Instruktor
+                  </label>
+                  <label className="flex items-center gap-1.5">
+                    <input
+                      type="checkbox"
+                      checked={copyFields.ucionica}
+                      onChange={(e) => setCopyFields((f) => ({ ...f, ucionica: e.target.checked }))}
+                    />
+                    Učionica
+                  </label>
+                  <label className="flex items-center gap-1.5">
+                    <input
+                      type="checkbox"
+                      checked={copyFields.klijent}
+                      onChange={(e) => setCopyFields((f) => ({ ...f, klijent: e.target.checked }))}
+                    />
+                    Klijent
+                  </label>
+                </div>
+                {copyFields.klijent && (
+                  <div className="min-w-[200px]">
+                    <label className="block text-xs font-medium text-stone-700 mb-1">Vrsta časa</label>
+                    <select
+                      value={copyTermTypeId}
+                      onChange={(e) => setCopyTermTypeId(e.target.value)}
+                      className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm text-stone-800 bg-white"
+                    >
+                      <option value="">— (zadrži originalnu) —</option>
+                      {termTypes.map((tt) => (
+                        <option key={tt.id} value={tt.id}>{tt.naziv}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
                 <button
                   type="button"
-                  onClick={() => setCopySource(null)}
-                  className="px-3 py-1.5 rounded-lg text-sm font-medium bg-stone-100 text-stone-600 hover:bg-stone-200"
+                  onClick={confirmCopy}
+                  disabled={copyTargets.size === 0 || !copyFieldsAnyChecked}
+                  className="px-3 py-1.5 rounded-lg text-sm font-medium bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed"
                 >
-                  Otkaži izbor
+                  Potvrdi kopiranje ({copyTargets.size})
                 </button>
-              </>
-            ) : (
-              <span className="text-stone-400">kliknite termin na kalendaru koji želite da kopirate</span>
+                <span className="text-stone-400 text-xs">kliknite jedan ili više praznih/slobodnih slotova da ih izaberete kao mete</span>
+              </div>
             )}
           </div>
         )}
@@ -1061,7 +1185,7 @@ function AdminCellContent({
     </div>
   ) : null;
 
-  const zahtevAssignClickable = swap.assignMode !== null;
+  const zahtevAssignClickable = swap.assignMode;
   const zahtevClickable = zahtevAssignClickable || swap.deleteMode;
   const PendingZahteviEntries = pendingZahteviInSlot.length > 0 ? (
     <div className="mt-1 space-y-1">
@@ -1085,6 +1209,7 @@ function AdminCellContent({
                 ? ' border-blue-600 ring-2 ring-offset-1 ring-blue-500 bg-blue-50'
                 : ' border-stone-300 bg-stone-100'
             }`}
+            style={swap.highlightPendingZahtevi ? { outline: '2px solid #dc2626', outlineOffset: '1px' } : undefined}
           >
             <span className="block font-medium text-stone-600">
               {z.client_ime}{z.client_prezime ? ` ${z.client_prezime}` : ''}
@@ -1104,12 +1229,16 @@ function AdminCellContent({
         <Link
           href={newTermHref}
           className={`block rounded-lg border border-dashed border-stone-200 p-2 text-stone-400 hover:border-amber-400 hover:bg-amber-50/50 min-h-[52px]${
-            swap.copyMode ? ' ring-2 ring-offset-1 ring-amber-300' : ''
+            swap.copyMode && swap.isCopyTargetSelected(emptyDate, emptySlot)
+              ? ' ring-2 ring-offset-1 ring-emerald-500 border-emerald-500'
+              : swap.copyMode
+              ? ' ring-2 ring-offset-1 ring-amber-300'
+              : ''
           }`}
           onClick={(e) => {
             if (swap.copyMode) {
               e.preventDefault();
-              swap.onSelectCopyTarget(emptyDate, emptySlot);
+              swap.onToggleCopyTarget(emptyDate, emptySlot);
             }
           }}
           onDragOver={(e) => {
@@ -1120,7 +1249,7 @@ function AdminCellContent({
             if (draggedTermId) onDropCell(emptyDate, emptySlot);
           }}
         >
-          {swap.copyMode ? 'Kopiraj ovde' : '+'}
+          {swap.copyMode ? (swap.isCopyTargetSelected(emptyDate, emptySlot) ? '✓ izabrano' : 'Kopiraj ovde') : '+'}
         </Link>
         <Link
           href={newTestHref}
@@ -1174,7 +1303,7 @@ function AdminCellContent({
         const copySelected = swap.copySourceId === term.id;
         const deleteSelected = swap.isMarkedForDelete(term.id);
         const assignSelected = swap.isMarkedForAssign(term.id);
-        const anyModeActive = swap.swapMode || swap.copyMode || swap.deleteMode || !!swap.assignMode;
+        const anyModeActive = swap.swapMode || swap.copyMode || swap.deleteMode || swap.assignMode;
 
         return (
           <Link
@@ -1261,16 +1390,24 @@ function AdminCellContent({
           <Link
             href={newTermHref}
             className={`block rounded-lg border border-dashed border-stone-200 p-1.5 text-stone-500 hover:border-amber-400 hover:bg-amber-50/50 hover:text-amber-800 text-xs text-center${
-              swap.copyMode ? ' ring-2 ring-offset-1 ring-amber-300' : ''
+              swap.copyMode && swap.isCopyTargetSelected(emptyDate, emptySlot)
+                ? ' ring-2 ring-offset-1 ring-emerald-500 border-emerald-500'
+                : swap.copyMode
+                ? ' ring-2 ring-offset-1 ring-amber-300'
+                : ''
             }`}
             onClick={(e) => {
               if (swap.copyMode) {
                 e.preventDefault();
-                swap.onSelectCopyTarget(emptyDate, emptySlot);
+                swap.onToggleCopyTarget(emptyDate, emptySlot);
               }
             }}
           >
-            {swap.copyMode ? 'Kopiraj ovde' : `+ Dodaj još termin u ovom slotu (${slotCount}/${maxTerminaPoSlotu})`}
+            {swap.copyMode
+              ? swap.isCopyTargetSelected(emptyDate, emptySlot)
+                ? '✓ izabrano'
+                : 'Kopiraj ovde'
+              : `+ Dodaj još termin u ovom slotu (${slotCount}/${maxTerminaPoSlotu})`}
           </Link>
           <Link
             href={newTestHref}

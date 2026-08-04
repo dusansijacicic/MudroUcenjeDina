@@ -1147,60 +1147,114 @@ export async function swapTermsAsAdmin(
 }
 
 /**
- * Kopira termin (instruktor, učionica, kategorija, napomena) i sve njegove radionice (klijent,
- * vrsta časa, komentar) na prazan slot – odrzano/placeno se NE prenose (nova radionica se još nije
- * desala). Cilja samo prazne slotove (za razliku od swap-a nema šta da se zameni), pa se ponovo
- * koriste već validirane funkcije createTermAsAdmin/createPredavanjeAsAdmin umesto duplirane provere.
+ * Kopira termin na jedan ili više ciljnih slotova odjednom. Bira se šta tačno ide u kopiju
+ * (instruktor/učionica/klijent(i)) – odrzano/placeno se NIKAD ne prenose (nova radionica se još nije
+ * desala). Za svaki cilj se PROVERAVA da li su instruktor/učionica slobodni baš u tom slotu; ako
+ * nisu (ili polje uopšte nije čekirano), kopija se ne odbija – samo se taj deo izostavi (termin bez
+ * instruktora postaje zahtev, isto kao "Više termina"; učionica bez slobodnog mesta ostaje prazna).
+ * Jedini pravi razlozi za neuspeh su npr. dete koje je već u tom terminu ili dostignut limit.
  */
-export async function copyTermAsAdmin(
+export async function copyTermToSlotsAsAdmin(
   sourceTermId: string,
-  targetDate: string,
-  targetSlot: number
-): Promise<{ error?: string; termId?: string }> {
+  targets: { date: string; slotIndex: number }[],
+  fields: { instruktor: boolean; ucionica: boolean; klijent: boolean },
+  termTypeId?: string | null
+): Promise<{ failed: { date: string; slotIndex: number; error: string }[] }> {
   const { admin, error: authErr } = await requireAdmin();
-  if (authErr || !admin) return { error: authErr ?? 'Niste ovlašćeni.' };
+  if (authErr || !admin) return { failed: targets.map((t) => ({ ...t, error: authErr ?? 'Niste ovlašćeni.' })) };
+  if (targets.length === 0) return { failed: [] };
 
   const { data: source } = await admin
     .from('terms')
     .select('instructor_id, classroom_id, term_category_id, napomena, nastavak_of_term_id')
     .eq('id', sourceTermId)
     .single();
-  if (!source) return { error: 'Termin za kopiranje nije pronađen.' };
+  if (!source) return { failed: targets.map((t) => ({ ...t, error: 'Termin za kopiranje nije pronađen.' })) };
   if (source.nastavak_of_term_id) {
-    return { error: 'Automatski blok (nastavak dužeg časa) nije moguće kopirati – izaberite pravi termin.' };
+    return { failed: targets.map((t) => ({ ...t, error: 'Automatski blok (nastavak dužeg časa) nije moguće kopirati.' })) };
   }
 
-  const { data: preds } = await admin
-    .from('predavanja')
-    .select('client_id, term_type_id, komentar')
-    .eq('term_id', sourceTermId);
-  if (!preds || preds.length === 0) {
-    return { error: 'Ovaj termin nema nijednu radionicu za kopiranje.' };
+  let preds: { client_id: string; term_type_id: string | null; komentar: string | null }[] = [];
+  if (fields.klijent) {
+    const { data } = await admin.from('predavanja').select('client_id, term_type_id, komentar').eq('term_id', sourceTermId);
+    preds = data ?? [];
+    if (preds.length === 0) {
+      return { failed: targets.map((t) => ({ ...t, error: 'Ovaj termin nema nijednu radionicu za kopiranje.' })) };
+    }
   }
+  // termTypeId (ako je prosleđen, uključujući null = "bez vrste") važi za SVE kopirane radionice,
+  // umesto da svaka nosi svoju originalnu vrstu – jednostavnije kad se bira jedna vrsta pri kopiranju.
+  const effectiveTermType = (p: { term_type_id: string | null }) => (termTypeId !== undefined ? termTypeId : p.term_type_id);
 
-  const createRes = await createTermAsAdmin(
-    source.instructor_id,
-    targetDate,
-    targetSlot,
-    source.classroom_id,
-    source.term_category_id,
-    source.napomena
+  const results = await Promise.all(
+    targets.map(async (t) => {
+      // Instruktor se koristi samo ako je čekiran I slobodan baš u ovom danu/slotu.
+      let useInstructor = false;
+      if (fields.instruktor) {
+        const { data: instrConflict } = await admin
+          .from('terms')
+          .select('id')
+          .eq('instructor_id', source.instructor_id)
+          .eq('date', t.date)
+          .eq('slot_index', t.slotIndex)
+          .maybeSingle();
+        useInstructor = !instrConflict;
+      }
+
+      // Isto za učionicu – ako je zauzeta, kopija ide bez nje umesto da padne.
+      let useClassroom = false;
+      if (fields.ucionica && source.classroom_id) {
+        const { data: roomConflict } = await admin
+          .from('terms')
+          .select('id')
+          .eq('classroom_id', source.classroom_id)
+          .eq('date', t.date)
+          .eq('slot_index', t.slotIndex)
+          .maybeSingle();
+        useClassroom = !roomConflict;
+      }
+      const classroomId = useClassroom ? source.classroom_id : null;
+
+      if (useInstructor) {
+        const createRes = await createTermAsAdmin(
+          source.instructor_id,
+          t.date,
+          t.slotIndex,
+          classroomId,
+          source.term_category_id,
+          source.napomena
+        );
+        if (createRes.error || !createRes.termId) return { ...t, error: createRes.error ?? 'Greška pri kreiranju termina.' };
+        for (const p of preds) {
+          const res = await createPredavanjeAsAdmin(createRes.termId, p.client_id, false, false, p.komentar, effectiveTermType(p));
+          if (res.error) return { ...t, error: res.error };
+        }
+        return { ...t, error: null as string | null };
+      }
+
+      // Bez instruktora (nije čekiran ili je zauzet) – zahtev, ne pravi termin. Nema šta da se
+      // kopira bez bar jednog klijenta.
+      if (preds.length === 0) {
+        return { ...t, error: 'Instruktor je zauzet (ili nije čekiran), a bez klijenta nema šta da se kopira kao zahtev.' };
+      }
+      const { error } = await admin.from('zahtevi_za_cas').insert(
+        preds.map((p) => ({
+          client_id: p.client_id,
+          instructor_id: null,
+          requested_date: t.date,
+          requested_slot_index: t.slotIndex,
+          term_type_id: effectiveTermType(p),
+          classroom_id: classroomId,
+          status: 'pending',
+        }))
+      );
+      if (error) return { ...t, error: error.message };
+      return { ...t, error: null as string | null };
+    })
   );
-  if (createRes.error || !createRes.termId) return { error: createRes.error ?? 'Greška pri kreiranju termina.' };
-  const newTermId = createRes.termId;
-
-  let firstError: string | null = null;
-  let successCount = 0;
-  for (const p of preds) {
-    const res = await createPredavanjeAsAdmin(newTermId, p.client_id, false, false, p.komentar, p.term_type_id);
-    if (res.error) firstError = firstError ?? res.error;
-    else successCount += 1;
-  }
-
   revalidatePath('/admin/kalendar');
-  if (successCount === 0) return { error: firstError ?? 'Kopiranje nije uspelo.' };
-  if (firstError) return { termId: newTermId, error: `Kopirano ${successCount}/${preds.length} – ${firstError}` };
-  return { termId: newTermId };
+  revalidatePath('/dashboard/zahtevi');
+  return { failed: results.filter((r): r is { date: string; slotIndex: number; error: string } => r.error !== null) };
 }
 
 export type TermTypeRow = { id: string; naziv: string; opis: string | null; cena_po_casu: number | null; program_id: string | null; trajanje_minuta: number };
