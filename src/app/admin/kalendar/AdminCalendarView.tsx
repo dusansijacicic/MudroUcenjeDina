@@ -1530,11 +1530,6 @@ function AdminWeekView({
     </tbody>
   );
 
-  const [selectedDay, setSelectedDay] = useState(() => {
-    const today = new Date().toISOString().slice(0, 10);
-    return allDates.includes(today) ? today : week1Dates[0];
-  });
-
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -1581,16 +1576,17 @@ function AdminWeekView({
         </table>
       </div>
 
-      {/* Tablet (md do lg): samo ova nedelja, 7 kolona. */}
-      <div className="hidden md:block lg:hidden overflow-x-auto rounded-xl border border-stone-200 bg-white">
-        <table className="w-full text-sm">
+      {/* Tablet + telefon (<lg): cela nedelja, 7 kolona, horizontalni skrol po potrebi –
+          da se svi dani vide odjednom i Copy/Delete/itd. mogu preko dana. */}
+      <div className="lg:hidden overflow-x-auto rounded-xl border border-stone-200 bg-white">
+        <table className="w-full min-w-[700px] text-sm">
           <thead>
             <tr className="border-b border-stone-200 bg-stone-50/60">
               <th className="w-16 p-2" />
               {week1Dates.map((date) => {
                 const d = new Date(date + 'T12:00:00');
                 return (
-                  <th key={date} className="p-2 text-center text-stone-600 font-medium">
+                  <th key={date} className="p-2 text-center text-stone-600 font-medium min-w-[90px]">
                     <div>{DAY_NAMES[d.getDay() === 0 ? 6 : d.getDay() - 1]}</div>
                     <div className="text-stone-400">{d.getDate()}.{d.getMonth() + 1}.</div>
                   </th>
@@ -1600,21 +1596,6 @@ function AdminWeekView({
           </thead>
           {renderBody(week1Dates)}
         </table>
-      </div>
-
-      {/* Telefon (<md): traka dana + jedan dan ispod. */}
-      <div className="md:hidden">
-        <AdminDateStrip dates={week1Dates} selectedDate={selectedDay} onSelect={setSelectedDay} />
-        <AdminDayAgenda
-          date={selectedDay}
-          terms={terms}
-          otkazaniTermini={otkazaniTermini}
-          pendingZahtevi={pendingZahtevi}
-          draggedTermId={draggedTermId}
-          setDraggedTermId={setDraggedTermId}
-          onDropCell={onDropCell}
-          maxTerminaPoSlotu={maxTerminaPoSlotu}
-        />
       </div>
     </div>
   );
