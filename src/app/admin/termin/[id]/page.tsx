@@ -9,6 +9,7 @@ import { deleteTermAsAdmin, getTermCategories } from '@/app/admin/actions';
 import { jedanKlijentIzJoina, nazivKategorijeIzJoina, isTestingCategoryJoin } from '@/lib/term-categories';
 import AdminTermMetaForm from '@/app/admin/termin/AdminTermMetaForm';
 import AddPotentialClientsInline from './AddPotentialClientsInline';
+import PotentialClientQuickActions from '@/app/admin/termin/PotentialClientQuickActions';
 import type { PotentialClientRow, PotentialClientStatus } from '@/app/admin/actions';
 
 const STATUS_LABEL: Record<PotentialClientStatus, string> = {
@@ -177,12 +178,20 @@ export default async function AdminTerminDetailPage({
                       <p className="mt-1 text-sm text-stone-600 italic whitespace-pre-wrap">{pc.komentar}</p>
                     )}
                   </div>
-                  <Link
-                    href={`/admin/termin/${termId}/testiranje/${pc.id}`}
-                    className="text-sm text-amber-600 hover:text-amber-700 shrink-0"
-                  >
-                    Izmeni
-                  </Link>
+                  <div className="flex items-center gap-3 shrink-0">
+                    <PotentialClientQuickActions
+                      id={pc.id}
+                      ime={pc.ime}
+                      status={pc.status as PotentialClientStatus}
+                      convertedClientId={pc.converted_client_id}
+                    />
+                    <Link
+                      href={`/admin/termin/${termId}/testiranje/${pc.id}`}
+                      className="text-sm text-amber-600 hover:text-amber-700"
+                    >
+                      Izmeni
+                    </Link>
+                  </div>
                 </div>
               ))
             )}
