@@ -165,7 +165,7 @@ export default function ClientForm({
           </label>
           <input
             type="number"
-            min="1990"
+            min="1920"
             max="2030"
             value={godiste}
             onChange={(e) => setGodiste(e.target.value)}

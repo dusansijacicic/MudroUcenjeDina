@@ -21,6 +21,7 @@ import {
   assignTermTypeToZahteviAsAdmin,
 } from '@/app/admin/actions';
 import SingleKlijentPicker from '@/components/SingleKlijentPicker';
+import GrupniKlijentiPicker from '@/components/GrupniKlijentiPicker';
 
 const DAY_NAMES = ['Pon', 'Uto', 'Sre', 'Čet', 'Pet', 'Sub', 'Ned'];
 
@@ -241,11 +242,73 @@ function termsByKey(terms: AdminTerm[], date: string, slot: number): AdminTerm[]
   return sortByClassroom(terms.filter((t) => t.date === date && t.slot_index === slot));
 }
 
+/** Abecedno sortira po imenu+prezimenu ("sr-Latn-RS") – koristi se svuda gde se prikazuje raspored dece. */
+function sortByFullName<T>(items: T[], getName: (item: T) => string): T[] {
+  return [...items].sort((a, b) => getName(a).localeCompare(getName(b), 'sr-Latn-RS'));
+}
+
+/** Abecedno sortirana lista imena u termin-kartici na kalendaru – ako ima više od `threshold` polaznika,
+ * prikazuje se samo prvih `threshold` + dugme "+ N ostalih" (klik proširuje, bez napuštanja kartice). */
+function TruncatedNameList({
+  items,
+  threshold = 3,
+  itemClassName,
+}: {
+  items: { key: string; content: React.ReactNode }[];
+  threshold?: number;
+  itemClassName: string;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const visible = expanded ? items : items.slice(0, threshold);
+  const restCount = items.length - visible.length;
+  return (
+    <>
+      {visible.map((it) => (
+        <li key={it.key} className={itemClassName}>
+          {it.content}
+        </li>
+      ))}
+      {restCount > 0 && (
+        <li>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setExpanded(true);
+            }}
+            className="text-[11px] font-medium text-stone-500 underline decoration-dotted hover:text-stone-800"
+          >
+            + {restCount} ostalih
+          </button>
+        </li>
+      )}
+      {expanded && items.length > threshold && (
+        <li>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setExpanded(false);
+            }}
+            className="text-[11px] font-medium text-stone-500 underline decoration-dotted hover:text-stone-800"
+          >
+            Prikaži manje
+          </button>
+        </li>
+      )}
+    </>
+  );
+}
+
 const DEFAULT_COLOR = '#0d9488';
 
 const DEFAULT_MAX_TERMINA_PO_SLOTU = 4;
 
 export default function AdminCalendarView({
+  headerContent,
+  stickyMode = 'toolbar',
   terms: termsProp,
   otkazaniTermini: otkazaniTerminiProp = [],
   startOfWeek,
@@ -255,11 +318,19 @@ export default function AdminCalendarView({
   maxTerminaPoSlotu = DEFAULT_MAX_TERMINA_PO_SLOTU,
   clients = [],
   termTypes = [],
+  termCategories = [],
   instructorsList = [],
   classroomsList = [],
   pendingZahtevi: pendingZahteviProp = [],
   allPendingZahteviDates = [],
 }: {
+  /** Naslov/filteri/legenda iznad kalendara (server-renderovani deo iz page.tsx) – prikazuje se unutar
+   * istog sticky omotača kao traka alata (Swap/Copy/Delete/…), da bi na velikim ekranima sve zajedno
+   * bilo "zamrznuto" pri skrolovanju kroz kalendar. */
+  headerContent?: React.ReactNode;
+  /** "toolbar" (podrazumevano) = samo traka alata je sticky; "all" = zaglavlje (headerContent) i
+   * obaveštenje o zahtevima idu u isti sticky omotač kao traka alata. Iz Admin → Podešavanja. */
+  stickyMode?: 'toolbar' | 'all';
   terms: AdminTerm[];
   otkazaniTermini?: OtkazaniTerminCalendar[];
   startOfWeek: string;
@@ -271,6 +342,8 @@ export default function AdminCalendarView({
   /** Za "Više termina" mod (masovno zakazivanje bez instruktora/učionice, preko zahteva). */
   clients?: { id: string; ime: string; prezime: string; godiste?: number | null; datumTestiranja?: string | null }[];
   termTypes?: { id: string; naziv: string; opis: string | null }[];
+  /** Za "Zakaži više časova" u grupnom modu – da se izabere odgovarajuća (grupna) kategorija termina. */
+  termCategories?: { id: string; naziv: string; jedan_klijent_po_terminu: boolean; is_testing?: boolean; is_nastavak?: boolean }[];
   /** Za "Dodeli instruktora"/"Dodeli učionicu" module. */
   instructorsList?: { id: string; ime: string; prezime: string }[];
   classroomsList?: { id: string; naziv: string }[];
@@ -338,7 +411,12 @@ export default function AdminCalendarView({
   const [deleteLoading, setDeleteLoading] = useState(false);
 
   const [bulkMode, setBulkMode] = useState(false);
+  // Grupni mod: više dece odjednom u istim slotovima (npr. grupa odraslih koja ima čas svaki dan) –
+  // zahteva instruktora (zahtevi_za_cas ne podržavaju grupu, samo jedno dete po zahtevu).
+  const [bulkGroupMode, setBulkGroupMode] = useState(false);
   const [bulkClientId, setBulkClientId] = useState('');
+  const [bulkGroupClientIds, setBulkGroupClientIds] = useState<string[]>([]);
+  const [bulkTermCategoryId, setBulkTermCategoryId] = useState('');
   const [bulkTermTypeId, setBulkTermTypeId] = useState('');
   // Prazno = bez instruktora/učionice – pravi se zahtev (kao do sad). Ako se izabere instruktor,
   // pravi se pravi termin (učionica ostaje opciona i u tom slučaju).
@@ -346,6 +424,8 @@ export default function AdminCalendarView({
   const [bulkClassroomChoice, setBulkClassroomChoice] = useState('');
   const [bulkSlots, setBulkSlots] = useState<Set<string>>(new Set());
   const [bulkLoading, setBulkLoading] = useState(false);
+
+  const grupneKategorije = termCategories.filter((c) => !c.jedan_klijent_po_terminu && !c.is_testing && !c.is_nastavak);
 
   const [assignMode, setAssignMode] = useState(false);
   const [assignSelection, setAssignSelection] = useState<Set<string>>(new Set());
@@ -493,20 +573,38 @@ export default function AdminCalendarView({
   };
 
   const confirmBulk = async () => {
-    if (!bulkClientId || bulkSlots.size === 0) return;
+    if (bulkGroupMode) {
+      if (bulkGroupClientIds.length === 0 || !bulkInstructorChoice || !bulkTermCategoryId || bulkSlots.size === 0) return;
+    } else if (!bulkClientId || bulkSlots.size === 0) {
+      return;
+    }
     const slots = [...bulkSlots].map((key) => {
       const [date, slotStr] = key.split('|');
       return { date, slotIndex: Number(slotStr) };
     });
     const instructorId = bulkInstructorChoice;
     const classroomId = bulkClassroomChoice || null;
+    const groupClientIds = bulkGroupClientIds;
+    const groupCategoryId = bulkTermCategoryId;
+    const isGroup = bulkGroupMode;
     setBulkSlots(new Set());
     setBulkMode(false);
+    setBulkGroupMode(false);
+    setBulkGroupClientIds([]);
+    setBulkTermCategoryId('');
     setBulkInstructorChoice('');
     setBulkClassroomChoice('');
     setBulkLoading(true);
-    if (instructorId) {
-      const { failed } = await createBulkTermsAsAdmin(bulkClientId, instructorId, classroomId, bulkTermTypeId || null, slots);
+    if (isGroup) {
+      const { failed } = await createBulkTermsAsAdmin(groupClientIds, instructorId, classroomId, bulkTermTypeId || null, slots, groupCategoryId);
+      setBulkLoading(false);
+      if (failed.length > 0) {
+        toast.error(`Nije zakazano ${failed.length}/${slots.length} – ${failed.map((f) => `${f.date} (${f.error})`).join('; ')}`);
+      } else {
+        toast.success(`Zakazano ${slots.length} termin(a) za grupu od ${groupClientIds.length}.`);
+      }
+    } else if (instructorId) {
+      const { failed } = await createBulkTermsAsAdmin([bulkClientId], instructorId, classroomId, bulkTermTypeId || null, slots);
       setBulkLoading(false);
       if (failed.length > 0) {
         toast.error(`Nije zakazano ${failed.length}/${slots.length} – ${failed.map((f) => `${f.date} (${f.error})`).join('; ')}`);
@@ -778,6 +876,8 @@ export default function AdminCalendarView({
         highlightPendingZahtevi,
       }}
     >
+      <div className={stickyMode === 'all' ? 'lg:sticky lg:top-16 z-30 bg-stone-50 lg:pb-2' : ''}>
+      {headerContent}
       {allPendingZahteviDates.length > 0 && (
         <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-amber-400 bg-amber-50 px-4 py-2.5 text-sm text-amber-900 animate-pulse">
           <button
@@ -802,7 +902,11 @@ export default function AdminCalendarView({
           </span>
         </div>
       )}
-      <div className="mb-4 rounded-xl border border-stone-200 bg-white p-3">
+      <div
+        className={`mb-4 rounded-xl border border-stone-200 bg-white p-3${
+          stickyMode !== 'all' ? ' lg:sticky lg:top-16 z-30' : ''
+        }`}
+      >
         <div className="flex items-center gap-3 flex-wrap">
           <button
             type="button"
@@ -1087,67 +1191,118 @@ export default function AdminCalendarView({
           </div>
         )}
         {bulkMode && (
-          <div className="mt-2 flex flex-wrap items-end gap-3 text-sm">
-            <div className="min-w-[220px]">
-              <label className="block text-xs font-medium text-stone-700 mb-1">Dete</label>
-              <SingleKlijentPicker
-                clients={clients}
-                value={bulkClientId}
-                onChange={setBulkClientId}
-                inputId="admin-bulk-klijent-search"
+          <div className="mt-2 flex flex-col gap-3 text-sm">
+            <label className="flex items-center gap-1.5 text-stone-700">
+              <input
+                type="checkbox"
+                checked={bulkGroupMode}
+                onChange={(e) => {
+                  const checked = e.target.checked;
+                  setBulkGroupMode(checked);
+                  // Grupa zahteva instruktora (zahtevi_za_cas ne podržavaju grupu) – ako nema
+                  // izabranog, uzmi prvog da forma odmah bude ispravna.
+                  if (checked && !bulkInstructorChoice) setBulkInstructorChoice(instructorsList[0]?.id ?? '');
+                  if (checked && !bulkTermCategoryId) setBulkTermCategoryId(grupneKategorije[0]?.id ?? '');
+                }}
               />
-            </div>
-            <div className="min-w-[200px]">
-              <label className="block text-xs font-medium text-stone-700 mb-1">Vrsta časa</label>
-              <select
-                value={bulkTermTypeId}
-                onChange={(e) => setBulkTermTypeId(e.target.value)}
-                className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm text-stone-800 bg-white"
-              >
-                <option value="">— (nije obavezno) —</option>
-                {termTypes.map((tt) => (
-                  <option key={tt.id} value={tt.id}>{tt.naziv}</option>
-                ))}
-              </select>
-            </div>
-            <div className="min-w-[180px]">
-              <label className="block text-xs font-medium text-stone-700 mb-1">Instruktor</label>
-              <select
-                value={bulkInstructorChoice}
-                onChange={(e) => setBulkInstructorChoice(e.target.value)}
-                className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm text-stone-800 bg-white"
-              >
-                <option value="">bez instruktora (zahtev)</option>
-                {instructorsList.map((i) => (
-                  <option key={i.id} value={i.id}>{i.ime} {i.prezime}</option>
-                ))}
-              </select>
-            </div>
-            {bulkInstructorChoice && (
-              <div className="min-w-[160px]">
-                <label className="block text-xs font-medium text-stone-700 mb-1">Učionica</label>
+              Grupa (više dece odjednom u istim terminima)
+            </label>
+            <div className="flex flex-wrap items-end gap-3">
+              {bulkGroupMode ? (
+                <div className="min-w-[260px]">
+                  <label className="block text-xs font-medium text-stone-700 mb-1">Deca (grupa)</label>
+                  <GrupniKlijentiPicker
+                    clients={clients}
+                    selectedIds={bulkGroupClientIds}
+                    onSelectionChange={setBulkGroupClientIds}
+                    inputId="admin-bulk-grupni-klijenti-search"
+                  />
+                </div>
+              ) : (
+                <div className="min-w-[220px]">
+                  <label className="block text-xs font-medium text-stone-700 mb-1">Dete</label>
+                  <SingleKlijentPicker
+                    clients={clients}
+                    value={bulkClientId}
+                    onChange={setBulkClientId}
+                    inputId="admin-bulk-klijent-search"
+                  />
+                </div>
+              )}
+              {bulkGroupMode && (
+                <div className="min-w-[200px]">
+                  <label className="block text-xs font-medium text-stone-700 mb-1">Kategorija termina</label>
+                  <select
+                    value={bulkTermCategoryId}
+                    onChange={(e) => setBulkTermCategoryId(e.target.value)}
+                    className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm text-stone-800 bg-white"
+                  >
+                    {grupneKategorije.length === 0 && <option value="">— nema grupnih kategorija —</option>}
+                    {grupneKategorije.map((c) => (
+                      <option key={c.id} value={c.id}>{c.naziv}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              <div className="min-w-[200px]">
+                <label className="block text-xs font-medium text-stone-700 mb-1">Vrsta časa</label>
                 <select
-                  value={bulkClassroomChoice}
-                  onChange={(e) => setBulkClassroomChoice(e.target.value)}
+                  value={bulkTermTypeId}
+                  onChange={(e) => setBulkTermTypeId(e.target.value)}
                   className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm text-stone-800 bg-white"
                 >
-                  <option value="">bez učionice</option>
-                  {classroomsList.map((c) => (
-                    <option key={c.id} value={c.id}>{c.naziv}</option>
+                  <option value="">— (nije obavezno) —</option>
+                  {termTypes.map((tt) => (
+                    <option key={tt.id} value={tt.id}>{tt.naziv}</option>
                   ))}
                 </select>
               </div>
-            )}
-            <button
-              type="button"
-              onClick={confirmBulk}
-              disabled={!bulkClientId || bulkSlots.size === 0}
-              className="px-3 py-1.5 rounded-lg text-sm font-medium bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              Potvrdi ({bulkSlots.size})
-            </button>
+              <div className="min-w-[180px]">
+                <label className="block text-xs font-medium text-stone-700 mb-1">Instruktor</label>
+                <select
+                  value={bulkInstructorChoice}
+                  onChange={(e) => setBulkInstructorChoice(e.target.value)}
+                  className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm text-stone-800 bg-white"
+                >
+                  {!bulkGroupMode && <option value="">bez instruktora (zahtev)</option>}
+                  {bulkGroupMode && !bulkInstructorChoice && <option value="">— izaberite instruktora —</option>}
+                  {instructorsList.map((i) => (
+                    <option key={i.id} value={i.id}>{i.ime} {i.prezime}</option>
+                  ))}
+                </select>
+              </div>
+              {bulkInstructorChoice && (
+                <div className="min-w-[160px]">
+                  <label className="block text-xs font-medium text-stone-700 mb-1">Učionica</label>
+                  <select
+                    value={bulkClassroomChoice}
+                    onChange={(e) => setBulkClassroomChoice(e.target.value)}
+                    className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm text-stone-800 bg-white"
+                  >
+                    <option value="">bez učionice</option>
+                    {classroomsList.map((c) => (
+                      <option key={c.id} value={c.id}>{c.naziv}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={confirmBulk}
+                disabled={
+                  bulkGroupMode
+                    ? bulkGroupClientIds.length === 0 || !bulkInstructorChoice || !bulkTermCategoryId || bulkSlots.size === 0
+                    : !bulkClientId || bulkSlots.size === 0
+                }
+                className="px-3 py-1.5 rounded-lg text-sm font-medium bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Potvrdi ({bulkSlots.size})
+              </button>
+            </div>
             <span className="text-stone-400 text-xs max-w-md">
-              Izaberite dete, pa kliknite termine na kalendaru (bilo prazne ili zauzete). Bez instruktora – pravi se zahtev koji bilo koji predavač preuzima na svom Dashboard → Zahtevi. Sa izabranim instruktorom (i opciono učionicom) – odmah se zakazuju pravi termini, isti instruktor/učionica/vrsta časa za sve izabrane slotove.
+              {bulkGroupMode
+                ? 'Izaberite grupu dece, kategoriju termina (grupna), instruktora i kliknite termine na kalendaru – ista grupa/instruktor/učionica/vrsta časa za sve izabrane slotove.'
+                : 'Izaberite dete, pa kliknite termine na kalendaru (bilo prazne ili zauzete). Bez instruktora – pravi se zahtev koji bilo koji predavač preuzima na svom Dashboard → Zahtevi. Sa izabranim instruktorom (i opciono učionicom) – odmah se zakazuju pravi termini, isti instruktor/učionica/vrsta časa za sve izabrane slotove.'}
             </span>
           </div>
         )}
@@ -1175,6 +1330,7 @@ export default function AdminCalendarView({
             })}
           </div>
         )}
+      </div>
       </div>
       {body}
     </SwapContext.Provider>
@@ -1436,24 +1592,30 @@ function AdminCellContent({
             </span>
             {isTesting ? (
               <div className="mt-1 border-t border-stone-200/80 pt-1">
-                <span className="block text-[11px] font-bold uppercase tracking-wide mb-1" style={{ color: instructorColor }}>
+                <span className="block text-[11px] font-bold uppercase tracking-wide mb-1 text-red-600">
                   Testiranje
                 </span>
                 {potentialClients.length === 0 ? (
                   <span className="text-xs text-stone-400">Nema prijavljenih</span>
                 ) : (
                   <ul className="space-y-1 pl-0 list-none">
-                    {potentialClients.map((pc) => (
-                      <li key={pc.id} className="text-[12px] leading-snug text-stone-900">
-                        <span className="font-semibold">{pc.ime}{pc.prezime ? ` ${pc.prezime}` : ''}</span>
-                        {pc.ime_roditelja && (
-                          <span className="block text-stone-500">rod: {pc.ime_roditelja}</span>
-                        )}
-                        {pc.mobilni_roditelja && (
-                          <span className="block text-stone-500">{pc.mobilni_roditelja}</span>
-                        )}
-                      </li>
-                    ))}
+                    <TruncatedNameList
+                      itemClassName="text-[12px] leading-snug text-stone-900"
+                      items={sortByFullName(potentialClients, (pc) => `${pc.ime ?? ''} ${pc.prezime ?? ''}`.trim()).map((pc) => ({
+                        key: pc.id,
+                        content: (
+                          <>
+                            <span className="font-semibold">{pc.ime}{pc.prezime ? ` ${pc.prezime}` : ''}</span>
+                            {pc.ime_roditelja && (
+                              <span className="block text-stone-500">rod: {pc.ime_roditelja}</span>
+                            )}
+                            {pc.mobilni_roditelja && (
+                              <span className="block text-stone-500">{pc.mobilni_roditelja}</span>
+                            )}
+                          </>
+                        ),
+                      }))}
+                    />
                   </ul>
                 )}
               </div>
@@ -1466,11 +1628,13 @@ function AdminCellContent({
                 })()}
                 {predavanja.length > 0 && (
                   <ul className="mt-1.5 space-y-1 pl-0 list-none border-t border-stone-200/80 pt-1.5">
-                    {predavanja.map((p) => (
-                      <li key={p.id} className="text-[13px] sm:text-sm leading-snug font-semibold text-stone-900 break-words antialiased">
-                        {p.client ? `${p.client.ime ?? ''} ${p.client.prezime ?? ''}`.trim() || '—' : '—'}
-                      </li>
-                    ))}
+                    <TruncatedNameList
+                      itemClassName="text-[13px] sm:text-sm leading-snug font-semibold text-stone-900 break-words antialiased"
+                      items={sortByFullName(predavanja, (p) => (p.client ? `${p.client.ime ?? ''} ${p.client.prezime ?? ''}`.trim() : '')).map((p) => ({
+                        key: p.id,
+                        content: p.client ? `${p.client.ime ?? ''} ${p.client.prezime ?? ''}`.trim() || '—' : '—',
+                      }))}
+                    />
                   </ul>
                 )}
                 {predavanja.length === 0 && (

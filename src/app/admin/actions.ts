@@ -3,7 +3,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import type { TermCategoryRow } from '@/lib/term-categories';
-import { SEEDED_TERM_CATEGORY_INDIVIDUAL_ID } from '@/lib/term-categories';
+import { SEEDED_TERM_CATEGORY_INDIVIDUAL_ID, SEEDED_TERM_CATEGORY_GRUPNI_ID } from '@/lib/term-categories';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { INSTRUCTOR_COLORS, isTermInPast, slotsNeeded, AUTO_SPILLOVER_NAPOMENA } from '@/lib/constants';
@@ -290,15 +290,19 @@ export async function createBulkZahteviAsAdmin(
  * dodaje radionicu za dete – isti instruktor/učionica/vrsta časa za sve slotove odjednom.
  */
 export async function createBulkTermsAsAdmin(
-  clientId: string,
+  clientIds: string[],
   instructorId: string,
   classroomId: string | null,
   termTypeId: string | null,
-  slots: { date: string; slotIndex: number }[]
+  slots: { date: string; slotIndex: number }[],
+  /** Kategorija termina za NOVE termine – grupna kategorija ako ima više od jednog deteta, inače individualna. */
+  termCategoryId: string | null = null
 ): Promise<{ failed: { date: string; slotIndex: number; error: string }[] }> {
   const { admin, error: authErr } = await requireAdmin();
   if (authErr || !admin) return { failed: slots.map((s) => ({ ...s, error: authErr ?? 'Niste ovlašćeni.' })) };
-  if (slots.length === 0) return { failed: [] };
+  if (slots.length === 0 || clientIds.length === 0) return { failed: [] };
+  const effectiveCategoryId =
+    termCategoryId || (clientIds.length > 1 ? SEEDED_TERM_CATEGORY_GRUPNI_ID : SEEDED_TERM_CATEGORY_INDIVIDUAL_ID);
 
   const results = await Promise.all(
     slots.map(async (s) => {
@@ -347,7 +351,7 @@ export async function createBulkTermsAsAdmin(
             date: dateStr,
             slot_index: slot,
             classroom_id: classroomId,
-            term_category_id: SEEDED_TERM_CATEGORY_INDIVIDUAL_ID,
+            term_category_id: effectiveCategoryId,
           })
           .select('id')
           .single();
@@ -355,8 +359,12 @@ export async function createBulkTermsAsAdmin(
         termId = inserted.id;
       }
 
-      const predRes = await createPredavanjeAsAdmin(termId, clientId, false, false, null, termTypeId);
-      if (predRes.error) return { ...s, error: predRes.error };
+      const clientErrors: string[] = [];
+      for (const clientId of clientIds) {
+        const predRes = await createPredavanjeAsAdmin(termId, clientId, false, false, null, termTypeId);
+        if (predRes.error) clientErrors.push(predRes.error);
+      }
+      if (clientErrors.length > 0) return { ...s, error: [...new Set(clientErrors)].join(' ') };
       return { ...s, error: null as string | null };
     })
   );
@@ -601,6 +609,8 @@ export async function assignTermTypeToTermsAsAdmin(
 
   const { error } = await admin.from('predavanja').update({ term_type_id: termTypeId }).in('term_id', termIds);
   if (error) return { failed: termIds.map((termId) => ({ termId, error: error.message })) };
+  // Nova vrsta časa može imati drugo trajanje – uskladi "blokirajuće" slotove dužeg časa za svaki termin.
+  await Promise.all(termIds.map((termId) => syncSpilloverForTerm(admin, termId)));
   revalidatePath('/admin/kalendar');
   return { failed: [] };
 }

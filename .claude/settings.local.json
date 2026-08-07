@@ -13,7 +13,12 @@
       "Bash(mkdir -p \"/c/Users/korisnik/AppData/Local/Temp/claude/c--Users-korisnik-Desktop-Dina-kalendar/d03b738d-6db7-48f0-92bd-d421434eddcf/scratchpad\")",
       "Bash(git add *)",
       "Bash(git commit -m ' *)",
-      "Bash(git push *)"
+      "Bash(git push *)",
+      "PowerShell(npx tsc --noEmit -p tsconfig.json 2>&1)",
+      "PowerShell(Get-Command node -ErrorAction SilentlyContinue)",
+      "PowerShell(Get-Command npm -ErrorAction SilentlyContinue)",
+      "PowerShell(node -v)",
+      "PowerShell(npm -v)"
     ],
     "additionalDirectories": [
       "C:\\Users\\korisnik\\AppData\\Local\\Temp\\claude\\c--Users-korisnik-Desktop-Dina-kalendar\\d03b738d-6db7-48f0-92bd-d421434eddcf\\scratchpad"

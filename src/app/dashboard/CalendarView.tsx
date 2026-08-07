@@ -89,6 +89,62 @@ function otherTermsByKey(terms: OtherTerm[], date: string, slot: number): OtherT
   return sortByClassroom(terms.filter((t) => t.date === date && t.slot_index === slot));
 }
 
+/** Abecedno sortira po imenu+prezimenu ("sr-Latn-RS") – koristi se svuda gde se prikazuje raspored dece. */
+function sortByFullName<T>(items: T[], getName: (item: T) => string): T[] {
+  return [...items].sort((a, b) => getName(a).localeCompare(getName(b), 'sr-Latn-RS'));
+}
+
+/** Abecedno sortirana lista imena u termin-kartici – ako ima više od `threshold` polaznika, prikazuje
+ * se samo prvih `threshold` + dugme "+ N ostalih" (klik proširuje, bez napuštanja kartice). */
+function TruncatedNameList<T>({
+  items,
+  keyFn,
+  renderItem,
+  threshold = 3,
+}: {
+  items: T[];
+  keyFn: (item: T) => string;
+  renderItem: (item: T) => React.ReactNode;
+  threshold?: number;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const visible = expanded ? items : items.slice(0, threshold);
+  const restCount = items.length - visible.length;
+  return (
+    <>
+      {visible.map((it) => (
+        <div key={keyFn(it)}>{renderItem(it)}</div>
+      ))}
+      {restCount > 0 && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setExpanded(true);
+          }}
+          className="block text-[11px] font-medium text-stone-500 underline decoration-dotted hover:text-stone-800"
+        >
+          + {restCount} ostalih
+        </button>
+      )}
+      {expanded && items.length > threshold && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setExpanded(false);
+          }}
+          className="block text-[11px] font-medium text-stone-500 underline decoration-dotted hover:text-stone-800"
+        >
+          Prikaži manje
+        </button>
+      )}
+    </>
+  );
+}
+
 function hexWithAlpha(hex: string, alpha: number) {
   const n = Math.round(alpha * 255).toString(16).padStart(2, '0');
   return `${hex}${n}`;
@@ -318,26 +374,30 @@ function CellContent({
           )}
           {isTesting ? (
             <div>
-              <span className="text-xs block mb-1 font-bold uppercase tracking-wide" style={{ color: textColor }}>
+              <span className="text-xs block mb-1 font-bold uppercase tracking-wide text-red-600">
                 Testiranje
               </span>
               {potentialClients.length === 0 ? (
                 <span className="text-xs text-stone-400">Nema prijavljenih</span>
               ) : (
                 <div className="space-y-1">
-                  {potentialClients.map((pc) => (
-                    <div key={pc.id} className="rounded-md bg-white/40 px-1 py-0.5">
-                      <span className="block text-[13px] font-semibold leading-snug text-stone-900" style={{ borderLeft: `3px solid ${textColor}`, paddingLeft: '6px' }}>
-                        {pc.ime}{pc.prezime ? ` ${pc.prezime}` : ''}
-                      </span>
-                      {pc.ime_roditelja && (
-                        <span className="block text-xs text-stone-500 pl-2">rod: {pc.ime_roditelja}</span>
-                      )}
-                      {pc.mobilni_roditelja && (
-                        <span className="block text-xs text-stone-500 pl-2">{pc.mobilni_roditelja}</span>
-                      )}
-                    </div>
-                  ))}
+                  <TruncatedNameList
+                    items={sortByFullName(potentialClients, (pc) => `${pc.ime ?? ''} ${pc.prezime ?? ''}`.trim())}
+                    keyFn={(pc) => pc.id}
+                    renderItem={(pc) => (
+                      <div className="rounded-md bg-white/40 px-1 py-0.5">
+                        <span className="block text-[13px] font-semibold leading-snug text-stone-900" style={{ borderLeft: `3px solid ${textColor}`, paddingLeft: '6px' }}>
+                          {pc.ime}{pc.prezime ? ` ${pc.prezime}` : ''}
+                        </span>
+                        {pc.ime_roditelja && (
+                          <span className="block text-xs text-stone-500 pl-2">rod: {pc.ime_roditelja}</span>
+                        )}
+                        {pc.mobilni_roditelja && (
+                          <span className="block text-xs text-stone-500 pl-2">{pc.mobilni_roditelja}</span>
+                        )}
+                      </div>
+                    )}
+                  />
                 </div>
               )}
             </div>
@@ -352,20 +412,24 @@ function CellContent({
                 <span className="text-sm" style={{ color: textColor }}>+ Dodaj radionicu</span>
               ) : (
                 <div className="space-y-1.5">
-                  {(term.predavanja ?? []).map((p) => (
-                    <div key={p.id} className="rounded-md bg-white/40 px-1 py-0.5">
-                      <span
-                        className="block text-[13px] sm:text-sm font-semibold leading-snug text-stone-900 break-words antialiased"
-                        style={{ borderLeft: `3px solid ${textColor}`, paddingLeft: '6px' }}
-                      >
-                        {p.client ? `${p.client.ime} ${p.client.prezime}`.trim() || '—' : '—'}
-                      </span>
-                      <div className="flex gap-1 mt-0.5 flex-wrap pl-2">
-                        {p.odrzano && <span className="text-xs bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded font-medium">Održano</span>}
-                        {p.placeno && <span className="text-xs bg-sky-100 text-sky-800 px-1.5 py-0.5 rounded font-medium">Plaćeno</span>}
+                  <TruncatedNameList
+                    items={sortByFullName(term.predavanja ?? [], (p) => (p.client ? `${p.client.ime} ${p.client.prezime}`.trim() : ''))}
+                    keyFn={(p) => p.id}
+                    renderItem={(p) => (
+                      <div className="rounded-md bg-white/40 px-1 py-0.5">
+                        <span
+                          className="block text-[13px] sm:text-sm font-semibold leading-snug text-stone-900 break-words antialiased"
+                          style={{ borderLeft: `3px solid ${textColor}`, paddingLeft: '6px' }}
+                        >
+                          {p.client ? `${p.client.ime} ${p.client.prezime}`.trim() || '—' : '—'}
+                        </span>
+                        <div className="flex gap-1 mt-0.5 flex-wrap pl-2">
+                          {p.odrzano && <span className="text-xs bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded font-medium">Održano</span>}
+                          {p.placeno && <span className="text-xs bg-sky-100 text-sky-800 px-1.5 py-0.5 rounded font-medium">Plaćeno</span>}
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    )}
+                  />
                 </div>
               )}
             </>

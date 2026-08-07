@@ -137,7 +137,7 @@ export default function AdminNoviKlijentForm({
           <label className="block text-sm font-medium text-stone-700 mb-1">Godište</label>
           <input
             type="number"
-            min="1990"
+            min="1920"
             max="2030"
             value={godiste}
             onChange={(e) => setGodiste(e.target.value)}

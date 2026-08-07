@@ -13,6 +13,7 @@ import {
   reassignPredavanjeInstructorAsAdmin,
 } from '@/app/admin/actions';
 import SingleKlijentPicker from '@/components/SingleKlijentPicker';
+import GrupniKlijentiPicker from '@/components/GrupniKlijentiPicker';
 import type { TermCategoryRow } from '@/lib/term-categories';
 import { findDefaultCitanjeTermTypeId } from '@/lib/term-types';
 
@@ -107,8 +108,18 @@ export default function AdminPredavanjeForm({
     return termCategories[0]?.id ?? '';
   });
   const [termNapomena, setTermNapomena] = useState(initialTermNapomena ?? '');
+  const [groupClientIds, setGroupClientIds] = useState<string[]>([]);
 
   const isNew = !predavanje;
+  // Kad kategorija dozvoljava grupu (nije "jedno dete") i dodaje se NOVA radionica (ne izmena
+  // postojeće), forma dozvoljava biranje više dece odjednom umesto jedno po jedno.
+  const selectedTermCategory = termCategories.find((c) => c.id === termCategoryId);
+  const allowsMultipleClients =
+    isNew &&
+    !!selectedTermCategory &&
+    !selectedTermCategory.jedan_klijent_po_terminu &&
+    !selectedTermCategory.is_testing &&
+    !selectedTermCategory.is_nastavak;
   const atLimit = isNew && currentCount >= maxCasova;
   const backHref = `/admin/termin/${termId}`;
   const kalendarHref = `/admin/kalendar?week=${getMonday(new Date(termDate + 'T12:00:00'))}`;
@@ -171,6 +182,15 @@ export default function AdminPredavanjeForm({
         );
         if (result.error) throw new Error(result.error);
         toast.success('Radionica sačuvana.');
+      } else if (allowsMultipleClients) {
+        if (groupClientIds.length === 0) throw new Error('Označite bar jedno dete.');
+        const errors: string[] = [];
+        for (const cid of groupClientIds) {
+          const result = await createPredavanjeAsAdmin(termId, cid, odrzano, placeno, komentar.trim() || null, termTypeId || null);
+          if (result.error) errors.push(result.error);
+        }
+        if (errors.length > 0) throw new Error([...new Set(errors)].join(' '));
+        toast.success(`Dodato ${groupClientIds.length} radionica.`);
       } else {
         if (!clientId) throw new Error('Izaberite klijenta.');
         const result = await createPredavanjeAsAdmin(
@@ -322,27 +342,44 @@ export default function AdminPredavanjeForm({
       )}
 
       {/* Klijent */}
-      <div>
-        <label className="block text-sm font-medium text-stone-700 mb-1">Klijent</label>
-        <SingleKlijentPicker
-          clients={clients}
-          value={clientId}
-          onChange={setClientId}
-          disabled={loading}
-          inputId="admin-predavanje-klijent-search"
-          completedIds={completedIds}
-        />
-        {clientId && selectedStanje.length > 0 && (
-          <div className="mt-2 rounded-lg bg-stone-50 border border-stone-200 px-3 py-2 text-sm">
-            <span className="font-medium text-stone-600">Ostalo časova kod ovog instruktora: </span>
-            {selectedStanje.map((s) => (
-              <span key={s.term_type_id ?? 'bez'} className="mr-2">
-                {s.term_type_naziv} <strong>{s.ostalo}</strong>
-              </span>
-            ))}
-          </div>
-        )}
-      </div>
+      {allowsMultipleClients ? (
+        <div>
+          <label className="block text-sm font-medium text-stone-700 mb-1">Deca (grupa)</label>
+          <p className="text-xs text-stone-500 mb-2">
+            Kategorija „{selectedTermCategory?.naziv}" dozvoljava grupu – označite jedno ili više dece, dodaju se odjednom.
+          </p>
+          <GrupniKlijentiPicker
+            clients={clients}
+            selectedIds={groupClientIds}
+            onSelectionChange={setGroupClientIds}
+            disabled={loading}
+            inputId="admin-predavanje-grupni-klijenti-search"
+            completedIds={completedIds}
+          />
+        </div>
+      ) : (
+        <div>
+          <label className="block text-sm font-medium text-stone-700 mb-1">Klijent</label>
+          <SingleKlijentPicker
+            clients={clients}
+            value={clientId}
+            onChange={setClientId}
+            disabled={loading}
+            inputId="admin-predavanje-klijent-search"
+            completedIds={completedIds}
+          />
+          {clientId && selectedStanje.length > 0 && (
+            <div className="mt-2 rounded-lg bg-stone-50 border border-stone-200 px-3 py-2 text-sm">
+              <span className="font-medium text-stone-600">Ostalo časova kod ovog instruktora: </span>
+              {selectedStanje.map((s) => (
+                <span key={s.term_type_id ?? 'bez'} className="mr-2">
+                  {s.term_type_naziv} <strong>{s.ostalo}</strong>
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Učionica */}
       {classrooms.length > 0 && (

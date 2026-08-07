@@ -41,14 +41,19 @@ export default function GrupniKlijentiPicker({
   const [search, setSearch] = useState('');
   const [showCompleted, setShowCompleted] = useState(false);
 
+  const sortedClients = useMemo(
+    () => [...clients].sort((a, b) => fullName(a).localeCompare(fullName(b), 'sr-Latn-RS')),
+    [clients]
+  );
+
   const searchMatched = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return clients;
-    return clients.filter((c) => {
+    if (!q) return sortedClients;
+    return sortedClients.filter((c) => {
       const full = `${c.ime ?? ''} ${c.prezime ?? ''}`.toLowerCase();
       return full.includes(q);
     });
-  }, [clients, search]);
+  }, [sortedClients, search]);
 
   const hiddenCompletedCount = useMemo(() => {
     if (!completedIds || completedIds.size === 0) return 0;
@@ -81,7 +86,10 @@ export default function GrupniKlijentiPicker({
   };
 
   const selectedClients = useMemo(
-    () => selectedIds.map((id) => clients.find((c) => c.id === id)).filter(Boolean) as GrupniKlijentOption[],
+    () =>
+      (selectedIds.map((id) => clients.find((c) => c.id === id)).filter(Boolean) as GrupniKlijentOption[]).sort((a, b) =>
+        fullName(a).localeCompare(fullName(b), 'sr-Latn-RS')
+      ),
     [clients, selectedIds]
   );
 

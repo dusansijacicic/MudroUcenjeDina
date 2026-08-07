@@ -5,8 +5,8 @@ import Link from 'next/link';
 import AdminCalendarView, { type AdminTerm, type OtkazaniTerminCalendar } from './AdminCalendarView';
 import AdminCalendarFilters from './AdminCalendarFilters';
 import AdminFromDashboardToast from '@/components/AdminFromDashboardToast';
-import { getMaxTerminaPoSlotu } from '@/lib/settings';
-import { getTermTypes } from '@/app/admin/actions';
+import { getMaxTerminaPoSlotu, getKalendarStickyMode } from '@/lib/settings';
+import { getTermTypes, getTermCategories } from '@/app/admin/actions';
 
 export default async function AdminKalendarPage({
   searchParams,
@@ -71,6 +71,8 @@ export default async function AdminKalendarPage({
     { data: zahteviRaw },
     maxTerminaPoSlotu,
     termTypes,
+    termCategories,
+    stickyMode,
     { data: allPendingZahteviRaw },
   ] = await Promise.all([
     adminSupabase
@@ -92,6 +94,8 @@ export default async function AdminKalendarPage({
       .lte('requested_date', dateTo),
     getMaxTerminaPoSlotu(),
     getTermTypes(),
+    getTermCategories(),
+    getKalendarStickyMode(),
     // Globalno (bez obzira na trenutno prikazanu nedelju/dan) – da admin ne propusti zahtev van
     // trenutnog prikaza. Samo datumi, radi lakog dugmeta "skoči na tu nedelju". U ISTOM Promise.all-u
     // (ne odvojen await posle) da ne doda dodatan sekvencijalni round-trip.
@@ -156,9 +160,11 @@ export default async function AdminKalendarPage({
     color: i.color ?? '#0d9488',
   }));
 
-  return (
-    <div>
-      <AdminFromDashboardToast from={params.from} />
+  // Zaglavlje (naslov, filteri, legenda, napomena) – prosleđuje se u AdminCalendarView da bi na velikim
+  // ekranima moglo da bude "zamrznuto" (sticky) ZAJEDNO sa njegovom traka alata (Swap/Copy/Delete/…),
+  // umesto da svaki blok ima svoj nezavisan (i nepouzdan) sticky offset.
+  const headerContent = (
+    <>
       <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
         <h1 className="text-xl font-semibold text-stone-800">Kalendar (svi instruktori)</h1>
         <div className="flex items-center gap-2 flex-wrap">
@@ -203,7 +209,15 @@ export default async function AdminKalendarPage({
         U jednom slotu (npr. 9:00) može biti do <strong>{maxTerminaPoSlotu}</strong> paralelnih termina — svaki svoj predavač i svoja učionica.
         Svaki od njih može biti <strong>individualni</strong> (jedno dete) ili <strong>grupni</strong> (više dece). Ispod postojećih termina u ćeliji: „Dodaj još termin u ovom slotu“.
       </p>
+    </>
+  );
+
+  return (
+    <div>
+      <AdminFromDashboardToast from={params.from} />
       <AdminCalendarView
+        headerContent={headerContent}
+        stickyMode={stickyMode}
         terms={terms}
         otkazaniTermini={(otkazaniRaw ?? []) as OtkazaniTerminCalendar[]}
         view={view}
@@ -219,6 +233,7 @@ export default async function AdminKalendarPage({
           datumTestiranja: (c as { datum_testiranja?: string | null }).datum_testiranja ?? null,
         }))}
         termTypes={termTypes}
+        termCategories={termCategories}
         instructorsList={(instructorsList ?? []).map((i) => ({ id: i.id, ime: i.ime ?? '', prezime: i.prezime ?? '' }))}
         classroomsList={(classroomsList ?? []).map((c) => ({ id: c.id, naziv: c.naziv ?? '' }))}
         pendingZahtevi={pendingZahtevi}
