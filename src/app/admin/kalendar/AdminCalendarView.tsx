@@ -22,6 +22,7 @@ import {
 } from '@/app/admin/actions';
 import SingleKlijentPicker from '@/components/SingleKlijentPicker';
 import GrupniKlijentiPicker from '@/components/GrupniKlijentiPicker';
+import StickyBar from '@/components/StickyBar';
 
 const DAY_NAMES = ['Pon', 'Uto', 'Sre', 'Čet', 'Pet', 'Sub', 'Ned'];
 
@@ -876,7 +877,7 @@ export default function AdminCalendarView({
         highlightPendingZahtevi,
       }}
     >
-      <div className={stickyMode === 'all' ? 'lg:sticky lg:top-16 z-30 bg-stone-50 lg:pb-2' : ''}>
+      <StickyBar enabled={stickyMode === 'all'} topOffset={64} className="bg-stone-50 lg:pb-2">
       {headerContent}
       {allPendingZahteviDates.length > 0 && (
         <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-amber-400 bg-amber-50 px-4 py-2.5 text-sm text-amber-900 animate-pulse">
@@ -902,11 +903,7 @@ export default function AdminCalendarView({
           </span>
         </div>
       )}
-      <div
-        className={`mb-4 rounded-xl border border-stone-200 bg-white p-3${
-          stickyMode !== 'all' ? ' lg:sticky lg:top-16 z-30' : ''
-        }`}
-      >
+      <StickyBar enabled={stickyMode !== 'all'} topOffset={64} className="mb-4 rounded-xl border border-stone-200 bg-white p-3">
         <div className="flex items-center gap-3 flex-wrap">
           <button
             type="button"
@@ -1330,8 +1327,8 @@ export default function AdminCalendarView({
             })}
           </div>
         )}
-      </div>
-      </div>
+      </StickyBar>
+      </StickyBar>
       {body}
     </SwapContext.Provider>
   );
