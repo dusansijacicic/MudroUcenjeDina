@@ -31,19 +31,6 @@ export async function getMaxTerminaPoSlotu(): Promise<number> {
   return Number.isFinite(n) && n >= 1 ? n : DEFAULT_MAX_TERMINA_PO_SLOTU;
 }
 
-/** Šta ostaje "zamrznuto" (sticky) na vrhu kalendara na velikim ekranima dok se skroluje kroz slotove:
- * "toolbar" (podrazumevano) = samo traka alata (Swap/Copy/Delete/…); "all" = traka alata i sve iznad
- * nje (naslov, filteri, legenda, napomena). Superadmin menja u /admin/podesavanja. */
-export async function getKalendarStickyMode(): Promise<'toolbar' | 'all'> {
-  const supabase = await createClient();
-  const { data } = await supabase
-    .from('app_settings')
-    .select('value')
-    .eq('key', 'kalendar_sticky_mode')
-    .single();
-  return data?.value === 'all' ? 'all' : 'toolbar';
-}
-
 /** true = u terminu najviše jedno dete (individualni); false = grupni do max_casova. */
 export async function jedanDeteMaksimalnoPoTerminu(
   // Server i admin klijent – isti .from() API

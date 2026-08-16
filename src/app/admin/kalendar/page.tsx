@@ -5,7 +5,7 @@ import Link from 'next/link';
 import AdminCalendarView, { type AdminTerm, type OtkazaniTerminCalendar } from './AdminCalendarView';
 import AdminCalendarFilters from './AdminCalendarFilters';
 import AdminFromDashboardToast from '@/components/AdminFromDashboardToast';
-import { getMaxTerminaPoSlotu, getKalendarStickyMode } from '@/lib/settings';
+import { getMaxTerminaPoSlotu } from '@/lib/settings';
 import { getTermTypes, getTermCategories } from '@/app/admin/actions';
 
 export default async function AdminKalendarPage({
@@ -72,7 +72,6 @@ export default async function AdminKalendarPage({
     maxTerminaPoSlotu,
     termTypes,
     termCategories,
-    stickyMode,
     { data: allPendingZahteviRaw },
   ] = await Promise.all([
     adminSupabase
@@ -95,7 +94,6 @@ export default async function AdminKalendarPage({
     getMaxTerminaPoSlotu(),
     getTermTypes(),
     getTermCategories(),
-    getKalendarStickyMode(),
     // Globalno (bez obzira na trenutno prikazanu nedelju/dan) – da admin ne propusti zahtev van
     // trenutnog prikaza. Samo datumi, radi lakog dugmeta "skoči na tu nedelju". U ISTOM Promise.all-u
     // (ne odvojen await posle) da ne doda dodatan sekvencijalni round-trip.
@@ -217,7 +215,6 @@ export default async function AdminKalendarPage({
       <AdminFromDashboardToast from={params.from} />
       <AdminCalendarView
         headerContent={headerContent}
-        stickyMode={stickyMode}
         terms={terms}
         otkazaniTermini={(otkazaniRaw ?? []) as OtkazaniTerminCalendar[]}
         view={view}

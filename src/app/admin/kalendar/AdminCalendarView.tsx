@@ -309,7 +309,6 @@ const DEFAULT_MAX_TERMINA_PO_SLOTU = 4;
 
 export default function AdminCalendarView({
   headerContent,
-  stickyMode = 'toolbar',
   terms: termsProp,
   otkazaniTermini: otkazaniTerminiProp = [],
   startOfWeek,
@@ -325,13 +324,8 @@ export default function AdminCalendarView({
   pendingZahtevi: pendingZahteviProp = [],
   allPendingZahteviDates = [],
 }: {
-  /** Naslov/filteri/legenda iznad kalendara (server-renderovani deo iz page.tsx) – prikazuje se unutar
-   * istog sticky omotača kao traka alata (Swap/Copy/Delete/…), da bi na velikim ekranima sve zajedno
-   * bilo "zamrznuto" pri skrolovanju kroz kalendar. */
+  /** Naslov/filteri/legenda iznad kalendara (server-renderovani deo iz page.tsx). */
   headerContent?: React.ReactNode;
-  /** "toolbar" (podrazumevano) = samo traka alata je sticky; "all" = zaglavlje (headerContent) i
-   * obaveštenje o zahtevima idu u isti sticky omotač kao traka alata. Iz Admin → Podešavanja. */
-  stickyMode?: 'toolbar' | 'all';
   terms: AdminTerm[];
   otkazaniTermini?: OtkazaniTerminCalendar[];
   startOfWeek: string;
@@ -877,7 +871,6 @@ export default function AdminCalendarView({
         highlightPendingZahtevi,
       }}
     >
-      <StickyBar enabled={stickyMode === 'all'} topOffset={0} className="bg-stone-50 lg:pb-2">
       {headerContent}
       {allPendingZahteviDates.length > 0 && (
         <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-amber-400 bg-amber-50 px-4 py-2.5 text-sm text-amber-900 animate-pulse">
@@ -903,7 +896,7 @@ export default function AdminCalendarView({
           </span>
         </div>
       )}
-      <StickyBar enabled={stickyMode !== 'all'} topOffset={0} className="mb-4 rounded-xl border border-stone-200 bg-white p-3">
+      <StickyBar enabled topOffset={0} className="mb-4 rounded-xl border border-stone-200 bg-white p-3">
         <div className="flex items-center gap-3 flex-wrap">
           <button
             type="button"
@@ -1328,9 +1321,104 @@ export default function AdminCalendarView({
           </div>
         )}
       </StickyBar>
-      </StickyBar>
       {body}
     </SwapContext.Provider>
+  );
+}
+
+/** Vizuelni sadržaj termin-kartice (instruktor/učionica/predavanja ili testiranje) – bez klika/href-a,
+ * da se može ponovo iskoristiti i unutar "Zakaži više časova" moda (gde je ceo slot jedno dugme za
+ * selekciju, a ne link ka terminu), a ne samo u normalnom prikazu. */
+function TermCardVisual({ term }: { term: AdminTerm }) {
+  if (isAutoSpillover(term)) {
+    const instructorName = term.instructor ? `${term.instructor.ime} ${term.instructor.prezime}` : '—';
+    return (
+      <div
+        className="rounded-lg border-2 border-dashed p-2 text-xs text-stone-500 bg-stone-50"
+        style={{ borderColor: term.classroom?.color ?? '#94a3b8' }}
+      >
+        <span className="font-medium">↳ Nastavak dužeg časa</span>
+        <span className="block text-[11px] mt-0.5">{instructorName} · {term.classroom?.naziv ?? 'Učionica'}</span>
+      </div>
+    );
+  }
+  const instructorColor = term.instructor?.color ?? DEFAULT_COLOR;
+  const classroomColor = term.classroom?.color ?? '#64748b'; // fallback siva
+  const bg = `${classroomColor}20`;
+  const predavanja = term.predavanja ?? [];
+  const instructorName = term.instructor ? `${term.instructor.ime} ${term.instructor.prezime}` : '—';
+  const classroomName = term.classroom?.naziv ?? null;
+  const tcRaw = term.term_category;
+  const isTesting = Array.isArray(tcRaw) ? (tcRaw as { is_testing: boolean }[])[0]?.is_testing === true : tcRaw?.is_testing === true;
+  const potentialClients = term.potential_clients ?? [];
+
+  return (
+    <div className="rounded-lg border-2 p-2 text-sm" style={{ borderColor: classroomColor, backgroundColor: bg, color: instructorColor }}>
+      <span className="font-medium">
+        <span className="lg:hidden">
+          {term.instructor ? shortInstructorLabel(term.instructor.ime, term.instructor.prezime) : '—'}
+        </span>
+        <span className="hidden lg:inline">{instructorName}</span>
+      </span>
+      <span className={`ml-1 text-[0.7rem] uppercase tracking-wide ${classroomName ? 'opacity-80' : 'italic opacity-60'}`}>
+        (
+        <span className="lg:hidden">{classroomName ? shortClassroomLabel(classroomName) : 'bez uč.'}</span>
+        <span className="hidden lg:inline">{classroomName ?? 'bez učionice'}</span>
+        )
+      </span>
+      {isTesting ? (
+        <div className="mt-1 border-t border-stone-200/80 pt-1">
+          <span className="block text-[11px] font-bold uppercase tracking-wide mb-1 text-red-600">
+            Testiranje
+          </span>
+          {potentialClients.length === 0 ? (
+            <span className="text-xs text-stone-400">Nema prijavljenih</span>
+          ) : (
+            <ul className="space-y-1 pl-0 list-none">
+              <TruncatedNameList
+                itemClassName="text-[12px] leading-snug text-stone-900"
+                items={sortByFullName(potentialClients, (pc) => `${pc.ime ?? ''} ${pc.prezime ?? ''}`.trim()).map((pc) => ({
+                  key: pc.id,
+                  content: (
+                    <>
+                      <span className="font-semibold">{pc.ime}{pc.prezime ? ` ${pc.prezime}` : ''}</span>
+                      {pc.ime_roditelja && (
+                        <span className="block text-stone-500">rod: {pc.ime_roditelja}</span>
+                      )}
+                      {pc.mobilni_roditelja && (
+                        <span className="block text-stone-500">{pc.mobilni_roditelja}</span>
+                      )}
+                    </>
+                  ),
+                }))}
+              />
+            </ul>
+          )}
+        </div>
+      ) : (
+        <>
+          {(() => {
+            const tt = predavanja[0]?.term_type;
+            const naziv = Array.isArray(tt) ? tt[0]?.naziv : tt?.naziv;
+            return naziv ? <span className="block text-[11px] font-semibold mt-0.5 opacity-90">{naziv}</span> : null;
+          })()}
+          {predavanja.length > 0 && (
+            <ul className="mt-1.5 space-y-1 pl-0 list-none border-t border-stone-200/80 pt-1.5">
+              <TruncatedNameList
+                itemClassName="text-[13px] sm:text-sm leading-snug font-semibold text-stone-900 break-words antialiased"
+                items={sortByFullName(predavanja, (p) => (p.client ? `${p.client.ime ?? ''} ${p.client.prezime ?? ''}`.trim() : '')).map((p) => ({
+                  key: p.id,
+                  content: p.client ? `${p.client.ime ?? ''} ${p.client.prezime ?? ''}`.trim() || '—' : '—',
+                }))}
+              />
+            </ul>
+          )}
+          {predavanja.length === 0 && (
+            <span className="text-stone-500 text-xs">+ radionica</span>
+          )}
+        </>
+      )}
+    </div>
   );
 }
 
@@ -1364,20 +1452,29 @@ function AdminCellContent({
   if (swap.bulkMode) {
     const bulkSelected = swap.isBulkSelected(emptyDate, emptySlot);
     return (
-      <button
-        type="button"
+      <div
+        role="button"
+        tabIndex={0}
         onClick={() => swap.onToggleBulkSlot(emptyDate, emptySlot)}
-        className={`w-full min-h-[52px] rounded-lg border-2 p-2 text-left text-xs transition-colors ${
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            swap.onToggleBulkSlot(emptyDate, emptySlot);
+          }
+        }}
+        className={`w-full min-h-[52px] rounded-lg border-2 p-2 text-left text-xs transition-colors cursor-pointer space-y-1.5 ${
           bulkSelected
             ? 'border-emerald-600 bg-emerald-50 ring-2 ring-offset-1 ring-emerald-500'
             : 'border-dashed border-stone-200 hover:border-emerald-400 hover:bg-emerald-50/50'
         }`}
       >
-        <span className="block text-stone-500">
-          {slotCount === 0 ? 'prazno' : `${slotCount} termin(a) ovde`}
-        </span>
+        {slotCount === 0 ? (
+          <span className="block text-stone-400">prazno</span>
+        ) : (
+          termsInSlot.map((term) => <TermCardVisual key={term.id} term={term} />)
+        )}
         {bulkSelected && <span className="block font-semibold text-emerald-700 mt-0.5">✓ izabrano</span>}
-      </button>
+      </div>
     );
   }
 
@@ -1516,30 +1613,12 @@ function AdminCellContent({
     >
       {termsInSlot.map((term) => {
         if (isAutoSpillover(term)) {
-          const instructorName = term.instructor ? `${term.instructor.ime} ${term.instructor.prezime}` : '—';
           return (
-            <Link
-              key={term.id}
-              href={`/admin/termin/${term.nastavak_of_term_id}`}
-              className="block rounded-lg border-2 border-dashed p-2 text-xs text-stone-500 bg-stone-50 hover:bg-stone-100"
-              style={{ borderColor: term.classroom?.color ?? '#94a3b8' }}
-            >
-              <span className="font-medium">↳ Nastavak dužeg časa</span>
-              <span className="block text-[11px] mt-0.5">{instructorName} · {term.classroom?.naziv ?? 'Učionica'}</span>
+            <Link key={term.id} href={`/admin/termin/${term.nastavak_of_term_id}`} className="block rounded-lg hover:opacity-90">
+              <TermCardVisual term={term} />
             </Link>
           );
         }
-        const instructorColor = term.instructor?.color ?? DEFAULT_COLOR;
-        const classroomColor = term.classroom?.color ?? '#64748b'; // fallback siva
-        const bg = `${classroomColor}20`;
-        const predavanja = term.predavanja ?? [];
-        const instructorName = term.instructor
-          ? `${term.instructor.ime} ${term.instructor.prezime}`
-          : '—';
-        const classroomName = term.classroom?.naziv ?? null;
-        const tcRaw = term.term_category;
-        const isTesting = Array.isArray(tcRaw) ? (tcRaw as {is_testing: boolean}[])[0]?.is_testing === true : tcRaw?.is_testing === true;
-        const potentialClients = term.potential_clients ?? [];
         const swapSelected = swap.isSelected(term.id);
         const copySelected = swap.copySourceId === term.id;
         const deleteSelected = swap.isMarkedForDelete(term.id);
@@ -1550,12 +1629,11 @@ function AdminCellContent({
           <Link
             key={term.id}
             href={`/admin/termin/${term.id}`}
-            className={`block rounded-lg border-2 p-2 text-sm transition-opacity hover:opacity-90${
+            className={`block rounded-lg transition-opacity hover:opacity-90${
               swapSelected || copySelected ? ' ring-2 ring-offset-1 ring-amber-500' : ''
             }${deleteSelected ? ' ring-2 ring-offset-1 ring-red-600' : ''}${
               assignSelected ? ' ring-2 ring-offset-1 ring-blue-600' : ''
             }`}
-            style={{ borderColor: classroomColor, backgroundColor: bg, color: instructorColor }}
             draggable={!anyModeActive}
             onDragStart={() => !anyModeActive && setDraggedTermId(term.id)}
             onDragEnd={() => setDraggedTermId(null)}
@@ -1575,70 +1653,7 @@ function AdminCellContent({
               }
             }}
           >
-            <span className="font-medium">
-              <span className="lg:hidden">
-                {term.instructor ? shortInstructorLabel(term.instructor.ime, term.instructor.prezime) : '—'}
-              </span>
-              <span className="hidden lg:inline">{instructorName}</span>
-            </span>
-            <span className={`ml-1 text-[0.7rem] uppercase tracking-wide ${classroomName ? 'opacity-80' : 'italic opacity-60'}`}>
-              (
-              <span className="lg:hidden">{classroomName ? shortClassroomLabel(classroomName) : 'bez uč.'}</span>
-              <span className="hidden lg:inline">{classroomName ?? 'bez učionice'}</span>
-              )
-            </span>
-            {isTesting ? (
-              <div className="mt-1 border-t border-stone-200/80 pt-1">
-                <span className="block text-[11px] font-bold uppercase tracking-wide mb-1 text-red-600">
-                  Testiranje
-                </span>
-                {potentialClients.length === 0 ? (
-                  <span className="text-xs text-stone-400">Nema prijavljenih</span>
-                ) : (
-                  <ul className="space-y-1 pl-0 list-none">
-                    <TruncatedNameList
-                      itemClassName="text-[12px] leading-snug text-stone-900"
-                      items={sortByFullName(potentialClients, (pc) => `${pc.ime ?? ''} ${pc.prezime ?? ''}`.trim()).map((pc) => ({
-                        key: pc.id,
-                        content: (
-                          <>
-                            <span className="font-semibold">{pc.ime}{pc.prezime ? ` ${pc.prezime}` : ''}</span>
-                            {pc.ime_roditelja && (
-                              <span className="block text-stone-500">rod: {pc.ime_roditelja}</span>
-                            )}
-                            {pc.mobilni_roditelja && (
-                              <span className="block text-stone-500">{pc.mobilni_roditelja}</span>
-                            )}
-                          </>
-                        ),
-                      }))}
-                    />
-                  </ul>
-                )}
-              </div>
-            ) : (
-              <>
-                {(() => {
-                  const tt = predavanja[0]?.term_type;
-                  const naziv = Array.isArray(tt) ? tt[0]?.naziv : tt?.naziv;
-                  return naziv ? <span className="block text-[11px] font-semibold mt-0.5 opacity-90">{naziv}</span> : null;
-                })()}
-                {predavanja.length > 0 && (
-                  <ul className="mt-1.5 space-y-1 pl-0 list-none border-t border-stone-200/80 pt-1.5">
-                    <TruncatedNameList
-                      itemClassName="text-[13px] sm:text-sm leading-snug font-semibold text-stone-900 break-words antialiased"
-                      items={sortByFullName(predavanja, (p) => (p.client ? `${p.client.ime ?? ''} ${p.client.prezime ?? ''}`.trim() : '')).map((p) => ({
-                        key: p.id,
-                        content: p.client ? `${p.client.ime ?? ''} ${p.client.prezime ?? ''}`.trim() || '—' : '—',
-                      }))}
-                    />
-                  </ul>
-                )}
-                {predavanja.length === 0 && (
-                  <span className="text-stone-500 text-xs">+ radionica</span>
-                )}
-              </>
-            )}
+            <TermCardVisual term={term} />
           </Link>
         );
       })}

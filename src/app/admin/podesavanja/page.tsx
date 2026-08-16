@@ -14,7 +14,6 @@ export default async function AdminPodesavanjaPage() {
   const settings = await getAppSettings();
   const maxCasovaPoTerminu = settings.max_casova_po_terminu ?? '4';
   const maxTerminaPoSlotu = settings.max_termina_po_slotu ?? '4';
-  const kalendarStickyMode = settings.kalendar_sticky_mode === 'all' ? 'all' : 'toolbar';
 
   return (
     <div className="max-w-lg">
@@ -26,7 +25,6 @@ export default async function AdminPodesavanjaPage() {
       <PodesavanjaForm
         maxCasovaPoTerminu={maxCasovaPoTerminu}
         maxTerminaPoSlotu={maxTerminaPoSlotu}
-        kalendarStickyMode={kalendarStickyMode}
       />
 
       <p className="mt-6">
