@@ -245,7 +245,8 @@ export async function repeatTermAsAdmin(
 export async function createBulkZahteviAsAdmin(
   clientId: string,
   termTypeId: string | null,
-  slots: { date: string; slotIndex: number }[]
+  slots: { date: string; slotIndex: number }[],
+  classroomId: string | null = null
 ): Promise<{ failed: { date: string; slotIndex: number; error: string }[] }> {
   const { admin, error: authErr } = await requireAdmin();
   if (authErr || !admin) return { failed: slots.map((s) => ({ ...s, error: authErr ?? 'Niste ovlašćeni.' })) };
@@ -270,6 +271,7 @@ export async function createBulkZahteviAsAdmin(
     toInsert.map((s) => ({
       client_id: clientId,
       instructor_id: null,
+      classroom_id: classroomId,
       requested_date: s.date,
       requested_slot_index: s.slotIndex,
       term_type_id: termTypeId,
