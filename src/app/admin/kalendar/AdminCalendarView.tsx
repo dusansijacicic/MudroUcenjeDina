@@ -113,6 +113,8 @@ type SwapContextValue = {
   isZahtevMarkedForAssign: (zahtevId: string) => boolean;
   onToggleAssignZahtevSelect: (zahtevId: string) => void;
   highlightPendingZahtevi: boolean;
+  /** Sve učionice (za "Zakaži više časova" – da svaki slot pokaže koje su još slobodne u njemu). */
+  classroomsList: { id: string; naziv: string }[];
 };
 const SwapContext = createContext<SwapContextValue>({
   swapMode: false,
@@ -140,6 +142,7 @@ const SwapContext = createContext<SwapContextValue>({
   onToggleAssignSelect: () => {},
   isZahtevMarkedForAssign: () => false,
   onToggleAssignZahtevSelect: () => {},
+  classroomsList: [],
 });
 
 type SwapFields = { termin: boolean; instruktor: boolean; ucionica: boolean; klijent: boolean };
@@ -891,6 +894,7 @@ export default function AdminCalendarView({
         isZahtevMarkedForAssign: (zahtevId: string) => assignZahteviSelection.has(zahtevId),
         onToggleAssignZahtevSelect,
         highlightPendingZahtevi,
+        classroomsList,
       }}
     >
       {headerContent}
@@ -1482,6 +1486,8 @@ function AdminCellContent({
 
   if (swap.bulkMode) {
     const bulkSelected = swap.isBulkSelected(emptyDate, emptySlot);
+    const occupiedClassroomIds = new Set(termsInSlot.map((t) => t.classroom?.id).filter((id): id is string => !!id));
+    const freeClassrooms = swap.classroomsList.filter((c) => !occupiedClassroomIds.has(c.id));
     return (
       <div
         role="button"
@@ -1503,6 +1509,11 @@ function AdminCellContent({
           <span className="block text-stone-400">prazno</span>
         ) : (
           termsInSlot.map((term) => <TermCardVisual key={term.id} term={term} />)
+        )}
+        {swap.classroomsList.length > 0 && (
+          <span className={`block pt-1 mt-1 border-t border-stone-200/70 ${freeClassrooms.length > 0 ? 'text-emerald-700' : 'text-red-600'}`}>
+            {freeClassrooms.length > 0 ? `Slobodno: ${freeClassrooms.map((c) => c.naziv).join(', ')}` : 'Sve učionice zauzete'}
+          </span>
         )}
         {bulkSelected && <span className="block font-semibold text-emerald-700 mt-0.5">✓ izabrano</span>}
       </div>
