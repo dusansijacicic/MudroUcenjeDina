@@ -21,6 +21,9 @@ type Props = {
   inputId?: string;
   /** Id-jevi klijenata koji su "završili" program vezan za trenutno izabranu vrstu časa – podrazumevano sakriveni. */
   completedIds?: Set<string>;
+  /** Max-visina liste rezultata (Tailwind klasa) – podrazumevano max-h-56 (~4-5 redova); prosledi
+   * kraću (npr. "max-h-20") kad picker stoji iznad nečeg drugog (npr. kalendara) kome treba prostor. */
+  listMaxHeightClassName?: string;
 };
 
 function formatDatum(iso: string): string {
@@ -37,6 +40,7 @@ export default function GrupniKlijentiPicker({
   disabled,
   inputId = 'grupni-klijenti-search',
   completedIds,
+  listMaxHeightClassName = 'max-h-56',
 }: Props) {
   const [search, setSearch] = useState('');
   const [showCompleted, setShowCompleted] = useState(false);
@@ -145,7 +149,7 @@ export default function GrupniKlijentiPicker({
           )}
         </div>
         <div
-          className="max-h-56 overflow-y-auto overscroll-y-contain"
+          className={`${listMaxHeightClassName} overflow-y-auto overscroll-y-contain`}
           role="listbox"
           aria-label="Lista klijenata za grupni termin"
           aria-multiselectable="true"

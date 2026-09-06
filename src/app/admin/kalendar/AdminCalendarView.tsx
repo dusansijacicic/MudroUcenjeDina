@@ -896,6 +896,8 @@ export default function AdminCalendarView({
           </span>
         </div>
       )}
+      {/* Zamrznuta (sticky) je ISKLJUČIVO ova traka sa dugmićima – ništa što se prikaže nakon
+          izbora moda (polja, potvrde, čipovi) nije ovde, da ne bi zauzelo ekran dok se skroluje. */}
       <StickyBar enabled topOffset={0} className="mb-4 rounded-xl border border-stone-200 bg-white p-3">
         <div className="flex items-center gap-3 flex-wrap">
           <button
@@ -926,21 +928,6 @@ export default function AdminCalendarView({
           >
             {deleteMode ? 'Delete: uključen' : 'Delete'}
           </button>
-          {deleteMode && (
-            <>
-              <button
-                type="button"
-                onClick={confirmDelete}
-                disabled={deleteSelection.size + deleteOtkazaniSelection.size + deleteZahteviSelection.size === 0}
-                className="px-3 py-1.5 rounded-lg text-sm font-medium bg-red-600 text-white hover:bg-red-700 disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                Potvrdi brisanje ({deleteSelection.size + deleteOtkazaniSelection.size + deleteZahteviSelection.size})
-              </button>
-              <span className="text-sm text-stone-400">
-                kliknite termine (i sive otkazane/zahteve) da ih označite, klik ponovo za deselekciju – ovo je trajno brisanje BEZ TRAGA, ne otkazivanje
-              </span>
-            </>
-          )}
           {deleteLoading && <span className="text-sm text-stone-500">Brišem…</span>}
           <button
             type="button"
@@ -961,54 +948,6 @@ export default function AdminCalendarView({
           >
             {assignMode ? 'Dodeli instruktora/učionicu/vrstu: uključeno' : 'Dodeli instruktora/učionicu/vrstu'}
           </button>
-          {assignMode && (
-            <>
-              <select
-                value={assignInstructorChoice}
-                onChange={(e) => setAssignInstructorChoice(e.target.value)}
-                className="rounded-lg border border-stone-300 px-3 py-1.5 text-sm text-stone-800 bg-white"
-              >
-                <option value="">bez instruktora</option>
-                {instructorsList.map((i) => (
-                  <option key={i.id} value={i.id}>{i.ime} {i.prezime}</option>
-                ))}
-              </select>
-              <select
-                value={assignClassroomChoice}
-                onChange={(e) => setAssignClassroomChoice(e.target.value)}
-                className="rounded-lg border border-stone-300 px-3 py-1.5 text-sm text-stone-800 bg-white"
-              >
-                <option value="">bez učionice</option>
-                {classroomsList.map((c) => (
-                  <option key={c.id} value={c.id}>{c.naziv}</option>
-                ))}
-              </select>
-              <select
-                value={assignTermTypeChoice}
-                onChange={(e) => setAssignTermTypeChoice(e.target.value)}
-                className="rounded-lg border border-stone-300 px-3 py-1.5 text-sm text-stone-800 bg-white"
-              >
-                <option value="">ne menjaj vrstu časa</option>
-                {termTypes.map((tt) => (
-                  <option key={tt.id} value={tt.id}>{tt.naziv}</option>
-                ))}
-              </select>
-              <button
-                type="button"
-                onClick={confirmAssign}
-                disabled={
-                  (!assignInstructorChoice && !assignClassroomChoice && !assignTermTypeChoice) ||
-                  assignSelection.size + assignZahteviSelection.size === 0
-                }
-                className="px-3 py-1.5 rounded-lg text-sm font-medium bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                Potvrdi dodelu ({assignSelection.size + assignZahteviSelection.size})
-              </button>
-              <span className="text-sm text-stone-400">
-                izaberite instruktora i/ili učionicu i/ili vrstu časa (može bilo koja kombinacija), pa kliknite termine na kalendaru da ih označite
-              </span>
-            </>
-          )}
           {assignLoading && <span className="text-sm text-stone-500">Dodeljujem…</span>}
           <Link
             href={`/admin/kalendar/print?week=${startOfWeek}`}
@@ -1016,9 +955,103 @@ export default function AdminCalendarView({
           >
             🖨 Print / PDF
           </Link>
+        </div>
+      </StickyBar>
+      {/* Polja/potvrde/čipovi aktivnog moda – NIJE zamrznuto, ide normalno u toku stranice, iznad kalendara. */}
+      {(swapMode || copyMode || deleteMode || bulkMode || assignMode) && (
+        <div className="mb-4 rounded-xl border border-stone-200 bg-white p-3 space-y-3">
+          {deleteMode && (
+            <div className="flex items-center gap-3 flex-wrap text-sm">
+              <button
+                type="button"
+                onClick={confirmDelete}
+                disabled={deleteSelection.size + deleteOtkazaniSelection.size + deleteZahteviSelection.size === 0}
+                className="px-3 py-1.5 rounded-lg text-sm font-medium bg-red-600 text-white hover:bg-red-700 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Potvrdi brisanje ({deleteSelection.size + deleteOtkazaniSelection.size + deleteZahteviSelection.size})
+              </button>
+              <span className="text-sm text-stone-400">
+                kliknite termine (i sive otkazane/zahteve) da ih označite, klik ponovo za deselekciju – ovo je trajno brisanje BEZ TRAGA, ne otkazivanje
+              </span>
+            </div>
+          )}
+          {assignMode && (
+            <div className="flex flex-col gap-2 text-sm">
+              <div className="flex items-center gap-3 flex-wrap">
+                <select
+                  value={assignInstructorChoice}
+                  onChange={(e) => setAssignInstructorChoice(e.target.value)}
+                  className="rounded-lg border border-stone-300 px-3 py-1.5 text-sm text-stone-800 bg-white"
+                >
+                  <option value="">bez instruktora</option>
+                  {instructorsList.map((i) => (
+                    <option key={i.id} value={i.id}>{i.ime} {i.prezime}</option>
+                  ))}
+                </select>
+                <select
+                  value={assignClassroomChoice}
+                  onChange={(e) => setAssignClassroomChoice(e.target.value)}
+                  className="rounded-lg border border-stone-300 px-3 py-1.5 text-sm text-stone-800 bg-white"
+                >
+                  <option value="">bez učionice</option>
+                  {classroomsList.map((c) => (
+                    <option key={c.id} value={c.id}>{c.naziv}</option>
+                  ))}
+                </select>
+                <select
+                  value={assignTermTypeChoice}
+                  onChange={(e) => setAssignTermTypeChoice(e.target.value)}
+                  className="rounded-lg border border-stone-300 px-3 py-1.5 text-sm text-stone-800 bg-white"
+                >
+                  <option value="">ne menjaj vrstu časa</option>
+                  {termTypes.map((tt) => (
+                    <option key={tt.id} value={tt.id}>{tt.naziv}</option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={confirmAssign}
+                  disabled={
+                    (!assignInstructorChoice && !assignClassroomChoice && !assignTermTypeChoice) ||
+                    assignSelection.size + assignZahteviSelection.size === 0
+                  }
+                  className="px-3 py-1.5 rounded-lg text-sm font-medium bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  Potvrdi dodelu ({assignSelection.size + assignZahteviSelection.size})
+                </button>
+                <span className="text-sm text-stone-400">
+                  izaberite instruktora i/ili učionicu i/ili vrstu časa (može bilo koja kombinacija), pa kliknite termine na kalendaru da ih označite
+                </span>
+              </div>
+              {(assignSelection.size > 0 || assignZahteviSelection.size > 0) && (
+                <div className="flex flex-wrap gap-1.5">
+                  {[...assignSelection].map((id) => {
+                    const t = terms.find((x) => x.id === id);
+                    if (!t) return null;
+                    return (
+                      <span key={id} className="rounded-full bg-blue-50 border border-blue-300 px-2 py-0.5 text-xs text-blue-800">
+                        {swapTermLabel(t)}
+                      </span>
+                    );
+                  })}
+                  {[...assignZahteviSelection].map((id) => {
+                    const z = pendingZahtevi.find((x) => x.id === id);
+                    if (!z) return null;
+                    const d = new Date(z.date + 'T12:00:00');
+                    const time = TIME_SLOTS[z.slot_index] ?? `slot ${z.slot_index}`;
+                    return (
+                      <span key={id} className="rounded-full bg-stone-100 border border-stone-300 px-2 py-0.5 text-xs text-stone-700">
+                        {d.getDate()}.{d.getMonth() + 1}. {time} · {z.client_ime}{z.client_prezime ? ` ${z.client_prezime}` : ''} (zahtev)
+                      </span>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
           {swapMode && (
-            <>
-              <div className="flex items-center gap-3 flex-wrap text-sm text-stone-700">
+            <div className="flex flex-col gap-2 text-sm">
+              <div className="flex items-center gap-3 flex-wrap text-stone-700">
                 <label className="flex items-center gap-1.5">
                   <input
                     type="checkbox"
@@ -1051,276 +1084,252 @@ export default function AdminCalendarView({
                   />
                   Klijent
                 </label>
+                <button
+                  type="button"
+                  onClick={confirmSwap}
+                  disabled={!swapFirst || !swapSecond || !anyFieldChecked}
+                  className="px-3 py-1.5 rounded-lg text-sm font-medium bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  Potvrdi zamenu
+                </button>
+                <button
+                  type="button"
+                  onClick={resetSwapSelection}
+                  className="px-3 py-1.5 rounded-lg text-sm font-medium bg-stone-100 text-stone-600 hover:bg-stone-200"
+                >
+                  Otkaži izbor
+                </button>
               </div>
-              <button
-                type="button"
-                onClick={confirmSwap}
-                disabled={!swapFirst || !swapSecond || !anyFieldChecked}
-                className="px-3 py-1.5 rounded-lg text-sm font-medium bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                Potvrdi zamenu
-              </button>
-              <button
-                type="button"
-                onClick={resetSwapSelection}
-                className="px-3 py-1.5 rounded-lg text-sm font-medium bg-stone-100 text-stone-600 hover:bg-stone-200"
-              >
-                Otkaži izbor
-              </button>
-            </>
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-stone-500">Prvi termin:</span>
+                  {swapFirst ? (
+                    <span className="rounded-lg bg-amber-50 border border-amber-300 px-2 py-1 text-stone-800">
+                      {swapFirst.label}{' '}
+                      <button type="button" onClick={() => setSwapFirst(null)} className="ml-1 text-amber-700 underline">
+                        Izmeni
+                      </button>
+                    </span>
+                  ) : (
+                    <span className="text-stone-400">kliknite termin na kalendaru</span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-stone-500">Drugi termin:</span>
+                  {swapSecond ? (
+                    <span className="rounded-lg bg-amber-50 border border-amber-300 px-2 py-1 text-stone-800">
+                      {swapSecond.label}{' '}
+                      <button type="button" onClick={() => setSwapSecond(null)} className="ml-1 text-amber-700 underline">
+                        Izmeni
+                      </button>
+                    </span>
+                  ) : (
+                    <span className="text-stone-400">kliknite termin na kalendaru</span>
+                  )}
+                </div>
+              </div>
+            </div>
           )}
-        </div>
-        {swapMode && (
-          <div className="mt-2 flex flex-wrap items-center gap-3 text-sm">
-            <div className="flex items-center gap-2">
-              <span className="text-stone-500">Prvi termin:</span>
-              {swapFirst ? (
-                <span className="rounded-lg bg-amber-50 border border-amber-300 px-2 py-1 text-stone-800">
-                  {swapFirst.label}{' '}
-                  <button type="button" onClick={() => setSwapFirst(null)} className="ml-1 text-amber-700 underline">
-                    Izmeni
-                  </button>
-                </span>
-              ) : (
-                <span className="text-stone-400">kliknite termin na kalendaru</span>
-              )}
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-stone-500">Drugi termin:</span>
-              {swapSecond ? (
-                <span className="rounded-lg bg-amber-50 border border-amber-300 px-2 py-1 text-stone-800">
-                  {swapSecond.label}{' '}
-                  <button type="button" onClick={() => setSwapSecond(null)} className="ml-1 text-amber-700 underline">
-                    Izmeni
-                  </button>
-                </span>
-              ) : (
-                <span className="text-stone-400">kliknite termin na kalendaru</span>
-              )}
-            </div>
-          </div>
-        )}
-        {copyMode && (
-          <div className="mt-2 flex flex-col gap-2 text-sm">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-stone-500">Kopiraj iz:</span>
-              {copySource ? (
-                <>
-                  <span className="rounded-lg bg-amber-50 border border-amber-300 px-2 py-1 text-stone-800">
-                    {copySource.label}
-                  </span>
+          {copyMode && (
+            <div className="flex flex-col gap-2 text-sm">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-stone-500">Kopiraj iz:</span>
+                {copySource ? (
+                  <>
+                    <span className="rounded-lg bg-amber-50 border border-amber-300 px-2 py-1 text-stone-800">
+                      {copySource.label}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCopySource(null);
+                        setCopyTargets(new Set());
+                      }}
+                      className="px-3 py-1.5 rounded-lg text-sm font-medium bg-stone-100 text-stone-600 hover:bg-stone-200"
+                    >
+                      Otkaži izbor
+                    </button>
+                  </>
+                ) : (
+                  <span className="text-stone-400">kliknite termin na kalendaru koji želite da kopirate</span>
+                )}
+              </div>
+              {copySource && (
+                <div className="flex flex-wrap items-end gap-3">
+                  <div className="flex items-center gap-3 flex-wrap text-stone-700">
+                    <label className="flex items-center gap-1.5">
+                      <input
+                        type="checkbox"
+                        checked={copyFields.instruktor}
+                        onChange={(e) => setCopyFields((f) => ({ ...f, instruktor: e.target.checked }))}
+                      />
+                      Instruktor
+                    </label>
+                    <label className="flex items-center gap-1.5">
+                      <input
+                        type="checkbox"
+                        checked={copyFields.ucionica}
+                        onChange={(e) => setCopyFields((f) => ({ ...f, ucionica: e.target.checked }))}
+                      />
+                      Učionica
+                    </label>
+                    <label className="flex items-center gap-1.5">
+                      <input
+                        type="checkbox"
+                        checked={copyFields.klijent}
+                        onChange={(e) => setCopyFields((f) => ({ ...f, klijent: e.target.checked }))}
+                      />
+                      Klijent
+                    </label>
+                  </div>
+                  {copyFields.klijent && (
+                    <div className="min-w-[200px]">
+                      <label className="block text-xs font-medium text-stone-700 mb-1">Vrsta časa</label>
+                      <select
+                        value={copyTermTypeId}
+                        onChange={(e) => setCopyTermTypeId(e.target.value)}
+                        className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm text-stone-800 bg-white"
+                      >
+                        <option value="">— (zadrži originalnu) —</option>
+                        {termTypes.map((tt) => (
+                          <option key={tt.id} value={tt.id}>{tt.naziv}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
                   <button
                     type="button"
-                    onClick={() => {
-                      setCopySource(null);
-                      setCopyTargets(new Set());
-                    }}
-                    className="px-3 py-1.5 rounded-lg text-sm font-medium bg-stone-100 text-stone-600 hover:bg-stone-200"
+                    onClick={confirmCopy}
+                    disabled={copyTargets.size === 0 || !copyFieldsAnyChecked}
+                    className="px-3 py-1.5 rounded-lg text-sm font-medium bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed"
                   >
-                    Otkaži izbor
+                    Potvrdi kopiranje ({copyTargets.size})
                   </button>
-                </>
-              ) : (
-                <span className="text-stone-400">kliknite termin na kalendaru koji želite da kopirate</span>
+                  <span className="text-stone-400 text-xs">kliknite jedan ili više praznih/slobodnih slotova da ih izaberete kao mete</span>
+                </div>
               )}
             </div>
-            {copySource && (
+          )}
+          {bulkMode && (
+            <div className="flex flex-col gap-3 text-sm">
+              <label className="flex items-center gap-1.5 text-stone-700">
+                <input
+                  type="checkbox"
+                  checked={bulkGroupMode}
+                  onChange={(e) => {
+                    const checked = e.target.checked;
+                    setBulkGroupMode(checked);
+                    // Grupa zahteva instruktora (zahtevi_za_cas ne podržavaju grupu) – ako nema
+                    // izabranog, uzmi prvog da forma odmah bude ispravna.
+                    if (checked && !bulkInstructorChoice) setBulkInstructorChoice(instructorsList[0]?.id ?? '');
+                    if (checked && !bulkTermCategoryId) setBulkTermCategoryId(grupneKategorije[0]?.id ?? '');
+                  }}
+                />
+                Grupa (više dece odjednom u istim terminima)
+              </label>
               <div className="flex flex-wrap items-end gap-3">
-                <div className="flex items-center gap-3 flex-wrap text-stone-700">
-                  <label className="flex items-center gap-1.5">
-                    <input
-                      type="checkbox"
-                      checked={copyFields.instruktor}
-                      onChange={(e) => setCopyFields((f) => ({ ...f, instruktor: e.target.checked }))}
+                {bulkGroupMode ? (
+                  <div className="min-w-[260px]">
+                    <label className="block text-xs font-medium text-stone-700 mb-1">Deca (grupa)</label>
+                    <GrupniKlijentiPicker
+                      clients={clients}
+                      selectedIds={bulkGroupClientIds}
+                      onSelectionChange={setBulkGroupClientIds}
+                      inputId="admin-bulk-grupni-klijenti-search"
+                      listMaxHeightClassName="max-h-20"
                     />
-                    Instruktor
-                  </label>
-                  <label className="flex items-center gap-1.5">
-                    <input
-                      type="checkbox"
-                      checked={copyFields.ucionica}
-                      onChange={(e) => setCopyFields((f) => ({ ...f, ucionica: e.target.checked }))}
+                  </div>
+                ) : (
+                  <div className="min-w-[220px]">
+                    <label className="block text-xs font-medium text-stone-700 mb-1">Dete</label>
+                    <SingleKlijentPicker
+                      clients={clients}
+                      value={bulkClientId}
+                      onChange={setBulkClientId}
+                      inputId="admin-bulk-klijent-search"
+                      listMaxHeightClassName="max-h-20"
                     />
-                    Učionica
-                  </label>
-                  <label className="flex items-center gap-1.5">
-                    <input
-                      type="checkbox"
-                      checked={copyFields.klijent}
-                      onChange={(e) => setCopyFields((f) => ({ ...f, klijent: e.target.checked }))}
-                    />
-                    Klijent
-                  </label>
-                </div>
-                {copyFields.klijent && (
+                  </div>
+                )}
+                {bulkGroupMode && (
                   <div className="min-w-[200px]">
-                    <label className="block text-xs font-medium text-stone-700 mb-1">Vrsta časa</label>
+                    <label className="block text-xs font-medium text-stone-700 mb-1">Kategorija termina</label>
                     <select
-                      value={copyTermTypeId}
-                      onChange={(e) => setCopyTermTypeId(e.target.value)}
+                      value={bulkTermCategoryId}
+                      onChange={(e) => setBulkTermCategoryId(e.target.value)}
                       className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm text-stone-800 bg-white"
                     >
-                      <option value="">— (zadrži originalnu) —</option>
-                      {termTypes.map((tt) => (
-                        <option key={tt.id} value={tt.id}>{tt.naziv}</option>
+                      {grupneKategorije.length === 0 && <option value="">— nema grupnih kategorija —</option>}
+                      {grupneKategorije.map((c) => (
+                        <option key={c.id} value={c.id}>{c.naziv}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                <div className="min-w-[200px]">
+                  <label className="block text-xs font-medium text-stone-700 mb-1">Vrsta časa</label>
+                  <select
+                    value={bulkTermTypeId}
+                    onChange={(e) => setBulkTermTypeId(e.target.value)}
+                    className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm text-stone-800 bg-white"
+                  >
+                    <option value="">— (nije obavezno) —</option>
+                    {termTypes.map((tt) => (
+                      <option key={tt.id} value={tt.id}>{tt.naziv}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="min-w-[180px]">
+                  <label className="block text-xs font-medium text-stone-700 mb-1">Instruktor</label>
+                  <select
+                    value={bulkInstructorChoice}
+                    onChange={(e) => setBulkInstructorChoice(e.target.value)}
+                    className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm text-stone-800 bg-white"
+                  >
+                    {!bulkGroupMode && <option value="">bez instruktora (zahtev)</option>}
+                    {bulkGroupMode && !bulkInstructorChoice && <option value="">— izaberite instruktora —</option>}
+                    {instructorsList.map((i) => (
+                      <option key={i.id} value={i.id}>{i.ime} {i.prezime}</option>
+                    ))}
+                  </select>
+                </div>
+                {bulkInstructorChoice && (
+                  <div className="min-w-[160px]">
+                    <label className="block text-xs font-medium text-stone-700 mb-1">Učionica</label>
+                    <select
+                      value={bulkClassroomChoice}
+                      onChange={(e) => setBulkClassroomChoice(e.target.value)}
+                      className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm text-stone-800 bg-white"
+                    >
+                      <option value="">bez učionice</option>
+                      {classroomsList.map((c) => (
+                        <option key={c.id} value={c.id}>{c.naziv}</option>
                       ))}
                     </select>
                   </div>
                 )}
                 <button
                   type="button"
-                  onClick={confirmCopy}
-                  disabled={copyTargets.size === 0 || !copyFieldsAnyChecked}
+                  onClick={confirmBulk}
+                  disabled={
+                    bulkGroupMode
+                      ? bulkGroupClientIds.length === 0 || !bulkInstructorChoice || !bulkTermCategoryId || bulkSlots.size === 0
+                      : !bulkClientId || bulkSlots.size === 0
+                  }
                   className="px-3 py-1.5 rounded-lg text-sm font-medium bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed"
                 >
-                  Potvrdi kopiranje ({copyTargets.size})
+                  Potvrdi ({bulkSlots.size})
                 </button>
-                <span className="text-stone-400 text-xs">kliknite jedan ili više praznih/slobodnih slotova da ih izaberete kao mete</span>
               </div>
-            )}
-          </div>
-        )}
-        {bulkMode && (
-          <div className="mt-2 flex flex-col gap-3 text-sm">
-            <label className="flex items-center gap-1.5 text-stone-700">
-              <input
-                type="checkbox"
-                checked={bulkGroupMode}
-                onChange={(e) => {
-                  const checked = e.target.checked;
-                  setBulkGroupMode(checked);
-                  // Grupa zahteva instruktora (zahtevi_za_cas ne podržavaju grupu) – ako nema
-                  // izabranog, uzmi prvog da forma odmah bude ispravna.
-                  if (checked && !bulkInstructorChoice) setBulkInstructorChoice(instructorsList[0]?.id ?? '');
-                  if (checked && !bulkTermCategoryId) setBulkTermCategoryId(grupneKategorije[0]?.id ?? '');
-                }}
-              />
-              Grupa (više dece odjednom u istim terminima)
-            </label>
-            <div className="flex flex-wrap items-end gap-3">
-              {bulkGroupMode ? (
-                <div className="min-w-[260px]">
-                  <label className="block text-xs font-medium text-stone-700 mb-1">Deca (grupa)</label>
-                  <GrupniKlijentiPicker
-                    clients={clients}
-                    selectedIds={bulkGroupClientIds}
-                    onSelectionChange={setBulkGroupClientIds}
-                    inputId="admin-bulk-grupni-klijenti-search"
-                  />
-                </div>
-              ) : (
-                <div className="min-w-[220px]">
-                  <label className="block text-xs font-medium text-stone-700 mb-1">Dete</label>
-                  <SingleKlijentPicker
-                    clients={clients}
-                    value={bulkClientId}
-                    onChange={setBulkClientId}
-                    inputId="admin-bulk-klijent-search"
-                  />
-                </div>
-              )}
-              {bulkGroupMode && (
-                <div className="min-w-[200px]">
-                  <label className="block text-xs font-medium text-stone-700 mb-1">Kategorija termina</label>
-                  <select
-                    value={bulkTermCategoryId}
-                    onChange={(e) => setBulkTermCategoryId(e.target.value)}
-                    className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm text-stone-800 bg-white"
-                  >
-                    {grupneKategorije.length === 0 && <option value="">— nema grupnih kategorija —</option>}
-                    {grupneKategorije.map((c) => (
-                      <option key={c.id} value={c.id}>{c.naziv}</option>
-                    ))}
-                  </select>
-                </div>
-              )}
-              <div className="min-w-[200px]">
-                <label className="block text-xs font-medium text-stone-700 mb-1">Vrsta časa</label>
-                <select
-                  value={bulkTermTypeId}
-                  onChange={(e) => setBulkTermTypeId(e.target.value)}
-                  className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm text-stone-800 bg-white"
-                >
-                  <option value="">— (nije obavezno) —</option>
-                  {termTypes.map((tt) => (
-                    <option key={tt.id} value={tt.id}>{tt.naziv}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="min-w-[180px]">
-                <label className="block text-xs font-medium text-stone-700 mb-1">Instruktor</label>
-                <select
-                  value={bulkInstructorChoice}
-                  onChange={(e) => setBulkInstructorChoice(e.target.value)}
-                  className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm text-stone-800 bg-white"
-                >
-                  {!bulkGroupMode && <option value="">bez instruktora (zahtev)</option>}
-                  {bulkGroupMode && !bulkInstructorChoice && <option value="">— izaberite instruktora —</option>}
-                  {instructorsList.map((i) => (
-                    <option key={i.id} value={i.id}>{i.ime} {i.prezime}</option>
-                  ))}
-                </select>
-              </div>
-              {bulkInstructorChoice && (
-                <div className="min-w-[160px]">
-                  <label className="block text-xs font-medium text-stone-700 mb-1">Učionica</label>
-                  <select
-                    value={bulkClassroomChoice}
-                    onChange={(e) => setBulkClassroomChoice(e.target.value)}
-                    className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm text-stone-800 bg-white"
-                  >
-                    <option value="">bez učionice</option>
-                    {classroomsList.map((c) => (
-                      <option key={c.id} value={c.id}>{c.naziv}</option>
-                    ))}
-                  </select>
-                </div>
-              )}
-              <button
-                type="button"
-                onClick={confirmBulk}
-                disabled={
-                  bulkGroupMode
-                    ? bulkGroupClientIds.length === 0 || !bulkInstructorChoice || !bulkTermCategoryId || bulkSlots.size === 0
-                    : !bulkClientId || bulkSlots.size === 0
-                }
-                className="px-3 py-1.5 rounded-lg text-sm font-medium bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                Potvrdi ({bulkSlots.size})
-              </button>
+              <span className="text-stone-400 text-xs max-w-md">
+                {bulkGroupMode
+                  ? 'Izaberite grupu dece, kategoriju termina (grupna), instruktora i kliknite termine na kalendaru – ista grupa/instruktor/učionica/vrsta časa za sve izabrane slotove.'
+                  : 'Izaberite dete, pa kliknite termine na kalendaru (bilo prazne ili zauzete). Bez instruktora – pravi se zahtev koji bilo koji predavač preuzima na svom Dashboard → Zahtevi. Sa izabranim instruktorom (i opciono učionicom) – odmah se zakazuju pravi termini, isti instruktor/učionica/vrsta časa za sve izabrane slotove.'}
+              </span>
             </div>
-            <span className="text-stone-400 text-xs max-w-md">
-              {bulkGroupMode
-                ? 'Izaberite grupu dece, kategoriju termina (grupna), instruktora i kliknite termine na kalendaru – ista grupa/instruktor/učionica/vrsta časa za sve izabrane slotove.'
-                : 'Izaberite dete, pa kliknite termine na kalendaru (bilo prazne ili zauzete). Bez instruktora – pravi se zahtev koji bilo koji predavač preuzima na svom Dashboard → Zahtevi. Sa izabranim instruktorom (i opciono učionicom) – odmah se zakazuju pravi termini, isti instruktor/učionica/vrsta časa za sve izabrane slotove.'}
-            </span>
-          </div>
-        )}
-        {assignMode && (assignSelection.size > 0 || assignZahteviSelection.size > 0) && (
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            {[...assignSelection].map((id) => {
-              const t = terms.find((x) => x.id === id);
-              if (!t) return null;
-              return (
-                <span key={id} className="rounded-full bg-blue-50 border border-blue-300 px-2 py-0.5 text-xs text-blue-800">
-                  {swapTermLabel(t)}
-                </span>
-              );
-            })}
-            {[...assignZahteviSelection].map((id) => {
-              const z = pendingZahtevi.find((x) => x.id === id);
-              if (!z) return null;
-              const d = new Date(z.date + 'T12:00:00');
-              const time = TIME_SLOTS[z.slot_index] ?? `slot ${z.slot_index}`;
-              return (
-                <span key={id} className="rounded-full bg-stone-100 border border-stone-300 px-2 py-0.5 text-xs text-stone-700">
-                  {d.getDate()}.{d.getMonth() + 1}. {time} · {z.client_ime}{z.client_prezime ? ` ${z.client_prezime}` : ''} (zahtev)
-                </span>
-              );
-            })}
-          </div>
-        )}
-      </StickyBar>
+          )}
+        </div>
+      )}
       {body}
     </SwapContext.Provider>
   );
