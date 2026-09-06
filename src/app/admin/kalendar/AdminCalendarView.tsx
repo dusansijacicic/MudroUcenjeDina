@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { TIME_SLOTS, AUTO_SPILLOVER_NAPOMENA } from '@/lib/constants';
@@ -419,6 +419,18 @@ export default function AdminCalendarView({
   const [bulkClassroomChoice, setBulkClassroomChoice] = useState('');
   const [bulkSlots, setBulkSlots] = useState<Set<string>>(new Set());
   const [bulkLoading, setBulkLoading] = useState(false);
+  // "Zakaži više časova" ne radi optimistički update (kao swap) – nakon potvrde čeka se pravi
+  // router.refresh() da bi se novi termini uopšte pojavili. Bez ovoga, "Zakazujem…" nestaje čim
+  // server odgovori, ali PRE nego što svež termsProp stigne – admin u međuvremenu otvori mod za
+  // sledeće dete i vidi te sveže zakazane termine kao da ih nema (dok se refresh ne završi).
+  const bulkRefreshTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (bulkRefreshTimeoutRef.current) {
+      clearTimeout(bulkRefreshTimeoutRef.current);
+      bulkRefreshTimeoutRef.current = null;
+      setBulkLoading(false);
+    }
+  }, [termsProp]);
 
   const grupneKategorije = termCategories.filter((c) => !c.jedan_klijent_po_terminu && !c.is_testing && !c.is_nastavak);
 
@@ -501,6 +513,10 @@ export default function AdminCalendarView({
       return next;
     });
     setBulkSlots(new Set());
+    setBulkClientId('');
+    setBulkGroupMode(false);
+    setBulkGroupClientIds([]);
+    setBulkTermCategoryId('');
     setBulkInstructorChoice('');
     setBulkClassroomChoice('');
   };
@@ -584,6 +600,7 @@ export default function AdminCalendarView({
     const isGroup = bulkGroupMode;
     setBulkSlots(new Set());
     setBulkMode(false);
+    setBulkClientId('');
     setBulkGroupMode(false);
     setBulkGroupClientIds([]);
     setBulkTermCategoryId('');
@@ -592,7 +609,6 @@ export default function AdminCalendarView({
     setBulkLoading(true);
     if (isGroup) {
       const { failed } = await createBulkTermsAsAdmin(groupClientIds, instructorId, classroomId, bulkTermTypeId || null, slots, groupCategoryId);
-      setBulkLoading(false);
       if (failed.length > 0) {
         toast.error(`Nije zakazano ${failed.length}/${slots.length} – ${failed.map((f) => `${f.date} (${f.error})`).join('; ')}`);
       } else {
@@ -600,7 +616,6 @@ export default function AdminCalendarView({
       }
     } else if (instructorId) {
       const { failed } = await createBulkTermsAsAdmin([bulkClientId], instructorId, classroomId, bulkTermTypeId || null, slots);
-      setBulkLoading(false);
       if (failed.length > 0) {
         toast.error(`Nije zakazano ${failed.length}/${slots.length} – ${failed.map((f) => `${f.date} (${f.error})`).join('; ')}`);
       } else {
@@ -608,13 +623,20 @@ export default function AdminCalendarView({
       }
     } else {
       const { failed } = await createBulkZahteviAsAdmin(bulkClientId, bulkTermTypeId || null, slots, classroomId);
-      setBulkLoading(false);
       if (failed.length > 0) {
         toast.error(`Nije zakazano ${failed.length}/${slots.length} – ${failed.map((f) => `${f.date} (${f.error})`).join('; ')}`);
       } else {
         toast.success(`Kreirano ${slots.length} zahtev(a) – predavači ih vide na svom Dashboard → Zahtevi.`);
       }
     }
+    // "Zakazujem…" ostaje vidljivo (i dugme za novo zakazivanje ostaje zaključano) dok sveži
+    // termini stvarno ne stignu kroz termsProp – vidi efekat gore. 4s je samo sigurnosna kočnica
+    // ako iz nekog razloga refresh ne donese nov niz (da spinner ne ostane zauvek).
+    if (bulkRefreshTimeoutRef.current) clearTimeout(bulkRefreshTimeoutRef.current);
+    bulkRefreshTimeoutRef.current = setTimeout(() => {
+      bulkRefreshTimeoutRef.current = null;
+      setBulkLoading(false);
+    }, 4000);
     router.refresh();
   };
 
@@ -932,13 +954,15 @@ export default function AdminCalendarView({
           <button
             type="button"
             onClick={toggleBulkMode}
-            className={`px-3 py-1.5 min-h-[44px] md:min-h-0 rounded-lg text-sm font-medium ${
+            disabled={bulkLoading}
+            title={bulkLoading ? 'Sačekajte da se prethodno zakazivanje završi i prikaže na kalendaru…' : undefined}
+            className={`px-3 py-1.5 min-h-[44px] md:min-h-0 rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed ${
               bulkMode ? 'bg-amber-600 text-white hover:bg-amber-700' : 'bg-stone-200 text-stone-700 hover:bg-stone-300'
             }`}
           >
             {bulkMode ? 'Zakaži više časova: uključeno' : 'Zakaži više časova'}
           </button>
-          {bulkLoading && <span className="text-sm text-stone-500">Zakazujem…</span>}
+          {bulkLoading && <span className="text-sm text-stone-500">Zakazujem… (sačekajte da se prikaže na kalendaru)</span>}
           <button
             type="button"
             onClick={toggleAssignMode}

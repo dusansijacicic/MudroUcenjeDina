@@ -6,9 +6,10 @@ import type { TermCategoryRow } from '@/lib/term-categories';
 import { SEEDED_TERM_CATEGORY_INDIVIDUAL_ID, SEEDED_TERM_CATEGORY_GRUPNI_ID } from '@/lib/term-categories';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
-import { INSTRUCTOR_COLORS, isTermInPast, slotsNeeded, AUTO_SPILLOVER_NAPOMENA } from '@/lib/constants';
+import { INSTRUCTOR_COLORS, isTermInPast, slotsNeeded, AUTO_SPILLOVER_NAPOMENA, TIME_SLOTS } from '@/lib/constants';
 import { termMozeNovoPredavanje } from '@/lib/settings';
 import { normalizeClientPol } from '@/lib/client-pol';
+import { logActivity, type Actor } from '@/lib/audit';
 
 export async function createInstructorAsAdmin(formData: FormData): Promise<{ error?: string; success?: boolean }> {
   const supabase = await createClient();
@@ -192,6 +193,12 @@ export async function createTermAsAdmin(
 
   if (error) return { error: error.message };
   if (!inserted) return { error: 'Termin nije kreiran.' };
+  logActivity(
+    { id: user.id, email: user.email ?? null, name: null, role: 'admin' },
+    'term.create',
+    `Kreiran termin ${dateStr} ${TIME_SLOTS[slot] ?? `slot ${slot}`}.`,
+    { entityType: 'term', entityId: inserted.id, metadata: { instructorId, classroomId, termCategoryId, dateStr, slot } }
+  );
   return { termId: inserted.id, instructorId };
 }
 
@@ -248,7 +255,7 @@ export async function createBulkZahteviAsAdmin(
   slots: { date: string; slotIndex: number }[],
   classroomId: string | null = null
 ): Promise<{ failed: { date: string; slotIndex: number; error: string }[] }> {
-  const { admin, error: authErr } = await requireAdmin();
+  const { admin, error: authErr, actor } = await requireAdmin();
   if (authErr || !admin) return { failed: slots.map((s) => ({ ...s, error: authErr ?? 'Niste ovlašćeni.' })) };
   if (slots.length === 0) return { failed: [] };
 
@@ -282,6 +289,14 @@ export async function createBulkZahteviAsAdmin(
     return { failed: [...skipped, ...toInsert.map((s) => ({ ...s, error: error.message }))] };
   }
   revalidatePath('/dashboard/zahtevi');
+  if (actor) {
+    logActivity(
+      actor,
+      'zahtev.bulk_create',
+      `Kreirano ${toInsert.length} zahtev(a) za čas (bez instruktora) za dete.`,
+      { entityType: 'client', entityId: clientId, metadata: { slots: toInsert, termTypeId, classroomId } }
+    );
+  }
   return { failed: skipped };
 }
 
@@ -300,7 +315,7 @@ export async function createBulkTermsAsAdmin(
   /** Kategorija termina za NOVE termine – grupna kategorija ako ima više od jednog deteta, inače individualna. */
   termCategoryId: string | null = null
 ): Promise<{ failed: { date: string; slotIndex: number; error: string }[] }> {
-  const { admin, error: authErr } = await requireAdmin();
+  const { admin, error: authErr, actor } = await requireAdmin();
   if (authErr || !admin) return { failed: slots.map((s) => ({ ...s, error: authErr ?? 'Niste ovlašćeni.' })) };
   if (slots.length === 0 || clientIds.length === 0) return { failed: [] };
   const effectiveCategoryId =
@@ -370,7 +385,16 @@ export async function createBulkTermsAsAdmin(
       return { ...s, error: null as string | null };
     })
   );
-  return { failed: results.filter((r): r is { date: string; slotIndex: number; error: string } => r.error !== null) };
+  const failed = results.filter((r): r is { date: string; slotIndex: number; error: string } => r.error !== null);
+  if (actor) {
+    logActivity(
+      actor,
+      'term.bulk_create',
+      `Zakazano ${slots.length - failed.length}/${slots.length} termin(a) za ${clientIds.length > 1 ? `grupu od ${clientIds.length} dece` : '1 dete'}.`,
+      { entityType: 'instructor', entityId: instructorId, metadata: { clientIds, classroomId, termTypeId, slots } }
+    );
+  }
+  return { failed };
 }
 
 /**
@@ -383,7 +407,7 @@ export async function assignInstructorToTermsAsAdmin(
   instructorId: string,
   termIds: string[]
 ): Promise<{ failed: { termId: string; error: string }[] }> {
-  const { admin, error: authErr } = await requireAdmin();
+  const { admin, error: authErr, actor } = await requireAdmin();
   if (authErr || !admin) return { failed: termIds.map((termId) => ({ termId, error: authErr ?? 'Niste ovlašćeni.' })) };
 
   const results = await Promise.all(
@@ -408,7 +432,16 @@ export async function assignInstructorToTermsAsAdmin(
     })
   );
   revalidatePath('/admin/kalendar');
-  return { failed: results.filter((r): r is { termId: string; error: string } => r.error !== null) };
+  const failed = results.filter((r): r is { termId: string; error: string } => r.error !== null);
+  if (actor && termIds.length > failed.length) {
+    logActivity(
+      actor,
+      'term.assign_instructor',
+      `Dodeljen instruktor na ${termIds.length - failed.length}/${termIds.length} termin(a).`,
+      { entityType: 'instructor', entityId: instructorId, metadata: { termIds } }
+    );
+  }
+  return { failed };
 }
 
 /** "Dodeli učionicu" mod – isto kao gore, za učionicu umesto instruktora. */
@@ -416,7 +449,7 @@ export async function assignClassroomToTermsAsAdmin(
   classroomId: string,
   termIds: string[]
 ): Promise<{ failed: { termId: string; error: string }[] }> {
-  const { admin, error: authErr } = await requireAdmin();
+  const { admin, error: authErr, actor } = await requireAdmin();
   if (authErr || !admin) return { failed: termIds.map((termId) => ({ termId, error: authErr ?? 'Niste ovlašćeni.' })) };
 
   const results = await Promise.all(
@@ -440,7 +473,16 @@ export async function assignClassroomToTermsAsAdmin(
     })
   );
   revalidatePath('/admin/kalendar');
-  return { failed: results.filter((r): r is { termId: string; error: string } => r.error !== null) };
+  const failed = results.filter((r): r is { termId: string; error: string } => r.error !== null);
+  if (actor && termIds.length > failed.length) {
+    logActivity(
+      actor,
+      'term.assign_classroom',
+      `Dodeljena učionica na ${termIds.length - failed.length}/${termIds.length} termin(a).`,
+      { entityType: 'classroom', entityId: classroomId, metadata: { termIds } }
+    );
+  }
+  return { failed };
 }
 
 /**
@@ -450,7 +492,7 @@ export async function assignClassroomToTermsAsAdmin(
  * dodeljuje posebno, "Dodeli učionicu").
  */
 export async function assignInstructorToZahtevAsAdmin(zahtevId: string, instructorId: string): Promise<{ error?: string }> {
-  const { admin, error: authErr } = await requireAdmin();
+  const { admin, error: authErr, actor } = await requireAdmin();
   if (authErr || !admin) return { error: authErr ?? 'Niste ovlašćeni.' };
 
   const { data: zahtev } = await admin.from('zahtevi_za_cas').select('*').eq('id', zahtevId).single();
@@ -518,6 +560,14 @@ export async function assignInstructorToZahtevAsAdmin(zahtevId: string, instruct
 
   revalidatePath('/admin/kalendar');
   revalidatePath('/dashboard/zahtevi');
+  if (actor) {
+    logActivity(
+      actor,
+      'zahtev.assign_instructor',
+      `Dodeljen instruktor zahtevu za ${dateStr} ${TIME_SLOTS[slot] ?? `slot ${slot}`} – potvrđen kao termin.`,
+      { entityType: 'zahtev', entityId: zahtevId, metadata: { instructorId, termId, dateStr, slot } }
+    );
+  }
   return {};
 }
 
@@ -544,7 +594,7 @@ export async function assignInstructorToZahteviAsAdmin(
  * inače se samo pamti na zahtevu i prenosi kasnije kad se zahtev potvrdi (bilo kojim putem).
  */
 export async function assignClassroomToZahtevAsAdmin(zahtevId: string, classroomId: string): Promise<{ error?: string }> {
-  const { admin, error: authErr } = await requireAdmin();
+  const { admin, error: authErr, actor } = await requireAdmin();
   if (authErr || !admin) return { error: authErr ?? 'Niste ovlašćeni.' };
 
   const { data: zahtev } = await admin
@@ -576,6 +626,13 @@ export async function assignClassroomToZahtevAsAdmin(zahtevId: string, classroom
 
   revalidatePath('/admin/kalendar');
   revalidatePath('/dashboard/zahtevi');
+  if (actor) {
+    logActivity(actor, 'zahtev.assign_classroom', `Dodeljena učionica zahtevu za ${dateStr} ${TIME_SLOTS[slot] ?? `slot ${slot}`}.`, {
+      entityType: 'zahtev',
+      entityId: zahtevId,
+      metadata: { classroomId },
+    });
+  }
   return {};
 }
 
@@ -605,7 +662,7 @@ export async function assignTermTypeToTermsAsAdmin(
   termTypeId: string | null,
   termIds: string[]
 ): Promise<{ failed: { termId: string; error: string }[] }> {
-  const { admin, error: authErr } = await requireAdmin();
+  const { admin, error: authErr, actor } = await requireAdmin();
   if (authErr || !admin) return { failed: termIds.map((termId) => ({ termId, error: authErr ?? 'Niste ovlašćeni.' })) };
   if (termIds.length === 0) return { failed: [] };
 
@@ -614,6 +671,13 @@ export async function assignTermTypeToTermsAsAdmin(
   // Nova vrsta časa može imati drugo trajanje – uskladi "blokirajuće" slotove dužeg časa za svaki termin.
   await Promise.all(termIds.map((termId) => syncSpilloverForTerm(admin, termId)));
   revalidatePath('/admin/kalendar');
+  if (actor) {
+    logActivity(actor, 'term.assign_term_type', `Promenjena vrsta časa na ${termIds.length} termin(a).`, {
+      entityType: 'term_type',
+      entityId: termTypeId,
+      metadata: { termIds },
+    });
+  }
   return { failed: [] };
 }
 
@@ -622,7 +686,7 @@ export async function assignTermTypeToZahteviAsAdmin(
   termTypeId: string | null,
   zahtevIds: string[]
 ): Promise<{ failed: { zahtevId: string; error: string }[] }> {
-  const { admin, error: authErr } = await requireAdmin();
+  const { admin, error: authErr, actor } = await requireAdmin();
   if (authErr || !admin) return { failed: zahtevIds.map((zahtevId) => ({ zahtevId, error: authErr ?? 'Niste ovlašćeni.' })) };
   if (zahtevIds.length === 0) return { failed: [] };
 
@@ -630,6 +694,13 @@ export async function assignTermTypeToZahteviAsAdmin(
   if (error) return { failed: zahtevIds.map((zahtevId) => ({ zahtevId, error: error.message })) };
   revalidatePath('/admin/kalendar');
   revalidatePath('/dashboard/zahtevi');
+  if (actor) {
+    logActivity(actor, 'zahtev.assign_term_type', `Promenjena vrsta časa na ${zahtevIds.length} zahtev(a).`, {
+      entityType: 'term_type',
+      entityId: termTypeId,
+      metadata: { zahtevIds },
+    });
+  }
   return { failed: [] };
 }
 
@@ -715,10 +786,11 @@ export async function updateInstructorAsAdmin(
 async function requireAdmin() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: 'Niste ulogovani.' as const, admin: null };
+  if (!user) return { error: 'Niste ulogovani.' as const, admin: null, actor: null };
   const { data: adminRow } = await supabase.from('admin_users').select('user_id').eq('user_id', user.id).single();
-  if (!adminRow) return { error: 'Samo admin.' as const, admin: null };
-  return { admin: createAdminClient(), error: null };
+  if (!adminRow) return { error: 'Samo admin.' as const, admin: null, actor: null };
+  const actor: Actor = { id: user.id, email: user.email ?? null, name: null, role: 'admin' };
+  return { admin: createAdminClient(), error: null, actor };
 }
 
 /**
@@ -810,7 +882,7 @@ export async function createPredavanjeAsAdmin(
   komentar: string | null,
   termTypeId: string | null = null
 ): Promise<{ error?: string }> {
-  const { admin, error: authErr } = await requireAdmin();
+  const { admin, error: authErr, actor } = await requireAdmin();
   if (authErr || !admin) return { error: authErr ?? 'Niste ovlašćeni.' };
   const { data: term } = await admin.from('terms').select('id, instructor_id').eq('id', termId).single();
   if (!term) return { error: 'Termin nije pronađen.' };
@@ -849,6 +921,13 @@ export async function createPredavanjeAsAdmin(
   await syncSpilloverForTerm(admin, termId);
   revalidatePath('/admin/kalendar');
   revalidatePath(`/admin/termin/${termId}`);
+  if (actor) {
+    logActivity(actor, 'predavanje.create', `Dodata radionica (dete) u termin.`, {
+      entityType: 'predavanje',
+      entityId: termId,
+      metadata: { termId, clientId, odrzano, placeno, termTypeId },
+    });
+  }
   return {};
 }
 
@@ -857,7 +936,7 @@ export async function updateTermMetaAsAdmin(
   termId: string,
   payload: { term_category_id: string; napomena: string | null }
 ): Promise<{ error?: string }> {
-  const { admin, error: authErr } = await requireAdmin();
+  const { admin, error: authErr, actor } = await requireAdmin();
   if (authErr || !admin) return { error: authErr ?? 'Niste ovlašćeni.' };
   const cid = payload.term_category_id?.trim();
   if (!cid) return { error: 'Izaberite kategoriju termina.' };
@@ -881,6 +960,13 @@ export async function updateTermMetaAsAdmin(
   revalidatePath('/admin/kalendar');
   revalidatePath(`/admin/termin/${termId}`);
   revalidatePath('/dashboard');
+  if (actor) {
+    logActivity(actor, 'term.update_meta', `Izmenjena kategorija/napomena termina.`, {
+      entityType: 'term',
+      entityId: termId,
+      metadata: payload,
+    });
+  }
   return {};
 }
 
@@ -893,7 +979,7 @@ export async function updatePredavanjeAsAdmin(
   komentar: string | null,
   termTypeId: string | null = null
 ): Promise<{ error?: string }> {
-  const { admin, error: authErr } = await requireAdmin();
+  const { admin, error: authErr, actor } = await requireAdmin();
   if (authErr || !admin) return { error: authErr ?? 'Niste ovlašćeni.' };
   const { data: dupOther } = await admin
     .from('predavanja')
@@ -919,6 +1005,13 @@ export async function updatePredavanjeAsAdmin(
   await syncSpilloverForTerm(admin, termId);
   revalidatePath('/admin/kalendar');
   revalidatePath(`/admin/termin/${termId}`);
+  if (actor) {
+    logActivity(actor, 'predavanje.update', `Izmenjena radionica u terminu.`, {
+      entityType: 'predavanje',
+      entityId: predavanjeId,
+      metadata: { termId, clientId, odrzano, placeno, termTypeId },
+    });
+  }
   return {};
 }
 
@@ -954,7 +1047,7 @@ async function savePredavanjeToHistory(
 }
 
 export async function deletePredavanjeAsAdmin(predavanjeId: string, termId: string): Promise<{ error?: string }> {
-  const { admin, error: authErr } = await requireAdmin();
+  const { admin, error: authErr, actor } = await requireAdmin();
   if (authErr || !admin) return { error: authErr ?? 'Niste ovlašćeni.' };
 
   await savePredavanjeToHistory(admin, predavanjeId);
@@ -974,6 +1067,13 @@ export async function deletePredavanjeAsAdmin(predavanjeId: string, termId: stri
 
   revalidatePath('/admin/kalendar');
   revalidatePath(`/admin/termin/${termId}`);
+  if (actor) {
+    logActivity(actor, 'predavanje.delete', `Obrisana radionica iz termina.`, {
+      entityType: 'predavanje',
+      entityId: predavanjeId,
+      metadata: { termId },
+    });
+  }
   return {};
 }
 
@@ -989,7 +1089,7 @@ export async function reassignPredavanjeInstructorAsAdmin(
   termDate: string,
   slotIndex: number
 ): Promise<{ error?: string; newTermId?: string }> {
-  const { admin, error: authErr } = await requireAdmin();
+  const { admin, error: authErr, actor } = await requireAdmin();
   if (authErr || !admin) return { error: authErr ?? 'Niste ovlašćeni.' };
 
   const { data: pred } = await admin
@@ -1086,6 +1186,13 @@ export async function reassignPredavanjeInstructorAsAdmin(
   revalidatePath('/admin/kalendar');
   revalidatePath(`/admin/termin/${currentTermId}`);
   revalidatePath(`/admin/termin/${newTermId}`);
+  if (actor) {
+    logActivity(actor, 'predavanje.reassign_instructor', `Premeštena radionica kod drugog instruktora.`, {
+      entityType: 'predavanje',
+      entityId: predavanjeId,
+      metadata: { currentTermId, newTermId, newInstructorId },
+    });
+  }
   return { newTermId };
 }
 
@@ -1095,7 +1202,7 @@ export async function moveTermAsAdmin(
   newDate: string,
   newSlotIndex: number
 ): Promise<{ error?: string }> {
-  const { admin, error: authErr } = await requireAdmin();
+  const { admin, error: authErr, actor } = await requireAdmin();
   if (authErr || !admin) return { error: authErr ?? 'Niste ovlašćeni.' };
   const slot = Math.min(15, Math.max(0, newSlotIndex));
   const dateStr = newDate.slice(0, 10);
@@ -1127,12 +1234,19 @@ export async function moveTermAsAdmin(
   if (error) return { error: error.message };
   revalidatePath('/admin/kalendar');
   revalidatePath(`/admin/termin/${termId}`);
+  if (actor) {
+    logActivity(actor, 'term.move', `Premešten termin na ${dateStr} ${TIME_SLOTS[slot] ?? `slot ${slot}`}.`, {
+      entityType: 'term',
+      entityId: termId,
+      metadata: { from: { date: term.date, slot: term.slot_index }, to: { date: dateStr, slot } },
+    });
+  }
   return {};
 }
 
 /** "Otkazivanje" – čuva istorijski trag u otkazani_termini (prikazuje se sivo na kalendaru) pre brisanja. */
 export async function deleteTermAsAdmin(termId: string): Promise<{ error?: string }> {
-  const { admin, error: authErr } = await requireAdmin();
+  const { admin, error: authErr, actor } = await requireAdmin();
   if (authErr || !admin) return { error: authErr ?? 'Niste ovlašćeni.' };
 
   // Save all predavanja in this term to history before deleting
@@ -1147,6 +1261,9 @@ export async function deleteTermAsAdmin(termId: string): Promise<{ error?: strin
   const { error } = await admin.from('terms').delete().eq('id', termId);
   if (error) return { error: error.message };
   revalidatePath('/admin/kalendar');
+  if (actor) {
+    logActivity(actor, 'term.cancel', `Otkazan termin (ostaje istorijski trag).`, { entityType: 'term', entityId: termId });
+  }
   return {};
 }
 
@@ -1156,13 +1273,16 @@ export async function deleteTermAsAdmin(termId: string): Promise<{ error?: strin
  * automatski (ON DELETE CASCADE na predavanja.term_id).
  */
 export async function permanentlyDeleteTermAsAdmin(termId: string): Promise<{ error?: string }> {
-  const { admin, error: authErr } = await requireAdmin();
+  const { admin, error: authErr, actor } = await requireAdmin();
   if (authErr || !admin) return { error: authErr ?? 'Niste ovlašćeni.' };
 
   await admin.from('terms').delete().eq('nastavak_of_term_id', termId).eq('napomena', AUTO_SPILLOVER_NAPOMENA);
   const { error } = await admin.from('terms').delete().eq('id', termId);
   if (error) return { error: error.message };
   revalidatePath('/admin/kalendar');
+  if (actor) {
+    logActivity(actor, 'term.delete', `Trajno obrisan termin (bez traga).`, { entityType: 'term', entityId: termId });
+  }
   return {};
 }
 
@@ -1177,7 +1297,7 @@ export async function deleteTermsAsAdmin(
   otkazaniIds: string[] = [],
   zahtevIds: string[] = []
 ): Promise<{ failed: { id: string; error: string }[] }> {
-  const { admin, error: authErr } = await requireAdmin();
+  const { admin, error: authErr, actor } = await requireAdmin();
   if (authErr || !admin) return { failed: [...termIds, ...otkazaniIds, ...zahtevIds].map((id) => ({ id, error: authErr ?? 'Niste ovlašćeni.' })) };
 
   const [termResults, otkazaniResults, zahtevResults] = await Promise.all([
@@ -1201,6 +1321,9 @@ export async function deleteTermsAsAdmin(
     ),
   ]);
   if (zahtevIds.length > 0) revalidatePath('/dashboard/zahtevi');
+  if (actor && zahtevIds.length > 0) {
+    logActivity(actor, 'zahtev.bulk_delete', `Obrisano ${zahtevIds.length} zahtev(a) sa kalendara.`, { entityType: 'zahtev', metadata: { zahtevIds } });
+  }
   return { failed: [...termResults, ...otkazaniResults, ...zahtevResults].filter((r): r is { id: string; error: string } => r.error !== null) };
 }
 
@@ -1211,7 +1334,7 @@ export async function deleteTermsAsAdmin(
  * da se ne prekrši ograničenje usred operacije).
  */
 export async function updateTermClassroomAsAdmin(termId: string, classroomId: string): Promise<{ error?: string }> {
-  const { admin, error: authErr } = await requireAdmin();
+  const { admin, error: authErr, actor } = await requireAdmin();
   if (authErr || !admin) return { error: authErr ?? 'Niste ovlašćeni.' };
 
   const { data: term } = await admin.from('terms').select('classroom_id, date, slot_index').eq('id', termId).single();
@@ -1239,6 +1362,9 @@ export async function updateTermClassroomAsAdmin(termId: string, classroomId: st
   if (error) return { error: error.message };
   revalidatePath('/admin/kalendar');
   revalidatePath(`/admin/termin/${termId}`);
+  if (actor) {
+    logActivity(actor, 'term.change_classroom', `Promenjena učionica termina.`, { entityType: 'term', entityId: termId, metadata: { classroomId } });
+  }
   return {};
 }
 
@@ -1254,7 +1380,7 @@ export async function swapTermsAsAdmin(
   termBId: string,
   opts: { termin: boolean; instruktor: boolean; ucionica: boolean; klijent: boolean }
 ): Promise<{ error?: string }> {
-  const { admin, error: authErr } = await requireAdmin();
+  const { admin, error: authErr, actor } = await requireAdmin();
   if (authErr || !admin) return { error: authErr ?? 'Niste ovlašćeni.' };
 
   const { error } = await admin.rpc('swap_terms', {
@@ -1270,6 +1396,13 @@ export async function swapTermsAsAdmin(
   await Promise.all([syncSpilloverForTerm(admin, termAId), syncSpilloverForTerm(admin, termBId)]);
 
   revalidatePath('/admin/kalendar');
+  if (actor) {
+    logActivity(actor, 'term.swap', `Zamenjena dva termina (${[opts.termin && 'termin', opts.instruktor && 'instruktor', opts.ucionica && 'učionica', opts.klijent && 'klijent'].filter(Boolean).join(', ')}).`, {
+      entityType: 'term',
+      entityId: termAId,
+      metadata: { termAId, termBId, opts },
+    });
+  }
   return {};
 }
 
@@ -1287,7 +1420,7 @@ export async function copyTermToSlotsAsAdmin(
   fields: { instruktor: boolean; ucionica: boolean; klijent: boolean },
   termTypeId?: string | null
 ): Promise<{ failed: { date: string; slotIndex: number; error: string }[] }> {
-  const { admin, error: authErr } = await requireAdmin();
+  const { admin, error: authErr, actor } = await requireAdmin();
   if (authErr || !admin) return { failed: targets.map((t) => ({ ...t, error: authErr ?? 'Niste ovlašćeni.' })) };
   if (targets.length === 0) return { failed: [] };
 
@@ -1381,10 +1514,18 @@ export async function copyTermToSlotsAsAdmin(
   );
   revalidatePath('/admin/kalendar');
   revalidatePath('/dashboard/zahtevi');
-  return { failed: results.filter((r): r is { date: string; slotIndex: number; error: string } => r.error !== null) };
+  const failed = results.filter((r): r is { date: string; slotIndex: number; error: string } => r.error !== null);
+  if (actor) {
+    logActivity(actor, 'term.copy', `Kopiran termin na ${targets.length - failed.length}/${targets.length} slot(ova).`, {
+      entityType: 'term',
+      entityId: sourceTermId,
+      metadata: { targets, fields, termTypeId },
+    });
+  }
+  return { failed };
 }
 
-export type TermTypeRow = { id: string; naziv: string; opis: string | null; cena_po_casu: number | null; program_id: string | null; trajanje_minuta: number };
+export type TermTypeRow ={ id: string; naziv: string; opis: string | null; cena_po_casu: number | null; program_id: string | null; trajanje_minuta: number };
 
 export async function getTermTypes(): Promise<TermTypeRow[]> {
   const admin = createAdminClient();
@@ -1705,7 +1846,7 @@ export async function updateClientAsAdmin(
     programi?: ClientProgramSelection[];
   }
 ): Promise<{ error?: string }> {
-  const { admin, error: authErr } = await requireAdmin();
+  const { admin, error: authErr, actor } = await requireAdmin();
   if (authErr || !admin) return { error: authErr ?? 'Samo admin.' };
   if (!payload.kontakt_telefon?.trim()) {
     return { error: 'Kontakt telefon je obavezan.' };
@@ -1718,6 +1859,9 @@ export async function updateClientAsAdmin(
   if (programi) await saveClientProgrami(admin, clientId, programi);
   revalidatePath('/admin/klijenti');
   revalidatePath(`/admin/klijenti/${clientId}`);
+  if (actor) {
+    logActivity(actor, 'client.update', `Izmenjen klijent ${rest.ime} ${rest.prezime}.`, { entityType: 'client', entityId: clientId });
+  }
   return {};
 }
 
@@ -1741,7 +1885,7 @@ export async function createClientAsAdminDirect(payload: {
   programi?: ClientProgramSelection[];
   instructorId?: string | null;
 }): Promise<{ error?: string; clientId?: string }> {
-  const { admin, error: authErr } = await requireAdmin();
+  const { admin, error: authErr, actor } = await requireAdmin();
   if (authErr || !admin) return { error: authErr ?? 'Samo admin.' };
   if (!payload.kontakt_telefon?.trim()) return { error: 'Kontakt telefon je obavezan.' };
 
@@ -1779,6 +1923,9 @@ export async function createClientAsAdminDirect(payload: {
   revalidatePath('/admin/klijenti');
   revalidatePath('/admin/kalendar');
   if (instructorId) revalidatePath(`/admin/view/${instructorId}/klijenti`);
+  if (actor) {
+    logActivity(actor, 'client.create', `Kreiran klijent ${rest.ime} ${rest.prezime}.`, { entityType: 'client', entityId: newClient.id });
+  }
   return { clientId: newClient.id };
 }
 
@@ -1787,13 +1934,13 @@ export async function createClientAsAdminDirect(payload: {
  * Samo korisnik iz tabele admin_users (super admin u smislu aplikacije).
  */
 export async function deleteClientAsAdmin(clientId: string): Promise<{ error?: string }> {
-  const { admin, error: authErr } = await requireAdmin();
+  const { admin, error: authErr, actor } = await requireAdmin();
   if (authErr || !admin) return { error: authErr ?? 'Samo super admin može da briše klijente.' };
 
   const trimmedId = clientId?.trim();
   if (!trimmedId) return { error: 'Nedostaje ID klijenta.' };
 
-  const { data: existing, error: fetchErr } = await admin.from('clients').select('id').eq('id', trimmedId).maybeSingle();
+  const { data: existing, error: fetchErr } = await admin.from('clients').select('id, ime, prezime').eq('id', trimmedId).maybeSingle();
   if (fetchErr) return { error: fetchErr.message };
   if (!existing) return { error: 'Klijent nije pronađen.' };
 
@@ -1810,6 +1957,9 @@ export async function deleteClientAsAdmin(clientId: string): Promise<{ error?: s
   }
   // Instruktorski dashboardi / kalendar mogu keširati termine sa ovim klijentom
   revalidatePath('/dashboard', 'layout');
+  if (actor) {
+    logActivity(actor, 'client.delete', `Trajno obrisan klijent ${existing.ime} ${existing.prezime}.`, { entityType: 'client', entityId: trimmedId });
+  }
   return {};
 }
 
@@ -2014,25 +2164,40 @@ export async function createUplata(
   if (!user) return { error: 'Niste ulogovani.' };
   const admin = createAdminClient();
   const { data: adminRow } = await supabase.from('admin_users').select('user_id').eq('user_id', user.id).single();
-  const { data: instructor } = await admin.from('instructors').select('id').eq('user_id', user.id).single();
+  const { data: instructor } = await admin.from('instructors').select('id, ime, prezime').eq('user_id', user.id).single();
   const isAdmin = !!adminRow;
   const isOwnInstructor = instructor?.id === instructorId;
   if (!isAdmin && !isOwnInstructor) return { error: 'Niste ovlašćeni da unesete uplatu za tog instruktora.' };
   const popust = popustPercent != null && Number.isFinite(popustPercent) && popustPercent >= 0 && popustPercent <= 100 ? popustPercent : null;
-  const { error } = await admin.from('uplate').insert({
-    instructor_id: instructorId,
-    client_id: clientId,
-    iznos: iznos != null && Number.isFinite(iznos) ? iznos : null,
-    term_type_id: termTypeId || null,
-    broj_casova: Math.max(0, brojCasova),
-    popust_percent: popust,
-    napomena: napomena?.trim() || null,
-  });
+  const { data: inserted, error } = await admin
+    .from('uplate')
+    .insert({
+      instructor_id: instructorId,
+      client_id: clientId,
+      iznos: iznos != null && Number.isFinite(iznos) ? iznos : null,
+      term_type_id: termTypeId || null,
+      broj_casova: Math.max(0, brojCasova),
+      popust_percent: popust,
+      napomena: napomena?.trim() || null,
+    })
+    .select('id')
+    .single();
   if (error) return { error: error.message };
   revalidatePath('/admin/uplate');
   revalidatePath('/admin/uplate/novi');
   revalidatePath('/dashboard/uplate');
   revalidatePath('/dashboard/uplate/novi');
+  logActivity(
+    {
+      id: user.id,
+      email: user.email ?? null,
+      name: isAdmin ? null : instructor ? `${instructor.ime} ${instructor.prezime}` : null,
+      role: isAdmin ? 'admin' : 'instruktor',
+    },
+    'uplata.create',
+    `Uneta uplata (${brojCasova} čas(ova)${iznos != null ? `, ${iznos} din` : ''}).`,
+    { entityType: 'uplata', entityId: inserted?.id ?? null, metadata: { instructorId, clientId, iznos, termTypeId, brojCasova, popust } }
+  );
   return {};
 }
 
@@ -2102,7 +2267,7 @@ export async function updatePotentialClient(
 export async function convertPotentialClientToClient(
   pcId: string
 ): Promise<{ error?: string; clientId?: string }> {
-  const { admin, error: authErr } = await requireAdmin();
+  const { admin, error: authErr, actor } = await requireAdmin();
   if (authErr || !admin) return { error: authErr ?? 'Samo admin.' };
 
   const { data: pc } = await admin.from('potential_clients').select('*').eq('id', pcId).single();
@@ -2120,6 +2285,13 @@ export async function convertPotentialClientToClient(
   if (pc.term_id) revalidatePath(`/admin/termin/${pc.term_id}`);
   revalidatePath('/admin/klijenti');
   revalidatePath('/admin/testiranja');
+  if (actor) {
+    logActivity(actor, 'potential_client.convert', `Prebačen potencijalni klijent ${pc.ime} ${pc.prezime ?? ''} u klijenta.`, {
+      entityType: 'client',
+      entityId: newClient.id,
+      metadata: { potentialClientId: pcId },
+    });
+  }
   return { clientId: newClient.id };
 }
 

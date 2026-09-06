@@ -24,6 +24,7 @@ const entityLinks = [
 
 /** Ostalo – retko se koristi. */
 const otherLinks = [
+  { href: '/admin/dnevnik', label: 'Dnevnik aktivnosti' },
   { href: '/admin/podesavanja', label: 'Podešavanja' },
   { href: '/admin/uputstvo', label: 'Uputstvo (uloge)' },
 ];

@@ -6,6 +6,8 @@ import { termMozeNovoPredavanje } from '@/lib/settings';
 import { SEEDED_TERM_CATEGORY_INDIVIDUAL_ID } from '@/lib/term-categories';
 import { syncSpilloverForTerm } from '@/app/admin/actions';
 import { revalidatePath } from 'next/cache';
+import { logActivity, getInstructorActor } from '@/lib/audit';
+import { TIME_SLOTS } from '@/lib/constants';
 
 function getAdmin() {
   try {
@@ -80,6 +82,10 @@ export async function preuzmiZahtev(zahtevId: string): Promise<{ error?: string 
     return { error: error.message };
   }
   revalidatePath('/dashboard/zahtevi');
+  const actor = await getInstructorActor();
+  if (actor) {
+    logActivity(actor, 'zahtev.preuzeto', `Preuzet zahtev za čas.`, { entityType: 'zahtev', entityId: zahtevId });
+  }
   return {};
 }
 
@@ -168,6 +174,14 @@ export async function potvrdiZahtev(zahtevId: string): Promise<{ error?: string 
   }
   revalidatePath('/dashboard/zahtevi');
   revalidatePath('/ucenik');
+  const actor = await getInstructorActor();
+  if (actor) {
+    logActivity(actor, 'zahtev.potvrdjeno', `Potvrđen zahtev za ${dateStr} ${TIME_SLOTS[slot] ?? `slot ${slot}`} – kreiran termin.`, {
+      entityType: 'zahtev',
+      entityId: zahtevId,
+      metadata: { termId, predavanjeId: predavanje.id },
+    });
+  }
   return {};
 }
 
@@ -262,6 +276,14 @@ export async function promeniTerminZahtev(
   }
   revalidatePath('/dashboard/zahtevi');
   revalidatePath('/ucenik');
+  const actor = await getInstructorActor();
+  if (actor) {
+    logActivity(actor, 'zahtev.promenjen_termin', `Predložen drugi termin (${dateStr} ${TIME_SLOTS[slot] ?? `slot ${slot}`}) za zahtev.`, {
+      entityType: 'zahtev',
+      entityId: zahtevId,
+      metadata: { termId, predavanjeId: predavanje.id, note },
+    });
+  }
   return {};
 }
 
@@ -299,5 +321,9 @@ export async function odbijZahtev(zahtevId: string, note?: string): Promise<{ er
     return { error: error.message };
   }
   revalidatePath('/dashboard/zahtevi');
+  const actor = await getInstructorActor();
+  if (actor) {
+    logActivity(actor, 'zahtev.odbijen', `Odbijen zahtev za čas.`, { entityType: 'zahtev', entityId: zahtevId, metadata: { note } });
+  }
   return {};
 }

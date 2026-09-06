@@ -6,8 +6,9 @@ import { getDashboardInstructor } from '@/lib/dashboard';
 import { termMozeNovoPredavanje, getMaxTerminaPoSlotu, jedanDeteMaksimalnoPoTerminu } from '@/lib/settings';
 import { revalidatePath } from 'next/cache';
 import { syncSpilloverForTerm } from '@/app/admin/actions';
-import { AUTO_SPILLOVER_NAPOMENA } from '@/lib/constants';
+import { AUTO_SPILLOVER_NAPOMENA, TIME_SLOTS } from '@/lib/constants';
 import { SEEDED_TERM_CATEGORY_INDIVIDUAL_ID } from '@/lib/term-categories';
+import { logActivity, getInstructorActor } from '@/lib/audit';
 
 export async function createPredavanje(
   termId: string,
@@ -89,6 +90,14 @@ export async function createPredavanje(
   revalidatePath('/dashboard');
   revalidatePath('/dashboard/klijenti');
   console.log('[termin] createPredavanje success');
+  const actor = await getInstructorActor();
+  if (actor) {
+    logActivity(actor, 'predavanje.create', `Dodata radionica (dete) u sopstveni termin.`, {
+      entityType: 'predavanje',
+      entityId: termId,
+      metadata: { termId, clientId, odrzano, placeno, termTypeId },
+    });
+  }
   return {};
 }
 
@@ -160,6 +169,14 @@ export async function createPredavanjaBatch(
   revalidatePath(`/dashboard/termin/${termId}`);
   revalidatePath('/dashboard');
   revalidatePath('/dashboard/klijenti');
+  const actor = await getInstructorActor();
+  if (actor) {
+    logActivity(actor, 'predavanje.create_batch', `Dodato ${unique.length} radionica (grupa) u sopstveni termin.`, {
+      entityType: 'term',
+      entityId: termId,
+      metadata: { clientIds: unique, termTypeId },
+    });
+  }
   return {};
 }
 
@@ -209,6 +226,14 @@ export async function updatePredavanje(
   revalidatePath('/dashboard');
   revalidatePath('/dashboard/klijenti');
   revalidatePath(`/dashboard/predavanje/${predavanjeId}`);
+  const actor = await getInstructorActor();
+  if (actor) {
+    logActivity(actor, 'predavanje.update', `Izmenjena radionica u sopstvenom terminu.`, {
+      entityType: 'predavanje',
+      entityId: predavanjeId,
+      metadata: { termId, clientId, odrzano, placeno, termTypeId },
+    });
+  }
   return {};
 }
 
@@ -269,6 +294,10 @@ export async function deletePredavanje(predavanjeId: string, termId: string): Pr
   revalidatePath(`/dashboard/termin/${termId}`);
   revalidatePath('/dashboard');
   revalidatePath('/dashboard/klijenti');
+  const actor = await getInstructorActor();
+  if (actor) {
+    logActivity(actor, 'predavanje.delete', `Obrisana radionica iz sopstvenog termina.`, { entityType: 'predavanje', entityId: predavanjeId, metadata: { termId } });
+  }
   return {};
 }
 
@@ -340,6 +369,14 @@ export async function moveTermAsInstructor(
   if (error) return { error: error.message };
   revalidatePath('/dashboard');
   revalidatePath(`/dashboard/termin/${termId}`);
+  const actor = await getInstructorActor();
+  if (actor) {
+    logActivity(actor, 'term.move', `Premešten sopstveni termin na ${dateStr} ${TIME_SLOTS[slot] ?? `slot ${slot}`}.`, {
+      entityType: 'term',
+      entityId: termId,
+      metadata: { from: { date: term.date, slot: term.slot_index }, to: { date: dateStr, slot } },
+    });
+  }
   return {};
 }
 
@@ -430,6 +467,10 @@ export async function deleteTermAsInstructor(termId: string): Promise<{ error?: 
   const { error } = await admin.from('terms').delete().eq('id', termId);
   if (error) return { error: error.message };
   revalidatePath('/dashboard');
+  const actor = await getInstructorActor();
+  if (actor) {
+    logActivity(actor, 'term.delete', `Obrisan sopstveni termin.`, { entityType: 'term', entityId: termId });
+  }
   return {};
 }
 
@@ -472,6 +513,10 @@ export async function updateTermClassroom(
   if (error) return { error: error.message };
   revalidatePath('/dashboard');
   revalidatePath(`/dashboard/termin/${termId}`);
+  const actor = await getInstructorActor();
+  if (actor) {
+    logActivity(actor, 'term.change_classroom', `Promenjena učionica sopstvenog termina.`, { entityType: 'term', entityId: termId, metadata: { classroomId } });
+  }
   return {};
 }
 
@@ -539,5 +584,14 @@ export async function createBulkTermsAsInstructor(
     })
   );
   revalidatePath('/dashboard');
-  return { failed: results.filter((r): r is { date: string; slotIndex: number; error: string } => r.error !== null) };
+  const failed = results.filter((r): r is { date: string; slotIndex: number; error: string } => r.error !== null);
+  const actor = await getInstructorActor();
+  if (actor) {
+    logActivity(actor, 'term.bulk_create', `Zakazano ${slots.length - failed.length}/${slots.length} sopstveni termin(a).`, {
+      entityType: 'client',
+      entityId: clientId,
+      metadata: { termTypeId, slots },
+    });
+  }
+  return { failed };
 }
