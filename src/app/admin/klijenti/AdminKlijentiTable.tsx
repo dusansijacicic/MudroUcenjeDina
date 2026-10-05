@@ -12,6 +12,7 @@ export type AdminKlijentRow = {
   loginEmail: string | null;
   godiste: number | null;
   razred: string | null;
+  skola: string | null;
   datumTestiranja: string | null;
   instructors: { id: string; ime: string; prezime: string }[];
   problemTypes: string[];
@@ -24,7 +25,7 @@ export default function AdminKlijentiTable({ rows }: { rows: AdminKlijentRow[] }
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return rows;
-    return rows.filter((r) => `${r.ime} ${r.prezime}`.toLowerCase().includes(q));
+    return rows.filter((r) => `${r.ime} ${r.prezime} ${r.skola ?? ''} ${r.loginEmail ?? ''}`.toLowerCase().includes(q));
   }, [rows, search]);
 
   return (
@@ -34,7 +35,7 @@ export default function AdminKlijentiTable({ rows }: { rows: AdminKlijentRow[] }
           type="search"
           autoComplete="off"
           spellCheck={false}
-          placeholder="Pretraga po imenu ili prezimenu…"
+          placeholder="Pretraga po imenu, prezimenu, školi ili emailu…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="w-full max-w-sm rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm text-stone-900 placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500"
@@ -54,6 +55,7 @@ export default function AdminKlijentiTable({ rows }: { rows: AdminKlijentRow[] }
               <th className="text-left p-3 font-medium text-stone-600">Datum testiranja</th>
               <th className="text-left p-3 font-medium text-stone-600">Email za prijavu</th>
               <th className="text-left p-3 font-medium text-stone-600">Godište / Razred</th>
+              <th className="text-left p-3 font-medium text-stone-600">Škola</th>
               <th className="text-left p-3 font-medium text-stone-600">Kupljeno / Održano / Preostalo po vrsti</th>
               <th className="text-left p-3 font-medium text-stone-600">Instruktori</th>
               <th className="text-right p-3 font-medium text-stone-600">Akcija</th>
@@ -85,6 +87,7 @@ export default function AdminKlijentiTable({ rows }: { rows: AdminKlijentRow[] }
                   <td className="p-3 text-stone-600">
                     {r.godiste ?? '—'} {r.razred ? ` / ${r.razred}` : ''}
                   </td>
+                  <td className="p-3 text-stone-600">{r.skola ?? '—'}</td>
                   <td className="p-3 text-stone-600">
                     {r.stanje.length === 0 ? (
                       <span className="text-stone-400">—</span>
