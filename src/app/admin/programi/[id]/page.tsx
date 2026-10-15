@@ -18,7 +18,7 @@ export default async function AdminProgramEditPage({
   const adminSupabase = createAdminClient();
   const { data: row, error } = await adminSupabase
     .from('programi')
-    .select('id, naziv, opis')
+    .select('id, naziv, opis, sort_order')
     .eq('id', id)
     .single();
 
@@ -27,7 +27,12 @@ export default async function AdminProgramEditPage({
   return (
     <div className="max-w-lg">
       <h1 className="text-xl font-semibold text-stone-800 mb-2">Izmena programa</h1>
-      <ProgramEditForm id={row.id} initialNaziv={row.naziv ?? ''} initialOpis={row.opis ?? ''} />
+      <ProgramEditForm
+        id={row.id}
+        initialNaziv={row.naziv ?? ''}
+        initialOpis={row.opis ?? ''}
+        initialSortOrder={row.sort_order ?? null}
+      />
       <p className="mt-4">
         <Link href="/admin/programi" className="text-sm text-amber-700 hover:underline">
           ← Nazad na programe

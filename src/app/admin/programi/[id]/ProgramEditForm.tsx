@@ -10,14 +10,17 @@ export default function ProgramEditForm({
   id,
   initialNaziv,
   initialOpis,
+  initialSortOrder,
 }: {
   id: string;
   initialNaziv: string;
   initialOpis: string;
+  initialSortOrder: number | null;
 }) {
   const router = useRouter();
   const [naziv, setNaziv] = useState(initialNaziv);
   const [opis, setOpis] = useState(initialOpis);
+  const [sortOrder, setSortOrder] = useState(initialSortOrder != null ? String(initialSortOrder) : '');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -28,8 +31,13 @@ export default function ProgramEditForm({
       setError('Unesite naziv.');
       return;
     }
+    const parsedSortOrder = sortOrder.trim() === '' ? null : Number(sortOrder);
+    if (parsedSortOrder != null && !Number.isFinite(parsedSortOrder)) {
+      setError('Redosled mora biti broj.');
+      return;
+    }
     setLoading(true);
-    const result = await updateProgramAsAdmin(id, naziv.trim(), opis.trim() || null);
+    const result = await updateProgramAsAdmin(id, naziv.trim(), opis.trim() || null, parsedSortOrder);
     setLoading(false);
     if (result.error) {
       setError(result.error);
@@ -61,6 +69,18 @@ export default function ProgramEditForm({
           onChange={(e) => setOpis(e.target.value)}
           className="w-full rounded-lg border border-stone-300 px-3 py-2 text-stone-800"
         />
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-stone-700 mb-1">Redosled (manji broj = ranije na listi)</label>
+        <input
+          type="number"
+          value={sortOrder}
+          onChange={(e) => setSortOrder(e.target.value)}
+          className="w-32 rounded-lg border border-stone-300 px-3 py-2 text-stone-800"
+        />
+        <p className="text-xs text-stone-500 mt-1">
+          Npr. da ubacite program tačno između dva postojeća, postavite broj između njihovih vrednosti redosleda.
+        </p>
       </div>
       {error && <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>}
       <div className="flex gap-3">

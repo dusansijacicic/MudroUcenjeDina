@@ -12,7 +12,11 @@ export default async function AdminProgramiPage() {
   if (!isAdmin) redirect('/login');
 
   const adminSupabase = createAdminClient();
-  const { data: rows } = await adminSupabase.from('programi').select('id, naziv, opis').order('naziv');
+  const { data: rows } = await adminSupabase
+    .from('programi')
+    .select('id, naziv, opis, sort_order')
+    .order('sort_order', { ascending: true, nullsFirst: false })
+    .order('naziv');
 
   return (
     <div className="max-w-lg">
@@ -29,7 +33,10 @@ export default async function AdminProgramiPage() {
           (rows ?? []).map((r) => (
             <div key={r.id} className="p-4 flex items-center justify-between gap-4">
               <div>
-                <p className="font-medium text-stone-800">{r.naziv}</p>
+                <p className="font-medium text-stone-800">
+                  {r.naziv}
+                  <span className="ml-2 text-xs font-normal text-stone-400">redosled: {r.sort_order ?? '—'}</span>
+                </p>
                 {r.opis && <p className="text-sm text-stone-600 mt-0.5">{r.opis}</p>}
               </div>
               <div className="flex items-center gap-2 shrink-0">

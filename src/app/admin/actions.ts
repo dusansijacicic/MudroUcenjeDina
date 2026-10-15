@@ -1589,33 +1589,42 @@ export async function deleteTermTypeAsAdmin(id: string): Promise<{ error?: strin
   return {};
 }
 
-export type ProgramRow = { id: string; naziv: string; opis: string | null };
+export type ProgramRow = { id: string; naziv: string; opis: string | null; sort_order: number | null };
 
 export async function getPrograms(): Promise<ProgramRow[]> {
   const admin = createAdminClient();
-  const { data } = await admin.from('programi').select('id, naziv, opis').order('naziv');
+  const { data } = await admin.from('programi').select('id, naziv, opis, sort_order').order('sort_order', { ascending: true, nullsFirst: false }).order('naziv');
   return (data ?? []) as ProgramRow[];
 }
 
-export async function createProgramAsAdmin(naziv: string, opis: string | null): Promise<{ error?: string }> {
+/** Novi program ide na kraj liste (max sort_order + 10) osim ako nije eksplicitno zadat redosled. */
+export async function createProgramAsAdmin(naziv: string, opis: string | null, sortOrder?: number | null): Promise<{ error?: string }> {
   const { admin, error: authErr } = await requireAdmin();
   if (authErr || !admin) return { error: authErr ?? 'Samo admin.' };
+  let effectiveSortOrder = sortOrder ?? null;
+  if (effectiveSortOrder == null) {
+    const { data: maxRow } = await admin.from('programi').select('sort_order').order('sort_order', { ascending: false, nullsFirst: false }).limit(1).maybeSingle();
+    effectiveSortOrder = (maxRow?.sort_order ?? 0) + 10;
+  }
   const { error } = await admin.from('programi').insert({
     naziv: naziv.trim(),
     opis: opis?.trim() || null,
+    sort_order: effectiveSortOrder,
   });
   if (error) return { error: error.message };
   revalidatePath('/admin/programi');
   return {};
 }
 
-export async function updateProgramAsAdmin(id: string, naziv: string, opis: string | null): Promise<{ error?: string }> {
+export async function updateProgramAsAdmin(id: string, naziv: string, opis: string | null, sortOrder?: number | null): Promise<{ error?: string }> {
   const { admin, error: authErr } = await requireAdmin();
   if (authErr || !admin) return { error: authErr ?? 'Samo admin.' };
-  const { error } = await admin.from('programi').update({
+  const row: { naziv: string; opis: string | null; sort_order?: number | null } = {
     naziv: naziv.trim(),
     opis: opis?.trim() || null,
-  }).eq('id', id);
+  };
+  if (sortOrder !== undefined) row.sort_order = sortOrder;
+  const { error } = await admin.from('programi').update(row).eq('id', id);
   if (error) return { error: error.message };
   revalidatePath('/admin/programi');
   return {};
