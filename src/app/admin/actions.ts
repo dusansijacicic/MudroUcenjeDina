@@ -711,7 +711,7 @@ export async function getAdminInstructorsList(): Promise<{ id: string; ime: stri
   const { data: admin } = await supabase.from('admin_users').select('user_id').eq('user_id', user.id).single();
   if (!admin) return [];
   const adminSupabase = createAdminClient();
-  const { data } = await adminSupabase.from('instructors').select('id, ime, prezime').order('prezime').order('ime');
+  const { data } = await adminSupabase.from('instructors').select('id, ime, prezime').eq('aktivan', true).order('prezime').order('ime');
   return data ?? [];
 }
 
@@ -780,6 +780,32 @@ export async function updateInstructorAsAdmin(
   revalidatePath(`/admin/predavaci/${instructorId}`);
   revalidatePath(`/admin/view/${instructorId}`);
   revalidatePath('/admin/kalendar');
+  return {};
+}
+
+/**
+ * "Suspenduje" instruktora – ne briše ga niti dira postojeće termine/istoriju, samo ga uklanja iz
+ * lista za dodelu NOVOG posla (zakazivanje, dodela instruktora, nova uplata). Prikazuje se i dalje
+ * u Admin → Instruktori (sa oznakom) i u filterima/legendi kalendara (da se ne izgubi istorija).
+ */
+export async function setInstructorAktivanAsAdmin(instructorId: string, aktivan: boolean): Promise<{ error?: string }> {
+  const { admin, error: authErr, actor } = await requireAdmin();
+  if (authErr || !admin) return { error: authErr ?? 'Samo admin.' };
+  const { data: instr } = await admin.from('instructors').select('ime, prezime').eq('id', instructorId).maybeSingle();
+  const { error } = await admin.from('instructors').update({ aktivan }).eq('id', instructorId);
+  if (error) return { error: error.message };
+  revalidatePath('/admin/predavaci');
+  revalidatePath('/admin/kalendar');
+  revalidatePath('/admin/termin/novi');
+  revalidatePath('/admin/uplate/novi');
+  if (actor) {
+    logActivity(
+      actor,
+      aktivan ? 'instructor.activate' : 'instructor.suspend',
+      `${aktivan ? 'Aktiviran' : 'Suspendovan'} instruktor ${instr?.ime ?? ''} ${instr?.prezime ?? ''}`.trim() + '.',
+      { entityType: 'instructor', entityId: instructorId }
+    );
+  }
   return {};
 }
 

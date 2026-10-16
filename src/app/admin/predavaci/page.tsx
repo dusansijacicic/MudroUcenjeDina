@@ -2,6 +2,7 @@ import { getAuthedUser, getIsAdmin } from '@/lib/auth';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
+import InstructorAktivanToggle from './InstructorAktivanToggle';
 
 export default async function AdminPredavaciPage() {
   const { supabase, user } = await getAuthedUser();
@@ -10,18 +11,18 @@ export default async function AdminPredavaciPage() {
   const isAdmin = await getIsAdmin();
   if (!isAdmin) redirect('/login');
 
-  let instructors: { id: string; ime: string; prezime: string; email: string; color: string | null }[] | null = null;
+  let instructors: { id: string; ime: string; prezime: string; email: string; color: string | null; aktivan: boolean }[] | null = null;
   try {
     const adminSupabase = createAdminClient();
     const { data } = await adminSupabase
       .from('instructors')
-      .select('id, ime, prezime, email, color')
+      .select('id, ime, prezime, email, color, aktivan')
       .order('prezime');
     instructors = data;
   } catch {
     const { data } = await supabase
       .from('instructors')
-      .select('id, ime, prezime, email, color')
+      .select('id, ime, prezime, email, color, aktivan')
       .order('prezime');
     instructors = data;
   }
@@ -52,17 +53,23 @@ export default async function AdminPredavaciPage() {
           <ul className="stagger-children">
             {(instructors ?? []).map((inst) => (
               <li key={inst.id}>
-                <div className="flex items-center gap-4 p-4 border-b border-stone-100 last:border-0">
+                <div className={`flex items-center gap-4 p-4 border-b border-stone-100 last:border-0${inst.aktivan === false ? ' opacity-60' : ''}`}>
                   <div
                     className="w-3 h-3 rounded-full shrink-0"
                     style={{ backgroundColor: inst.color ?? '#EAB308' }}
                   />
                   <div className="flex-1 min-w-0">
-                    <div className="font-medium text-stone-800 truncate">
+                    <div className="font-medium text-stone-800 truncate flex items-center gap-2">
                       {inst.ime} {inst.prezime}
+                      {inst.aktivan === false && (
+                        <span className="rounded-full bg-stone-200 px-2 py-0.5 text-xs font-medium text-stone-600 shrink-0">
+                          Suspendovan
+                        </span>
+                      )}
                     </div>
                     <div className="text-sm text-stone-500 truncate">{inst.email}</div>
                   </div>
+                  <InstructorAktivanToggle id={inst.id} aktivan={inst.aktivan !== false} />
                   <Link
                     href={`/admin/predavaci/${inst.id}`}
                     className="text-sm text-stone-500 hover:text-amber-700 shrink-0 ui-transition"

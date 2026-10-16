@@ -26,6 +26,7 @@ export default async function AdminTerminNoviPage({
   const { data: instructors } = await adminSupabase
     .from('instructors')
     .select('id, ime, prezime')
+    .eq('aktivan', true)
     .order('prezime')
     .order('ime');
   const { data: clients } = await adminSupabase
