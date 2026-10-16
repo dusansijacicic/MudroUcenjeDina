@@ -151,7 +151,11 @@ export default async function AdminKalendarPage({
   const base = '/admin/kalendar';
   const month = params.month || new Date().toISOString().slice(0, 7);
   const day = singleDay ?? todayStr;
-  const legendInstructors = (instructorsList ?? []).map((i) => ({
+  // Suspendovan instruktor se nigde ne nudi kao opcija (ni u filteru, ni u legendi, ni u pickerima za
+  // dodelu novog posla) – i dalje se vidi NA SAMOM rasporedu ako već ima zakazane termine (ti termini
+  // se ne diraju), samo se ne pojavljuje po imenu u listama za izbor.
+  const activeInstructors = (instructorsList ?? []).filter((i) => (i as { aktivan?: boolean }).aktivan !== false);
+  const legendInstructors = activeInstructors.map((i) => ({
     id: i.id,
     ime: i.ime ?? '',
     prezime: i.prezime ?? '',
@@ -167,7 +171,7 @@ export default async function AdminKalendarPage({
         <h1 className="text-xl font-semibold text-stone-800">Kalendar (svi instruktori)</h1>
         <div className="flex items-center gap-2 flex-wrap">
           <AdminCalendarFilters
-            instructors={(instructorsList ?? []).map((i) => ({ id: i.id, ime: i.ime ?? '', prezime: i.prezime ?? '' }))}
+            instructors={activeInstructors.map((i) => ({ id: i.id, ime: i.ime ?? '', prezime: i.prezime ?? '' }))}
             classrooms={(classroomsList ?? []).map((c) => ({ id: c.id, naziv: c.naziv ?? '' }))}
             clients={(clientsList ?? []).map((c) => ({ id: c.id, ime: c.ime ?? '', prezime: c.prezime ?? '' }))}
             filterInstructorId={filterInstructorId}
@@ -231,9 +235,7 @@ export default async function AdminKalendarPage({
         }))}
         termTypes={termTypes}
         termCategories={termCategories}
-        instructorsList={(instructorsList ?? [])
-          .filter((i) => (i as { aktivan?: boolean }).aktivan !== false)
-          .map((i) => ({ id: i.id, ime: i.ime ?? '', prezime: i.prezime ?? '' }))}
+        instructorsList={activeInstructors.map((i) => ({ id: i.id, ime: i.ime ?? '', prezime: i.prezime ?? '' }))}
         classroomsList={(classroomsList ?? []).map((c) => ({ id: c.id, naziv: c.naziv ?? '' }))}
         pendingZahtevi={pendingZahtevi}
         allPendingZahteviDates={allPendingZahteviDates}
