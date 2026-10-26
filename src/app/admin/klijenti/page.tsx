@@ -58,6 +58,7 @@ export default async function AdminSviKlijentiPage() {
       godiste: c.godiste ?? null,
       razred: c.razred ?? null,
       skola: c.skola ?? null,
+      kontaktTelefon: c.kontakt_telefon ?? null,
       datumTestiranja: c.datum_testiranja ?? null,
       instructors: instructorsByClientId.get(c.id) ?? [],
       problemTypes: stanjeAll.filter((s) => s.uplaceno < s.odrzano).map((s) => s.term_type_naziv),
