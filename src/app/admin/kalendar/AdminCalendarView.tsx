@@ -23,6 +23,7 @@ import {
 import SingleKlijentPicker from '@/components/SingleKlijentPicker';
 import GrupniKlijentiPicker from '@/components/GrupniKlijentiPicker';
 import StickyBar from '@/components/StickyBar';
+import useStickyThead from '@/components/useStickyThead';
 
 const DAY_NAMES = ['Pon', 'Uto', 'Sre', 'Čet', 'Pet', 'Sub', 'Ned'];
 
@@ -1486,8 +1487,6 @@ function AdminCellContent({
 
   if (swap.bulkMode) {
     const bulkSelected = swap.isBulkSelected(emptyDate, emptySlot);
-    const occupiedClassroomIds = new Set(termsInSlot.map((t) => t.classroom?.id).filter((id): id is string => !!id));
-    const freeClassrooms = swap.classroomsList.filter((c) => !occupiedClassroomIds.has(c.id));
     return (
       <div
         role="button"
@@ -1509,11 +1508,6 @@ function AdminCellContent({
           <span className="block text-stone-400">prazno</span>
         ) : (
           termsInSlot.map((term) => <TermCardVisual key={term.id} term={term} />)
-        )}
-        {swap.classroomsList.length > 0 && (
-          <span className={`block pt-1 mt-1 border-t border-stone-200/70 ${freeClassrooms.length > 0 ? 'text-emerald-700' : 'text-red-600'}`}>
-            {freeClassrooms.length > 0 ? `Slobodno: ${freeClassrooms.map((c) => c.naziv).join(', ')}` : 'Sve učionice zauzete'}
-          </span>
         )}
         {bulkSelected && <span className="block font-semibold text-emerald-700 mt-0.5">✓ izabrano</span>}
       </div>
@@ -1764,6 +1758,8 @@ function AdminWeekView({
   onDropCell: (date: string, slot: number) => void | Promise<void>;
   maxTerminaPoSlotu: number;
 }) {
+  // Na računaru (>= 1024px) red sa danima i datumima ostaje zamrznut ispod trake alata dok se skroluje
+  const desktopTabelaRef = useStickyThead();
   const week1Dates = getWeekDates(startOfWeek);
   const week2Start = (() => {
     const d = new Date(startOfWeek + 'T12:00:00');
@@ -1838,9 +1834,10 @@ function AdminWeekView({
 
       {/* Desktop (lg+): obe nedelje, netaknuto. */}
       <div className="hidden lg:block overflow-x-auto rounded-xl border border-stone-200 bg-white">
-        <table className="w-full min-w-[1400px] text-sm">
-          <thead>
-            <tr className="border-b border-stone-100 bg-stone-50/60">
+        <table ref={desktopTabelaRef} className="w-full min-w-[1400px] text-sm">
+          {/* relative + z-20 + neprovidna pozadina: zamrznuto zaglavlje (useStickyThead) prekriva termine ispod sebe */}
+          <thead className="relative z-20 bg-white shadow-[0_1px_0_0_#e7e5e4]">
+            <tr className="border-b border-stone-100 bg-stone-50">
               <th className="sticky left-0 z-20 bg-stone-50 w-16 p-2" rowSpan={2} />
               <th colSpan={7} className="px-2 py-1.5 text-center text-xs font-semibold text-stone-500 uppercase tracking-wide border-r border-stone-200">
                 Ova nedelja — {formatWeekLabel(startOfWeek)}

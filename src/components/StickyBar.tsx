@@ -81,6 +81,11 @@ export default function StickyBar({
     };
   }, [enabled, topOffset]);
 
+  // Javlja zamrznutim zaglavljima (useStickyThead) da se traka zamrzla ili otpustila, da se namesti ispod nje
+  useEffect(() => {
+    window.dispatchEvent(new Event('stickybar'));
+  }, [pinned]);
+
   if (!enabled) {
     return <div className={className}>{children}</div>;
   }
@@ -91,6 +96,7 @@ export default function StickyBar({
       <div
         ref={contentRef}
         className={className}
+        data-sticky-bar={pinned ? 'pinned' : 'free'}
         style={
           pinned
             ? { position: 'fixed', top: topOffset, left: box.left, width: box.width, zIndex: 30 }
