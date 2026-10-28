@@ -113,7 +113,6 @@ type SwapContextValue = {
   onToggleAssignSelect: (termId: string) => void;
   isZahtevMarkedForAssign: (zahtevId: string) => boolean;
   onToggleAssignZahtevSelect: (zahtevId: string) => void;
-  highlightPendingZahtevi: boolean;
   /** Sve učionice (za "Zakaži više časova" – da svaki slot pokaže koje su još slobodne u njemu). */
   classroomsList: { id: string; naziv: string }[];
 };
@@ -134,7 +133,6 @@ const SwapContext = createContext<SwapContextValue>({
   onToggleOtkazaniDeleteSelect: () => {},
   isZahtevMarkedForDelete: () => false,
   onToggleZahtevDeleteSelect: () => {},
-  highlightPendingZahtevi: false,
   bulkMode: false,
   isBulkSelected: () => false,
   onToggleBulkSlot: () => {},
@@ -327,6 +325,7 @@ export default function AdminCalendarView({
   classroomsList = [],
   pendingZahtevi: pendingZahteviProp = [],
   allPendingZahteviDates = [],
+  focusDate,
 }: {
   /** Naslov/filteri/legenda iznad kalendara (server-renderovani deo iz page.tsx). */
   headerContent?: React.ReactNode;
@@ -350,6 +349,8 @@ export default function AdminCalendarView({
   pendingZahtevi?: PendingZahtevCalendar[];
   /** SVI zahtevi na čekanju (bez obzira na trenutno prikazanu nedelju) – za notifikaciju gore. */
   allPendingZahteviDates?: string[];
+  /** ?fokus=YYYY-MM-DD – posle klika na datum u traci zahteva, skroluje se do tog zahteva. */
+  focusDate?: string;
 }) {
   const router = useRouter();
   const [draggedTermId, setDraggedTermId] = useState<string | null>(null);
@@ -373,7 +374,31 @@ export default function AdminCalendarView({
     setPendingZahtevi(pendingZahteviProp);
   }, [pendingZahteviProp]);
 
-  const [highlightPendingZahtevi, setHighlightPendingZahtevi] = useState(false);
+  // Klik na datum u traci "termini bez instruktora/učionice" vodi tačno do tog zahteva na rasporedu
+  // (bez animacije). Traži se prvi VIDLJIV element – desktop i tablet tabela su obe u DOM-u.
+  const scrollToZahtev = (d: string): boolean => {
+    const els = Array.from(document.querySelectorAll<HTMLElement>(`[data-zahtev-date="${d}"]`));
+    const visible = els.find((el) => el.offsetParent !== null);
+    if (!visible) return false;
+    visible.scrollIntoView({ behavior: 'auto', block: 'center' });
+    return true;
+  };
+  // Posle navigacije na drugu nedelju (?fokus=datum) lokalni pendingZahtevi se osveže tek u
+  // narednom renderu – zato se pokušava i kad se oni promene, ali samo jednom po datumu.
+  const focusedForRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!focusDate || focusedForRef.current === focusDate) return;
+    if (scrollToZahtev(focusDate)) focusedForRef.current = focusDate;
+  }, [focusDate, pendingZahtevi]);
+
+  const openZahtevDate = (d: string) => {
+    const weekEnd = new Date(startOfWeek + 'T12:00:00');
+    weekEnd.setDate(weekEnd.getDate() + 13);
+    const inView = view === 'nedelja' && d >= startOfWeek && d <= weekEnd.toISOString().slice(0, 10);
+    if (inView && scrollToZahtev(d)) return;
+    focusedForRef.current = null;
+    router.push(`/admin/kalendar?view=nedelja&week=${getMonday(d)}&fokus=${d}`);
+  };
 
   const handleDeleteOtkazani = async (id: string) => {
     if (!confirm('Trajno obrisati ovaj otkazani termin sa kalendara?')) return;
@@ -894,31 +919,25 @@ export default function AdminCalendarView({
         onToggleAssignSelect,
         isZahtevMarkedForAssign: (zahtevId: string) => assignZahteviSelection.has(zahtevId),
         onToggleAssignZahtevSelect,
-        highlightPendingZahtevi,
         classroomsList,
       }}
     >
       {headerContent}
       {allPendingZahteviDates.length > 0 && (
-        <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-amber-400 bg-amber-50 px-4 py-2.5 text-sm text-amber-900 animate-pulse">
-          <button
-            type="button"
-            onClick={() => setHighlightPendingZahtevi((v) => !v)}
-            className="font-semibold underline decoration-dotted hover:text-amber-700"
-            title="Klikni da obeležiš/skloniš obeležavanje ovih na kalendaru"
-          >
-            ⚠ {allPendingZahteviDates.length} {allPendingZahteviDates.length === 1 ? 'termin' : 'termina'} bez instruktora/učionice
-            {highlightPendingZahtevi ? ' (obeleženo – klikni da skloniš)' : ':'}
-          </button>
+        <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-amber-400 bg-amber-50 px-4 py-2.5 text-sm text-amber-900">
+          <span className="font-semibold">
+            ⚠ {allPendingZahteviDates.length} {allPendingZahteviDates.length === 1 ? 'termin' : 'termina'} bez instruktora/učionice:
+          </span>
           <span className="flex flex-wrap gap-1.5">
             {allPendingZahteviDates.map((d) => (
-              <Link
+              <button
                 key={d}
-                href={`/admin/kalendar?view=nedelja&week=${getMonday(d)}`}
+                type="button"
+                onClick={() => openZahtevDate(d)}
                 className="rounded-full bg-amber-200 px-2 py-0.5 font-medium text-amber-900 hover:bg-amber-300"
               >
                 {formatShortDate(d)}
-              </Link>
+              </button>
             ))}
           </span>
         </div>
@@ -1574,18 +1593,18 @@ function AdminCellContent({
               if (swap.deleteMode) swap.onToggleZahtevDeleteSelect(z.id);
               else if (zahtevAssignClickable) swap.onToggleAssignZahtevSelect(z.id);
             }}
-            className={`rounded-lg border border-dashed p-1.5 text-xs text-stone-500${
+            data-zahtev-date={z.date}
+            className={`rounded-lg border border-dashed p-1.5 text-xs text-amber-900${
               zahtevClickable ? ' cursor-pointer' : ''
             }${
               zahtevDeleteSelected
                 ? ' border-red-600 ring-2 ring-offset-1 ring-red-500 bg-red-50'
                 : zahtevAssignSelected
                 ? ' border-blue-600 ring-2 ring-offset-1 ring-blue-500 bg-blue-50'
-                : ' border-stone-300 bg-stone-100'
+                : ' border-amber-500 bg-amber-100'
             }`}
-            style={swap.highlightPendingZahtevi ? { outline: '2px solid #dc2626', outlineOffset: '1px' } : undefined}
           >
-            <span className="block font-medium text-stone-600">
+            <span className="block font-medium text-amber-950">
               {z.client_ime}{z.client_prezime ? ` ${z.client_prezime}` : ''}
             </span>
             {z.term_type_naziv && <span className="block text-[11px]">{z.term_type_naziv}</span>}
@@ -1760,6 +1779,7 @@ function AdminWeekView({
 }) {
   // Na računaru (>= 1024px) red sa danima i datumima ostaje zamrznut ispod trake alata dok se skroluje
   const desktopTabelaRef = useStickyThead();
+  const gridRef = useRef<HTMLDivElement>(null);
   const week1Dates = getWeekDates(startOfWeek);
   const week2Start = (() => {
     const d = new Date(startOfWeek + 'T12:00:00');
@@ -1791,14 +1811,14 @@ function AdminWeekView({
   const renderBody = (dates: string[]) => (
     <tbody>
       {TIME_SLOTS.map((time, slotIndex) => (
-        <tr key={slotIndex} className="border-b border-stone-100">
-          <td className="sticky left-0 z-10 bg-white p-2 text-stone-500 font-medium w-16">{time}</td>
+        <tr key={slotIndex} data-row={slotIndex} className="border-b border-stone-100">
+          <td data-slot-label={slotIndex} className="sticky left-0 z-10 bg-white p-2 text-stone-500 font-medium w-16">{time}</td>
           {dates.map((date, idx) => {
             const termsInSlot = termsByKey(terms, date, slotIndex);
             const otkazaniInSlot = otkazaniTermini.filter((ot) => ot.term_date === date && ot.slot_index === slotIndex);
             const pendingZahteviInSlot = pendingZahtevi.filter((z) => z.date === date && z.slot_index === slotIndex);
             return (
-              <td key={date} className={`p-1 align-top${idx === 7 ? ' border-l-2 border-stone-300' : ''}`}>
+              <td key={date} data-date={date} data-slot={slotIndex} className={`p-1 align-top${idx === 7 ? ' border-l-2 border-stone-300' : ''}`}>
                 <AdminCellContent
                   termsInSlot={termsInSlot}
                   otkazaniInSlot={otkazaniInSlot}
@@ -1832,6 +1852,8 @@ function AdminWeekView({
         </div>
       </div>
 
+      <div ref={gridRef} data-hover-grid="" className="space-y-4">
+      <GridHoverHighlight containerRef={gridRef} />
       {/* Desktop (lg+): obe nedelje, netaknuto. */}
       <div className="hidden lg:block overflow-x-auto rounded-xl border border-stone-200 bg-white">
         <table ref={desktopTabelaRef} className="w-full min-w-[1400px] text-sm">
@@ -1852,6 +1874,7 @@ function AdminWeekView({
                 return (
                   <th
                     key={date}
+                    data-date={date}
                     className={`p-2 text-center text-stone-600 font-medium min-w-[90px]${idx === 7 ? ' border-l-2 border-stone-300' : ''}`}
                   >
                     <div>{DAY_NAMES[d.getDay() === 0 ? 6 : d.getDay() - 1]}</div>
@@ -1877,7 +1900,7 @@ function AdminWeekView({
               {week1Dates.map((date) => {
                 const d = new Date(date + 'T12:00:00');
                 return (
-                  <th key={date} className="sticky top-0 z-20 bg-stone-50 p-2 text-center text-stone-600 font-medium min-w-[90px]">
+                  <th key={date} data-date={date} className="sticky top-0 z-20 bg-stone-50 p-2 text-center text-stone-600 font-medium min-w-[90px]">
                     <div>{DAY_NAMES[d.getDay() === 0 ? 6 : d.getDay() - 1]}</div>
                     <div className="text-stone-400">{d.getDate()}.{d.getMonth() + 1}.</div>
                   </th>
@@ -1888,7 +1911,46 @@ function AdminWeekView({
           {renderBody(week1Dates)}
         </table>
       </div>
+      </div>
     </div>
+  );
+}
+
+/**
+ * Prelazak mišem preko ćelije kalendara boji ceo red (vreme) i celu kolonu (dan) + uokviruje samu ćeliju.
+ * Sopstveno stanje i <style> umesto stanja u AdminWeekView – pomeranje miša tako ne iscrtava ponovo
+ * celu tabelu sa svim terminima, menja se samo ovaj mali <style>.
+ */
+function GridHoverHighlight({ containerRef }: { containerRef: React.RefObject<HTMLDivElement | null> }) {
+  const [hover, setHover] = useState<{ date: string; slot: string } | null>(null);
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const onOver = (e: MouseEvent) => {
+      const td = (e.target as HTMLElement).closest<HTMLElement>('td[data-date]');
+      if (!td) return;
+      const date = td.dataset.date ?? '';
+      const slot = td.dataset.slot ?? '';
+      setHover((h) => (h && h.date === date && h.slot === slot ? h : { date, slot }));
+    };
+    const onLeave = () => setHover(null);
+    el.addEventListener('mouseover', onOver);
+    el.addEventListener('mouseleave', onLeave);
+    return () => {
+      el.removeEventListener('mouseover', onOver);
+      el.removeEventListener('mouseleave', onLeave);
+    };
+  }, [containerRef]);
+  if (!hover) return null;
+  const g = '[data-hover-grid]';
+  const { date, slot } = hover;
+  return (
+    <style>{`
+      ${g} td[data-date="${date}"], ${g} tr[data-row="${slot}"] > td { background-color: rgb(254 243 199 / 0.6); }
+      ${g} th[data-date="${date}"] { background-color: #fde68a; color: #78350f; }
+      ${g} td[data-slot-label="${slot}"] { background-color: #fde68a; color: #78350f; font-weight: 700; }
+      ${g} td[data-date="${date}"][data-slot="${slot}"] { box-shadow: inset 0 0 0 2px #f59e0b; }
+    `}</style>
   );
 }
 

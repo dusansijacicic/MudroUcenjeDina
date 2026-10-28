@@ -57,29 +57,8 @@ export default async function AdminTerminNoviPage({
   ]);
 
   return (
-    <div className="max-w-lg">
-      <h1 className="text-xl font-semibold text-stone-800 mb-2">Zakaži termin za instruktora</h1>
-      <div className="rounded-lg border border-stone-200 bg-stone-50 px-4 py-3 text-sm text-stone-700 mb-6">
-        <p className="font-medium mb-1">Paralelni termini u istom vremenu (slotu):</p>
-        <ul className="list-disc list-inside space-y-0.5">
-          <li>
-            U istom slotu (npr. 9:00) može biti <strong>do {maxTerminaPoSlotu} termina odjednom</strong> — kao u podešavanjima (Admin → Podešavanja). To su paralelne radionice: različiti predavači, različite učionice.
-          </li>
-          <li>
-            Svaki od tih termina može biti <strong>individualni</strong> (jedno dete) ili <strong>grupni</strong> (više dece u tom terminu), prema izabranoj kategoriji.
-          </li>
-          <li>
-            <strong>A)</strong> Isti predavač: najviše <strong>jedan</strong> termin u tom slotu.
-          </li>
-          <li>
-            <strong>B)</strong> Ista učionica: najviše <strong>jedan</strong> termin u tom slotu.
-          </li>
-          <li>U formi redosled: <strong>vrsta časa</strong> → <strong>kategorija</strong> → <strong>deca</strong>.</li>
-        </ul>
-        <p className="mt-2 text-stone-600">
-          U padajućim listama su svi predavači i učionice; oni koji su već zauzeti u izabranom slotu su označeni sa „(zauzeto)“ — i dalje se mogu izabrati. Iz kalendara koristite „+“ ili „Dodaj još termin u ovom slotu“.
-        </p>
-      </div>
+    <div className="max-w-5xl">
+      <h1 className="text-xl font-semibold text-stone-800 mb-2">Zakaži termin</h1>
       <AdminTerminForm
         instructors={(instructors ?? []) as { id: string; ime: string; prezime: string }[]}
         clients={(clients ?? []).map((c) => ({

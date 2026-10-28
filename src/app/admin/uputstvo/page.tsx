@@ -69,6 +69,24 @@ export default function AdminUputstvoPage() {
         ]}
       />
 
+      <section id="zakazivanje-termina" className="rounded-xl border border-stone-200 bg-white shadow-sm overflow-hidden scroll-mt-4">
+        <div className="px-4 py-3 bg-stone-700 text-white">
+          <h2 className="text-lg font-semibold">Zakazivanje termina („Dodaj termin“)</h2>
+        </div>
+        <div className="px-4 py-4 space-y-3">
+          <ul className="list-disc list-inside space-y-2 text-sm text-stone-800">
+            <li className="marker:text-amber-600">U istom slotu (npr. 9:00) može biti više paralelnih termina odjednom (limit u Admin → Podešavanja) – različiti predavači, različite učionice. Isti predavač i ista učionica: najviše jedan termin po slotu.</li>
+            <li className="marker:text-amber-600">Svaki termin može biti individualni (jedno dete) ili grupni (više dece), prema izabranoj kategoriji.</li>
+            <li className="marker:text-amber-600">Instruktor i učionica su podrazumevano prazni. Bez instruktora se pravi zahtev (kao „Zakaži više časova“) koji bilo koji predavač preuzima; vidi se na kalendaru u listi termina bez instruktora/učionice. Za grupu i testiranje instruktor je obavezan.</li>
+            <li className="marker:text-amber-600">Instruktor/učionica obeleženi sa „(zauzeto)“ u listi već imaju termin u tom slotu — za NOVI termin se ne mogu izabrati (fizički nemoguće, dvoje ne mogu biti u istom terminu); zamena mesta je moguća samo kod izmene postojećeg termina (Swap na kalendaru).</li>
+            <li className="marker:text-amber-600">Kategorija „Testiranje“: deca se mogu upisati odmah (ime obavezno, ostalo opciono) ili kasnije na stranici termina.</li>
+            <li className="marker:text-amber-600">Kategorija „Nastavak“: za duži (dvočas i sl.) termin koji se nastavlja na prethodni slot — koristi se isti instruktor i učionica kao roditeljski termin, bira se iz liste termina u prethodnom slotu; ne računa se u naplaćene časove.</li>
+            <li className="marker:text-amber-600">Kategorija koja dozvoljava grupu: pretraga sa čekiranjem — označite jedno ili više dece odjednom.</li>
+            <li className="marker:text-amber-600">„Zakaži isti termin i narednih N dana“: 0 = samo izabrani datum; inače isti instruktor/učionica/dete/vrsta časa se zakazuje i narednih N uzastopnih kalendarskih dana (ne isti dan u nedelji) odjednom.</li>
+          </ul>
+        </div>
+      </section>
+
       <section className="rounded-xl border border-stone-200 bg-amber-50/60 px-4 py-3 text-sm text-stone-700">
         <p className="font-medium text-stone-800 mb-1">Napomena</p>
         <p>

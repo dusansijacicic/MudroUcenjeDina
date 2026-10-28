@@ -11,7 +11,7 @@ import { getTermTypes, getTermCategories } from '@/app/admin/actions';
 export default async function AdminKalendarPage({
   searchParams,
 }: {
-  searchParams: Promise<{ week?: string; day?: string; month?: string; view?: string; instructor?: string; classroom?: string; client?: string; from?: string }>;
+  searchParams: Promise<{ week?: string; day?: string; month?: string; view?: string; instructor?: string; classroom?: string; client?: string; from?: string; fokus?: string }>;
 }) {
   const { user } = await getAuthedUser();
   if (!user) redirect('/login');
@@ -239,6 +239,7 @@ export default async function AdminKalendarPage({
         classroomsList={(classroomsList ?? []).map((c) => ({ id: c.id, naziv: c.naziv ?? '' }))}
         pendingZahtevi={pendingZahtevi}
         allPendingZahteviDates={allPendingZahteviDates}
+        focusDate={params.fokus?.slice(0, 10)}
       />
     </div>
   );
