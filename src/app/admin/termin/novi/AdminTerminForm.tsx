@@ -38,6 +38,7 @@ export default function AdminTerminForm({
   maxTerminaPoSlotu = 4,
   initialCategoryIsTesting = false,
   completedProgramIdsByClient = {},
+  initialBlocked = null,
 }: {
   instructors: Instructor[];
   clients: Client[];
@@ -54,12 +55,15 @@ export default function AdminTerminForm({
   initialCategoryIsTesting?: boolean;
   /** client_id -> program_id[] (koje je programe klijent završio) – za sakrivanje u pretrazi. */
   completedProgramIdsByClient?: Record<string, string[]>;
+  /** Ako je početni slot blokiran (Admin → Blokiraj termin(e)). */
+  initialBlocked?: { napomena: string | null } | null;
 }) {
   const router = useRouter();
   const [date, setDate] = useState(defaultDate);
   const [slotIndex, setSlotIndex] = useState(defaultSlotIndex);
   const [takenInstructorIds, setTakenInstructorIds] = useState<string[]>(initialTakenInstructorIds);
   const [takenClassroomIds, setTakenClassroomIds] = useState<string[]>(initialTakenClassroomIds);
+  const [blocked, setBlocked] = useState<{ napomena: string | null } | null>(initialBlocked);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -105,10 +109,11 @@ export default function AdminTerminForm({
 
   useEffect(() => {
     let cancelled = false;
-    getTakenForSlot(date, slotIndex).then(({ takenInstructorIds: ti, takenClassroomIds: tc }) => {
+    getTakenForSlot(date, slotIndex).then(({ takenInstructorIds: ti, takenClassroomIds: tc, blocked: b }) => {
       if (!cancelled) {
         setTakenInstructorIds(ti);
         setTakenClassroomIds(tc);
+        setBlocked(b);
       }
     });
     return () => { cancelled = true; };
@@ -143,7 +148,7 @@ export default function AdminTerminForm({
   const nastavakClassroomBusy = isNastavakCat && !!selectedParentTerm && takenClassroomIds.includes(selectedParentTerm.classroom_id ?? '');
 
   const slotFull = takenInstructorIds.length >= maxTerminaPoSlotu;
-  const cannotSubmit = slotFull || nastavakInstructorBusy || nastavakClassroomBusy;
+  const cannotSubmit = !!blocked || slotFull || nastavakInstructorBusy || nastavakClassroomBusy;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -285,6 +290,13 @@ export default function AdminTerminForm({
           Uputstvo za zakazivanje →
         </a>
       </div>
+      {blocked && (
+        <div className="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-800">
+          <p className="font-medium">⛔ Ovaj termin je blokiran — u njemu niko ne može da zakaže.</p>
+          {blocked.napomena && <p className="mt-0.5 text-red-700">Razlog: {blocked.napomena}</p>}
+          <p className="mt-0.5 text-red-700">Izaberite drugi datum ili vreme.</p>
+        </div>
+      )}
       {slotFull && (
         <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-800">
           <p className="font-medium">Maksimalan broj termina u ovom slotu je dostignut ({maxTerminaPoSlotu}).</p>
@@ -545,6 +557,8 @@ export default function AdminTerminForm({
       >
         {loading
           ? 'Kreiranje...'
+          : blocked
+          ? 'Termin je blokiran'
           : slotFull
           ? `Slot pun (max ${maxTerminaPoSlotu})`
           : cannotSubmit

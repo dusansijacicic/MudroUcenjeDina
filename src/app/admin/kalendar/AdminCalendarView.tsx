@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useEffect, useRef, useState } from 'react';
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { TIME_SLOTS, AUTO_SPILLOVER_NAPOMENA } from '@/lib/constants';
@@ -19,6 +19,9 @@ import {
   assignClassroomToZahteviAsAdmin,
   assignTermTypeToTermsAsAdmin,
   assignTermTypeToZahteviAsAdmin,
+  blockSlotsAsAdmin,
+  unblockSlotAsAdmin,
+  type BlokiranTermin,
 } from '@/app/admin/actions';
 import SingleKlijentPicker from '@/components/SingleKlijentPicker';
 import GrupniKlijentiPicker from '@/components/GrupniKlijentiPicker';
@@ -108,6 +111,11 @@ type SwapContextValue = {
   bulkMode: boolean;
   isBulkSelected: (date: string, slot: number) => boolean;
   onToggleBulkSlot: (date: string, slot: number) => void;
+  blockMode: boolean;
+  isBlockSelected: (date: string, slot: number) => boolean;
+  onToggleBlockSlot: (date: string, slot: number) => void;
+  getBlocked: (date: string, slot: number) => BlokiranTermin | undefined;
+  onUnblock: (id: string) => void;
   assignMode: boolean;
   isMarkedForAssign: (termId: string) => boolean;
   onToggleAssignSelect: (termId: string) => void;
@@ -136,6 +144,11 @@ const SwapContext = createContext<SwapContextValue>({
   bulkMode: false,
   isBulkSelected: () => false,
   onToggleBulkSlot: () => {},
+  blockMode: false,
+  isBlockSelected: () => false,
+  onToggleBlockSlot: () => {},
+  getBlocked: () => undefined,
+  onUnblock: () => {},
   assignMode: false,
   isMarkedForAssign: () => false,
   onToggleAssignSelect: () => {},
@@ -309,6 +322,8 @@ const DEFAULT_COLOR = '#0d9488';
 
 const DEFAULT_MAX_TERMINA_PO_SLOTU = 4;
 
+const NO_BLOCKED_SLOTS: BlokiranTermin[] = [];
+
 export default function AdminCalendarView({
   headerContent,
   terms: termsProp,
@@ -326,6 +341,7 @@ export default function AdminCalendarView({
   pendingZahtevi: pendingZahteviProp = [],
   allPendingZahteviDates = [],
   focusDate,
+  blockedSlots: blockedSlotsProp = NO_BLOCKED_SLOTS,
 }: {
   /** Naslov/filteri/legenda iznad kalendara (server-renderovani deo iz page.tsx). */
   headerContent?: React.ReactNode;
@@ -351,6 +367,8 @@ export default function AdminCalendarView({
   allPendingZahteviDates?: string[];
   /** ?fokus=YYYY-MM-DD – posle klika na datum u traci zahteva, skroluje se do tog zahteva. */
   focusDate?: string;
+  /** Blokirani slotovi u prikazanom opsegu (Admin → Blokiraj termin(e)). */
+  blockedSlots?: BlokiranTermin[];
 }) {
   const router = useRouter();
   const [draggedTermId, setDraggedTermId] = useState<string | null>(null);
@@ -473,9 +491,24 @@ export default function AdminCalendarView({
   const [assignTermTypeChoice, setAssignTermTypeChoice] = useState('');
   const [assignLoading, setAssignLoading] = useState(false);
 
-  // Swap/Copy/Delete/Bulk/Assign su međusobno isključivi – uključivanje jednog gasi ostale da
+  // Blokiranje termina: izabrani slotovi (date|slot) + zajednička napomena ZAŠTO.
+  const [blockMode, setBlockMode] = useState(false);
+  const [blockSlots, setBlockSlots] = useState<Set<string>>(new Set());
+  const [blockNapomena, setBlockNapomena] = useState('');
+  const [blockLoading, setBlockLoading] = useState(false);
+  const [blokirani, setBlokirani] = useState(blockedSlotsProp);
+  useEffect(() => {
+    setBlokirani(blockedSlotsProp);
+  }, [blockedSlotsProp]);
+  const blokiraniByKey = useMemo(() => new Map(blokirani.map((b) => [`${b.date}|${b.slot_index}`, b])), [blokirani]);
+
+  // Swap/Copy/Delete/Bulk/Assign/Block su međusobno isključivi – uključivanje jednog gasi ostale da
   // klikovi na kalendaru ne budu dvosmisleni.
-  const resetOtherModes = (keep: 'swap' | 'copy' | 'delete' | 'bulk' | 'assign') => {
+  const resetOtherModes = (keep: 'swap' | 'copy' | 'delete' | 'bulk' | 'assign' | 'block') => {
+    if (keep !== 'block') {
+      setBlockMode(false);
+      setBlockSlots(new Set());
+    }
     if (keep !== 'swap') {
       setSwapMode(false);
       resetSwapSelection();
@@ -666,6 +699,92 @@ export default function AdminCalendarView({
       bulkRefreshTimeoutRef.current = null;
       setBulkLoading(false);
     }, 4000);
+    router.refresh();
+  };
+
+  const toggleBlockMode = () => {
+    setBlockMode((v) => {
+      const next = !v;
+      if (next) resetOtherModes('block');
+      return next;
+    });
+    setBlockSlots(new Set());
+    setBlockNapomena('');
+  };
+
+  const onToggleBlockSlot = (date: string, slot: number) => {
+    const key = `${date}|${slot}`;
+    setBlockSlots((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  /** Već zakazani termini/zahtevi u izabranim slotovima – ostaju posle blokiranja, treba ih premestiti. */
+  const blockConflicts = useMemo(() => {
+    const list: { key: string; label: string }[] = [];
+    for (const key of blockSlots) {
+      const [date, slotStr] = key.split('|');
+      const slot = Number(slotStr);
+      for (const t of terms) {
+        if (t.date !== date || t.slot_index !== slot || isAutoSpillover(t)) continue;
+        const deca = (t.predavanja ?? [])
+          .map((p) => (p.client ? `${p.client.ime} ${p.client.prezime}` : ''))
+          .filter(Boolean)
+          .join(', ');
+        list.push({ key: `t-${t.id}`, label: `${swapTermLabel(t)}${deca ? ` – ${deca}` : ''}` });
+      }
+      for (const z of pendingZahtevi) {
+        if (z.date !== date || z.slot_index !== slot) continue;
+        list.push({
+          key: `z-${z.id}`,
+          label: `${formatShortDate(z.date)} ${TIME_SLOTS[z.slot_index] ?? ''} · zahtev – ${z.client_ime}${z.client_prezime ? ` ${z.client_prezime}` : ''}`,
+        });
+      }
+    }
+    return list;
+  }, [blockSlots, terms, pendingZahtevi]);
+
+  const confirmBlock = async () => {
+    if (blockSlots.size === 0) return;
+    if (blockConflicts.length > 0) {
+      const ok = window.confirm(
+        `U izabranim terminima već je zakazano (${blockConflicts.length}):\n\n` +
+          blockConflicts.map((c) => `• ${c.label}`).join('\n') +
+          '\n\nAko ipak blokirate, ovi termini OSTAJU i treba ih premestiti (spisak je u Admin → Blokirani termini).\n\nBlokirati ipak?'
+      );
+      if (!ok) return;
+    }
+    const slots = [...blockSlots].map((key) => {
+      const [date, slotStr] = key.split('|');
+      return { date, slotIndex: Number(slotStr) };
+    });
+    setBlockLoading(true);
+    const res = await blockSlotsAsAdmin(slots, blockNapomena);
+    setBlockLoading(false);
+    if (res.error) {
+      toast.error(res.error);
+      return;
+    }
+    toast.success(`Blokirano ${slots.length} termin(a).`);
+    setBlockSlots(new Set());
+    setBlockNapomena('');
+    setBlockMode(false);
+    router.refresh();
+  };
+
+  const handleUnblock = async (id: string) => {
+    if (!confirm('Odblokirati ovaj termin? Ponovo će moći da se zakazuje.')) return;
+    const prev = blokirani;
+    setBlokirani((list) => list.filter((b) => b.id !== id));
+    const res = await unblockSlotAsAdmin(id);
+    if (res.error) {
+      setBlokirani(prev);
+      toast.error(res.error);
+      return;
+    }
     router.refresh();
   };
 
@@ -914,6 +1033,11 @@ export default function AdminCalendarView({
         bulkMode,
         isBulkSelected: (date: string, slot: number) => bulkSlots.has(`${date}|${slot}`),
         onToggleBulkSlot,
+        blockMode,
+        isBlockSelected: (date: string, slot: number) => blockSlots.has(`${date}|${slot}`),
+        onToggleBlockSlot,
+        getBlocked: (date: string, slot: number) => blokiraniByKey.get(`${date}|${slot}`),
+        onUnblock: handleUnblock,
         assignMode,
         isMarkedForAssign: (termId: string) => assignSelection.has(termId),
         onToggleAssignSelect,
@@ -997,6 +1121,16 @@ export default function AdminCalendarView({
             {assignMode ? 'Dodeli instruktora/učionicu/vrstu: uključeno' : 'Dodeli instruktora/učionicu/vrstu'}
           </button>
           {assignLoading && <span className="text-sm text-stone-500">Dodeljujem…</span>}
+          <button
+            type="button"
+            onClick={toggleBlockMode}
+            className={`px-3 py-1.5 min-h-[44px] md:min-h-0 rounded-lg text-sm font-medium ${
+              blockMode ? 'bg-stone-800 text-white hover:bg-stone-900' : 'bg-stone-200 text-stone-700 hover:bg-stone-300'
+            }`}
+          >
+            {blockMode ? 'Blokiraj termin(e): uključeno' : 'Blokiraj termin(e)'}
+          </button>
+          {blockLoading && <span className="text-sm text-stone-500">Blokiram…</span>}
           <Link
             href={`/admin/kalendar/print?week=${startOfWeek}`}
             className="hidden md:inline-flex ml-auto px-3 py-1.5 rounded-lg text-sm font-medium bg-stone-100 text-stone-600 hover:bg-stone-200"
@@ -1006,8 +1140,43 @@ export default function AdminCalendarView({
         </div>
       </StickyBar>
       {/* Polja/potvrde/čipovi aktivnog moda – NIJE zamrznuto, ide normalno u toku stranice, iznad kalendara. */}
-      {(swapMode || copyMode || deleteMode || bulkMode || assignMode) && (
+      {(swapMode || copyMode || deleteMode || bulkMode || assignMode || blockMode) && (
         <div className="mb-4 rounded-xl border border-stone-200 bg-white p-3 space-y-3">
+          {blockMode && (
+            <div className="flex flex-col gap-2 text-sm">
+              <div className="flex flex-wrap items-end gap-3">
+                <div className="min-w-[260px] flex-1 max-w-xl">
+                  <label className="block text-xs font-medium text-stone-700 mb-1">Napomena – zašto se blokira</label>
+                  <input
+                    type="text"
+                    value={blockNapomena}
+                    onChange={(e) => setBlockNapomena(e.target.value)}
+                    placeholder="npr. praznik, sređivanje učionica, sastanak…"
+                    className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm text-stone-800"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={confirmBlock}
+                  disabled={blockSlots.size === 0 || blockLoading}
+                  className="px-3 py-2 rounded-lg text-sm font-medium bg-stone-800 text-white hover:bg-stone-900 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  Blokiraj ({blockSlots.size})
+                </button>
+                <span className="text-stone-400 text-xs">kliknite termine na kalendaru koje blokirate</span>
+              </div>
+              {blockConflicts.length > 0 && (
+                <div className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-red-800">
+                  <p className="font-medium">U izabranim terminima već je zakazano ({blockConflicts.length}) – ako blokirate, treba ih premestiti:</p>
+                  <ul className="mt-1 list-disc list-inside text-xs space-y-0.5">
+                    {blockConflicts.map((c) => (
+                      <li key={c.key}>{c.label}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
           {deleteMode && (
             <div className="flex items-center gap-3 flex-wrap text-sm">
               <button
@@ -1502,7 +1671,71 @@ function AdminCellContent({
   const newTermHref = `/admin/termin/novi?date=${emptyDate}&slot=${emptySlot}`;
   const newTestHref = `${newTermHref}&cat=testing`;
   const slotCount = termsInSlot.length;
-  const canAddParallelTerm = slotCount < maxTerminaPoSlotu;
+  const blocked = swap.getBlocked(emptyDate, emptySlot);
+  const canAddParallelTerm = slotCount < maxTerminaPoSlotu && !blocked;
+
+  const BlockedBadge = blocked ? (
+    <div className="rounded-lg border-2 border-stone-400 bg-[repeating-linear-gradient(45deg,#e7e5e4,#e7e5e4_6px,#f5f5f4_6px,#f5f5f4_12px)] p-2 text-xs text-stone-700">
+      <div className="flex items-start justify-between gap-1">
+        <span className="font-semibold">⛔ Blokirano</span>
+        {!swap.blockMode && (
+          <button
+            type="button"
+            title="Odblokiraj termin"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              swap.onUnblock(blocked.id);
+            }}
+            className="shrink-0 rounded px-1 text-[11px] font-medium text-stone-500 underline decoration-dotted hover:text-red-700"
+          >
+            Odblokiraj
+          </button>
+        )}
+      </div>
+      {blocked.napomena && <span className="block mt-0.5 break-words">{blocked.napomena}</span>}
+      {slotCount > 0 && <span className="block mt-1 font-medium text-red-700">Zakazano ovde – treba premestiti</span>}
+    </div>
+  ) : null;
+
+  if (swap.blockMode) {
+    const blockSelected = swap.isBlockSelected(emptyDate, emptySlot);
+    return (
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={() => swap.onToggleBlockSlot(emptyDate, emptySlot)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            swap.onToggleBlockSlot(emptyDate, emptySlot);
+          }
+        }}
+        className={`w-full min-h-[52px] rounded-lg border-2 p-2 text-left text-xs transition-colors cursor-pointer space-y-1.5 ${
+          blockSelected
+            ? 'border-stone-800 bg-stone-100 ring-2 ring-offset-1 ring-stone-700'
+            : 'border-dashed border-stone-200 hover:border-stone-500 hover:bg-stone-50'
+        }`}
+      >
+        {BlockedBadge}
+        {slotCount === 0 && !blocked ? (
+          <span className="block text-stone-400">prazno</span>
+        ) : (
+          termsInSlot.map((term) => <TermCardVisual key={term.id} term={term} />)
+        )}
+        {blockSelected && <span className="block font-semibold text-stone-800 mt-0.5">⛔ izabrano za blokiranje</span>}
+      </div>
+    );
+  }
+
+  if (swap.bulkMode && blocked) {
+    return (
+      <div className="space-y-1.5 min-h-[52px] cursor-not-allowed">
+        {BlockedBadge}
+        {termsInSlot.map((term) => <TermCardVisual key={term.id} term={term} />)}
+      </div>
+    );
+  }
 
   if (swap.bulkMode) {
     const bulkSelected = swap.isBulkSelected(emptyDate, emptySlot);
@@ -1616,6 +1849,16 @@ function AdminCellContent({
     </div>
   ) : null;
 
+  if (termsInSlot.length === 0 && blocked) {
+    return (
+      <div className="space-y-1 min-h-[52px]">
+        {BlockedBadge}
+        {PendingZahteviEntries}
+        {CancelledEntries}
+      </div>
+    );
+  }
+
   if (termsInSlot.length === 0) {
     return (
       <div className="space-y-1">
@@ -1666,6 +1909,7 @@ function AdminCellContent({
         if (draggedTermId && canAddParallelTerm) onDropCell(emptyDate, emptySlot);
       }}
     >
+      {BlockedBadge}
       {termsInSlot.map((term) => {
         if (isAutoSpillover(term)) {
           return (
@@ -1743,7 +1987,7 @@ function AdminCellContent({
             + Testiranje
           </Link>
         </>
-      ) : (
+      ) : blocked ? null : (
         <p className="text-[0.7rem] text-stone-400 px-1">
           Slot pun ({maxTerminaPoSlotu} termina). Povećajte limit u Admin → Podešavanja ili izaberite drugo vreme.
         </p>

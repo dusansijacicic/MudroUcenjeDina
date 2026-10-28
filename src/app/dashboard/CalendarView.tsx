@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { createContext, useContext, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { TIME_SLOTS, AUTO_SPILLOVER_NAPOMENA } from '@/lib/constants';
 import Link from 'next/link';
@@ -182,6 +182,7 @@ export default function CalendarView({
   monthStart,
   clientFilterId,
   otherTerms = [],
+  blockedSlots,
 }: {
   view: string;
   terms: RawTerm[];
@@ -193,6 +194,52 @@ export default function CalendarView({
   clientFilterId?: string | null;
   /** Tuđi termini (drugi instruktori) – samo prikaz, bez linka */
   otherTerms?: OtherTerm[];
+  /** Blokirani slotovi (Admin → Blokiraj termin(e)) – u njima se ne nudi "+" za zakazivanje. */
+  blockedSlots?: { date: string; slot_index: number; napomena: string | null }[];
+}) {
+  const blockedMap = useMemo(
+    () => new Map((blockedSlots ?? []).map((b) => [`${b.date}|${b.slot_index}`, { napomena: b.napomena }])),
+    [blockedSlots]
+  );
+  return (
+    <BlockedSlotsContext.Provider value={blockedMap}>
+      <CalendarViewInner
+        view={view}
+        terms={terms}
+        instructorId={instructorId}
+        instructorColor={instructorColor}
+        startOfWeek={startOfWeek}
+        singleDay={singleDay}
+        monthStart={monthStart}
+        clientFilterId={clientFilterId}
+        otherTerms={otherTerms}
+      />
+    </BlockedSlotsContext.Provider>
+  );
+}
+
+const BlockedSlotsContext = createContext<Map<string, { napomena: string | null }>>(new Map());
+
+function CalendarViewInner({
+  view,
+  terms,
+  instructorId,
+  instructorColor,
+  startOfWeek,
+  singleDay,
+  monthStart,
+  clientFilterId,
+  otherTerms,
+}: {
+  view: string;
+  terms: RawTerm[];
+  instructorId: string;
+  instructorColor: string;
+  startOfWeek: string;
+  singleDay?: string;
+  monthStart?: string;
+  clientFilterId?: string | null;
+  otherTerms: OtherTerm[];
 }) {
   const router = useRouter();
   const [draggedTermId, setDraggedTermId] = useState<string | null>(null);
@@ -279,22 +326,33 @@ function CellContent({
   const borderColor = term?.classroom?.color ?? instructorColor;
   const textColor = instructorColor;
   const bgLight = hexWithAlpha(term?.classroom?.color ?? instructorColor, 0.08);
+  const blocked = useContext(BlockedSlotsContext).get(`${emptyDate}|${emptySlot}`);
+  const BlockedBadge = blocked ? (
+    <div className="rounded-lg border-2 border-stone-400 bg-[repeating-linear-gradient(45deg,#e7e5e4,#e7e5e4_6px,#f5f5f4_6px,#f5f5f4_12px)] p-2 text-xs text-stone-700">
+      <span className="font-semibold">⛔ Blokirano</span>
+      {blocked.napomena && <span className="block mt-0.5 break-words">{blocked.napomena}</span>}
+    </div>
+  ) : null;
   if (!term) {
     return (
       <div className="space-y-1.5 min-h-[52px]">
-        <Link
-          href={`/dashboard/termin/novi?date=${emptyDate}&slot=${emptySlot}`}
-          className="block rounded-lg border border-dashed border-stone-200 p-2 text-stone-400 hover:border-stone-400 hover:bg-stone-50/50"
-          onDragOver={(e) => {
-            if (draggedTermId) e.preventDefault();
-          }}
-          onDrop={(e) => {
-            e.preventDefault();
-            if (draggedTermId) onDropCell(emptyDate, emptySlot);
-          }}
-        >
-          +
-        </Link>
+        {blocked ? (
+          BlockedBadge
+        ) : (
+          <Link
+            href={`/dashboard/termin/novi?date=${emptyDate}&slot=${emptySlot}`}
+            className="block rounded-lg border border-dashed border-stone-200 p-2 text-stone-400 hover:border-stone-400 hover:bg-stone-50/50"
+            onDragOver={(e) => {
+              if (draggedTermId) e.preventDefault();
+            }}
+            onDrop={(e) => {
+              e.preventDefault();
+              if (draggedTermId) onDropCell(emptyDate, emptySlot);
+            }}
+          >
+            +
+          </Link>
+        )}
         {otherTermsInSlot.map((ot) => {
           if (isAutoSpillover(ot)) {
             return (
@@ -357,6 +415,7 @@ function CellContent({
 
   return (
     <div className="space-y-1.5 min-h-[52px]">
+      {BlockedBadge}
       {term && (
         <Link
           href={`/dashboard/termin/${term.id}`}

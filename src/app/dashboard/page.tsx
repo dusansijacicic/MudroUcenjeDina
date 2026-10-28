@@ -111,6 +111,19 @@ export default async function DashboardPage({
     classroomsRaw = (classRes.data ?? []);
   }
 
+  // Blokirani termini (Admin → Blokiraj termin(e)) – čitaju se sa korisnikovim klijentom (RLS dozvoljava
+  // svim ulogovanima). Ako migracija 044 nije pokrenuta, data je null → nema blokiranih.
+  const { data: blockedRaw } = await (await createClient())
+    .from('blokirani_termini')
+    .select('date, slot_index, napomena')
+    .gte('date', dateFrom)
+    .lte('date', dateTo);
+  const blockedSlots = (blockedRaw ?? []).map((b) => ({
+    date: String(b.date).slice(0, 10),
+    slot_index: b.slot_index as number,
+    napomena: (b.napomena as string | null) ?? null,
+  }));
+
   const allTerms = (allTermsRaw ?? []) as TermRow[];
   const normOne = (t: TermRow) => ({
     instructor: Array.isArray(t.instructor) ? t.instructor[0] : t.instructor,
@@ -290,6 +303,7 @@ export default async function DashboardPage({
         monthStart={monthStart}
         clientFilterId={clientFilterId}
         otherTerms={filteredOtherTerms}
+        blockedSlots={blockedSlots}
       />
     </div>
   );

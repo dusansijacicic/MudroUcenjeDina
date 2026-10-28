@@ -19,6 +19,7 @@ const entityLinks = [
   { href: '/admin/programi', label: 'Programi' },
   { href: '/admin/ucionice', label: 'Učionice' },
   { href: '/admin/testiranja', label: 'Testiranja' },
+  { href: '/admin/blokirani', label: 'Blokirani termini' },
   { href: '/admin/predavaci', label: 'Instruktori' },
 ];
 

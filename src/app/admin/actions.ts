@@ -86,24 +86,24 @@ export async function createInstructorAsAdmin(formData: FormData): Promise<{ err
   return { success: true };
 }
 
-/** Vraća ID-eve predavača i učionica koji su već zauzeti u datom slotu (date + slot_index). */
+/** Vraća ID-eve predavača i učionica koji su već zauzeti u datom slotu (date + slot_index), i da li je
+ * slot blokiran (blocked = null ako nije; napomena može biti prazna i kad jeste). */
 export async function getTakenForSlot(
   date: string,
   slotIndex: number
-): Promise<{ takenInstructorIds: string[]; takenClassroomIds: string[] }> {
+): Promise<{ takenInstructorIds: string[]; takenClassroomIds: string[]; blocked: { napomena: string | null } | null }> {
   const slot = Math.min(15, Math.max(0, slotIndex));
   const dateStr = date.slice(0, 10);
   const admin = createAdminClient();
-  const { data: terms } = await admin
-    .from('terms')
-    .select('instructor_id, classroom_id')
-    .eq('date', dateStr)
-    .eq('slot_index', slot);
+  const [{ data: terms }, { data: block }] = await Promise.all([
+    admin.from('terms').select('instructor_id, classroom_id').eq('date', dateStr).eq('slot_index', slot),
+    admin.from('blokirani_termini').select('napomena').eq('date', dateStr).eq('slot_index', slot).maybeSingle(),
+  ]);
   const takenInstructorIds = [...new Set((terms ?? []).map((t) => t.instructor_id).filter(Boolean))] as string[];
   const takenClassroomIds = [
     ...new Set((terms ?? []).map((t) => t.classroom_id).filter((id): id is string => id != null)),
   ];
-  return { takenInstructorIds, takenClassroomIds };
+  return { takenInstructorIds, takenClassroomIds, blocked: block ? { napomena: block.napomena ?? null } : null };
 }
 
 /** Pravila za slot (datum + vreme): max N termina (iz podešavanja); svaki termin ima JEDINSTVENOG predavača i JEDINSTVENU učionicu u tom slotu. */
@@ -2386,5 +2386,60 @@ export async function deleteOtkazaniTermin(id: string, clientId?: string): Promi
   if (error) return { error: error.message };
   revalidatePath('/admin/kalendar');
   if (clientId) revalidatePath(`/admin/klijenti/${clientId}`);
+  return {};
+}
+
+// ── Blokirani termini ────────────────────────────────────────────────────────
+
+export type BlokiranTermin = { id: string; date: string; slot_index: number; napomena: string | null };
+
+/** Blokira ceo slot (sve učionice/predavače) za svaki izabrani datum+vreme. Već blokiran slot dobija
+ * novu napomenu. Termini koji su već zakazani u tim slotovima ostaju – vide se u Admin → Blokirani termini. */
+export async function blockSlotsAsAdmin(
+  slots: { date: string; slotIndex: number }[],
+  napomena: string | null
+): Promise<{ error?: string }> {
+  const { admin, error: authErr, actor } = await requireAdmin();
+  if (authErr || !admin) return { error: authErr ?? 'Niste ovlašćeni.' };
+  if (slots.length === 0) return {};
+  const note = napomena?.trim() || null;
+  const { error } = await admin.from('blokirani_termini').upsert(
+    slots.map((s) => ({
+      date: s.date.slice(0, 10),
+      slot_index: s.slotIndex,
+      napomena: note,
+      created_by: actor?.id ?? null,
+    })),
+    { onConflict: 'date,slot_index' }
+  );
+  if (error) return { error: error.message };
+  revalidatePath('/admin/kalendar');
+  revalidatePath('/admin/blokirani');
+  revalidatePath('/dashboard');
+  if (actor) {
+    logActivity(actor, 'slot.block', `Blokirano ${slots.length} termin(a)${note ? ` – ${note}` : ''}.`, {
+      entityType: 'blokiran_termin',
+      metadata: { slots, napomena: note },
+    });
+  }
+  return {};
+}
+
+export async function unblockSlotAsAdmin(id: string): Promise<{ error?: string }> {
+  const { admin, error: authErr, actor } = await requireAdmin();
+  if (authErr || !admin) return { error: authErr ?? 'Niste ovlašćeni.' };
+  const { data: row } = await admin.from('blokirani_termini').select('date, slot_index, napomena').eq('id', id).maybeSingle();
+  const { error } = await admin.from('blokirani_termini').delete().eq('id', id);
+  if (error) return { error: error.message };
+  revalidatePath('/admin/kalendar');
+  revalidatePath('/admin/blokirani');
+  revalidatePath('/dashboard');
+  if (actor && row) {
+    logActivity(actor, 'slot.unblock', `Odblokiran termin ${row.date} ${TIME_SLOTS[row.slot_index] ?? `slot ${row.slot_index}`}.`, {
+      entityType: 'blokiran_termin',
+      entityId: id,
+      metadata: row,
+    });
+  }
   return {};
 }

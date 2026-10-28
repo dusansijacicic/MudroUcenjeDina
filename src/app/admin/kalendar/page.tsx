@@ -73,6 +73,7 @@ export default async function AdminKalendarPage({
     termTypes,
     termCategories,
     { data: allPendingZahteviRaw },
+    { data: blockedRaw },
   ] = await Promise.all([
     adminSupabase
       .from('terms')
@@ -98,7 +99,15 @@ export default async function AdminKalendarPage({
     // trenutnog prikaza. Samo datumi, radi lakog dugmeta "skoči na tu nedelju". U ISTOM Promise.all-u
     // (ne odvojen await posle) da ne doda dodatan sekvencijalni round-trip.
     adminSupabase.from('zahtevi_za_cas').select('requested_date').eq('status', 'pending').order('requested_date'),
+    // Ako migracija 044 još nije pokrenuta, upit vraća grešku → data je null → nema blokiranih.
+    adminSupabase.from('blokirani_termini').select('id, date, slot_index, napomena').gte('date', dateFrom).lte('date', dateTo),
   ]);
+  const blockedSlots = (blockedRaw ?? []).map((b) => ({
+    id: b.id as string,
+    date: String(b.date).slice(0, 10),
+    slot_index: b.slot_index as number,
+    napomena: (b.napomena as string | null) ?? null,
+  }));
   const allPendingZahteviDates = [...new Set((allPendingZahteviRaw ?? []).map((z) => String(z.requested_date).slice(0, 10)))];
 
   let terms: AdminTerm[] = (termsRaw ?? []).map((t) => {
@@ -240,6 +249,7 @@ export default async function AdminKalendarPage({
         pendingZahtevi={pendingZahtevi}
         allPendingZahteviDates={allPendingZahteviDates}
         focusDate={params.fokus?.slice(0, 10)}
+        blockedSlots={blockedSlots}
       />
     </div>
   );
