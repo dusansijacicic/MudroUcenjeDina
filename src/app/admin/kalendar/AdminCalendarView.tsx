@@ -963,9 +963,11 @@ export default function AdminCalendarView({
     }
     const res = await moveTermAsAdmin(draggedTermId, date, slot);
     setDraggedTermId(null);
-    if (!res.error) {
-      router.refresh();
+    if (res.error) {
+      toast.error(res.error);
+      return;
     }
+    router.refresh();
   };
   const base = '/admin/kalendar';
   const linkSuffix = '';
@@ -1698,36 +1700,6 @@ function AdminCellContent({
     </div>
   ) : null;
 
-  if (swap.blockMode) {
-    const blockSelected = swap.isBlockSelected(emptyDate, emptySlot);
-    return (
-      <div
-        role="button"
-        tabIndex={0}
-        onClick={() => swap.onToggleBlockSlot(emptyDate, emptySlot)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            swap.onToggleBlockSlot(emptyDate, emptySlot);
-          }
-        }}
-        className={`w-full min-h-[52px] rounded-lg border-2 p-2 text-left text-xs transition-colors cursor-pointer space-y-1.5 ${
-          blockSelected
-            ? 'border-stone-800 bg-stone-100 ring-2 ring-offset-1 ring-stone-700'
-            : 'border-dashed border-stone-200 hover:border-stone-500 hover:bg-stone-50'
-        }`}
-      >
-        {BlockedBadge}
-        {slotCount === 0 && !blocked ? (
-          <span className="block text-stone-400">prazno</span>
-        ) : (
-          termsInSlot.map((term) => <TermCardVisual key={term.id} term={term} />)
-        )}
-        {blockSelected && <span className="block font-semibold text-stone-800 mt-0.5">⛔ izabrano za blokiranje</span>}
-      </div>
-    );
-  }
-
   if (swap.bulkMode && blocked) {
     return (
       <div className="space-y-1.5 min-h-[52px] cursor-not-allowed">
@@ -1848,6 +1820,63 @@ function AdminCellContent({
       })}
     </div>
   ) : null;
+
+  if (swap.blockMode) {
+    const blockSelected = swap.isBlockSelected(emptyDate, emptySlot);
+    // Termini iz slota se mogu i u ovom modu otvoriti (klik) ili prevući u drugi, neblokirani slot –
+    // da se ono što smeta blokiranju odmah premesti bez izlaska iz moda.
+    const canDropHere = !blocked && slotCount < maxTerminaPoSlotu;
+    const isEmpty = slotCount === 0 && pendingZahteviInSlot.length === 0;
+    return (
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={() => swap.onToggleBlockSlot(emptyDate, emptySlot)}
+        onKeyDown={(e) => {
+          if (e.target !== e.currentTarget) return;
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            swap.onToggleBlockSlot(emptyDate, emptySlot);
+          }
+        }}
+        onDragOver={(e) => {
+          if (draggedTermId && canDropHere) e.preventDefault();
+        }}
+        onDrop={(e) => {
+          e.preventDefault();
+          if (draggedTermId && canDropHere) onDropCell(emptyDate, emptySlot);
+        }}
+        className={`w-full min-h-[52px] rounded-lg border-2 p-2 text-left text-xs transition-colors cursor-pointer space-y-1.5 ${
+          blockSelected
+            ? 'border-stone-800 bg-stone-100 ring-2 ring-offset-1 ring-stone-700'
+            : 'border-dashed border-stone-200 hover:border-stone-500 hover:bg-stone-50'
+        }`}
+      >
+        {BlockedBadge}
+        {termsInSlot.map((term) =>
+          isAutoSpillover(term) ? (
+            <TermCardVisual key={term.id} term={term} />
+          ) : (
+            <Link
+              key={term.id}
+              href={`/admin/termin/${term.id}`}
+              title="Otvori termin (izmena) – ili ga prevuci u drugi termin"
+              className="block rounded-lg hover:opacity-90"
+              draggable
+              onClick={(e) => e.stopPropagation()}
+              onDragStart={() => setDraggedTermId(term.id)}
+              onDragEnd={() => setDraggedTermId(null)}
+            >
+              <TermCardVisual term={term} />
+            </Link>
+          )
+        )}
+        {PendingZahteviEntries}
+        {isEmpty && !blocked && <span className="block text-stone-400">prazno</span>}
+        {blockSelected && <span className="block font-semibold text-stone-800 mt-0.5">⛔ izabrano za blokiranje</span>}
+      </div>
+    );
+  }
 
   if (termsInSlot.length === 0 && blocked) {
     return (
