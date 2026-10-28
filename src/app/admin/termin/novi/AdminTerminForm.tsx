@@ -299,9 +299,9 @@ export default function AdminTerminForm({
         </div>
       )}
 
-      <div className="lg:grid lg:grid-cols-[1fr_380px] lg:gap-6 lg:items-start space-y-4 lg:space-y-0">
-        {/* GLAVNO: izbor dece/klijenta – na vrhu na računaru da se ne mora skrolovati do njega. */}
-        <div className="order-2 lg:order-1 rounded-xl border-2 border-amber-200 bg-amber-50/30 p-4">
+      <div className="lg:grid lg:grid-cols-2 lg:gap-6 lg:items-start space-y-4 lg:space-y-0">
+        {/* Izbor dece/klijenta – desna polovina na računaru. */}
+        <div className="lg:order-2 rounded-xl border-2 border-amber-200 bg-amber-50/30 p-4">
           {isNastavakCat ? (
             <div>
               <p className="text-sm font-medium text-stone-800 mb-3">Klijenti u nastavku</p>
@@ -344,8 +344,8 @@ export default function AdminTerminForm({
           )}
         </div>
 
-        {/* SA STRANE: datum/vreme, kategorija, vrsta, instruktor/učionica, ponavljanje. */}
-        <div className="order-1 lg:order-2 space-y-4">
+        {/* Leva polovina na računaru: datum/vreme, kategorija, vrsta, instruktor/učionica, ponavljanje. */}
+        <div className="lg:order-1 space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-stone-700 mb-1">Datum</label>
