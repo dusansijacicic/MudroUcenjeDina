@@ -10,6 +10,7 @@ import { INSTRUCTOR_COLORS, isTermInPast, slotsNeeded, AUTO_SPILLOVER_NAPOMENA, 
 import { termMozeNovoPredavanje } from '@/lib/settings';
 import { normalizeClientPol } from '@/lib/client-pol';
 import { logActivity, type Actor } from '@/lib/audit';
+import { getAuthedUser, getIsAdmin } from '@/lib/auth';
 
 export async function createInstructorAsAdmin(formData: FormData): Promise<{ error?: string; success?: boolean }> {
   const supabase = await createClient();
@@ -810,11 +811,10 @@ export async function setInstructorAktivanAsAdmin(instructorId: string, aktivan:
 }
 
 async function requireAdmin() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  // getAuthedUser/getIsAdmin su keširani po zahtevu i proveravaju JWT lokalno (bez poziva Auth-u).
+  const { user } = await getAuthedUser();
   if (!user) return { error: 'Niste ulogovani.' as const, admin: null, actor: null };
-  const { data: adminRow } = await supabase.from('admin_users').select('user_id').eq('user_id', user.id).single();
-  if (!adminRow) return { error: 'Samo admin.' as const, admin: null, actor: null };
+  if (!(await getIsAdmin())) return { error: 'Samo admin.' as const, admin: null, actor: null };
   const actor: Actor = { id: user.id, email: user.email ?? null, name: null, role: 'admin' };
   return { admin: createAdminClient(), error: null, actor };
 }

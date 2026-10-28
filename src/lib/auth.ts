@@ -12,9 +12,14 @@ export const getAuthedUser = cache(async function getAuthedUser(): Promise<{
   user: User | null;
 }> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // getClaims() proverava potpis JWT-a lokalno (projekat koristi ES256 ključeve, javni ključ se
+  // preuzme jednom i kešira) – bez mrežnog poziva ka Supabase Auth-u na svakom renderu stranice,
+  // što je ranije radio getUser(). Aplikacija od korisnika koristi samo id i email.
+  const { data } = await supabase.auth.getClaims();
+  const claims = data?.claims;
+  const user = claims?.sub
+    ? ({ id: claims.sub, email: typeof claims.email === 'string' ? claims.email : undefined } as User)
+    : null;
   return { supabase, user };
 });
 
