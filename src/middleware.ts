@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 
 const ADMIN_VIEW_PREFIX = '/admin/view/';
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const AUTH_TIMEOUT_MS = 2500;
 
 export async function middleware(request: NextRequest) {
   let supabaseResponse = NextResponse.next({
@@ -49,7 +50,18 @@ export async function middleware(request: NextRequest) {
     }
   );
 
-  await supabase.auth.getUser();
+  // getClaims() (preporuka Supabase-a za middleware) proverava JWT lokalno kad god može i osvežava
+  // sesiju samo kad je istekla – za razliku od getUser(), koji je na SVAKI zahtev (i svaki prefetch
+  // linka) išao mrežom do Supabase Auth-a. Uz to tvrd limit: ako je Supabase spor, middleware ne sme
+  // da visi do Vercel-ovog 504 MIDDLEWARE_INVOCATION_TIMEOUT – stranica i sama proverava korisnika.
+  try {
+    await Promise.race([
+      supabase.auth.getClaims(),
+      new Promise((resolve) => setTimeout(resolve, AUTH_TIMEOUT_MS)),
+    ]);
+  } catch (err) {
+    console.error('[middleware] auth refresh failed', err);
+  }
 
   if (viewAsInstructorId) {
     supabaseResponse.cookies.set('view_as_instructor', viewAsInstructorId, {
