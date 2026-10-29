@@ -1558,7 +1558,7 @@ const CHILD_ROW_COLORS = [
   { bg: '#dbeafe', bar: '#3b82f6' }, // plava
   { bg: '#dcfce7', bar: '#22c55e' }, // zelena
   { bg: '#fce7f3', bar: '#ec4899' }, // roze
-  { bg: '#ede9fe', bar: '#8b5cf6' }, // ljubičasta
+  { bg: '#ccfbf1', bar: '#14b8a6' }, // tirkizna (ljubičasta je rezervisana za hover)
   { bg: '#ffedd5', bar: '#f97316' }, // narandžasta
 ];
 
@@ -2248,13 +2248,12 @@ function GridHoverHighlight({ containerRef }: { containerRef: React.RefObject<HT
   const g = '[data-hover-grid]';
   const { date, slot } = hover;
   return (
-    // Neutralna grafitna (siva) – namerno bez boje, da se ne meša sa bojama redova dece
-    // (žuta, plava, zelena, roze, ljubičasta, narandžasta).
+    // Jaka ljubičasta – nema je među bojama redova dece (žuta, plava, zelena, roze, tirkizna, narandžasta).
     <style>{`
-      ${g} td[data-date="${date}"], ${g} tr[data-row="${slot}"] > td { background-color: rgb(71 85 105 / 0.14); }
-      ${g} th[data-date="${date}"], ${g} th[data-date="${date}"] * { background-color: #334155; color: #ffffff; }
-      ${g} td[data-slot-label="${slot}"] { background-color: #334155; color: #ffffff; font-weight: 700; }
-      ${g} td[data-date="${date}"][data-slot="${slot}"] { box-shadow: inset 0 0 0 3px #1e293b; }
+      ${g} td[data-date="${date}"], ${g} tr[data-row="${slot}"] > td { background-color: rgb(147 51 234 / 0.22); }
+      ${g} th[data-date="${date}"], ${g} th[data-date="${date}"] * { background-color: #6b21a8; color: #ffffff; }
+      ${g} td[data-slot-label="${slot}"] { background-color: #6b21a8; color: #ffffff; font-weight: 700; }
+      ${g} td[data-date="${date}"][data-slot="${slot}"] { box-shadow: inset 0 0 0 3px #7e22ce; }
     `}</style>
   );
 }
