@@ -11,6 +11,7 @@ import { termMozeNovoPredavanje } from '@/lib/settings';
 import { normalizeClientPol } from '@/lib/client-pol';
 import { logActivity, type Actor } from '@/lib/audit';
 import { getAuthedUser, getIsAdmin } from '@/lib/auth';
+import { beogradIso, danasBeograd, datumBeograd, jeIsoDatum } from '@/lib/datum';
 
 export async function createInstructorAsAdmin(formData: FormData): Promise<{ error?: string; success?: boolean }> {
   const { supabase, user } = await getAuthedUser();
@@ -2154,10 +2155,14 @@ export async function createUplata(
   termTypeId: string | null,
   brojCasova: number,
   popustPercent: number | null,
-  napomena: string | null
+  napomena: string | null,
+  /** YYYY-MM-DD; prazno ili danas = sada, raniji dan = uplata primljena tog dana. */
+  datum: string | null = null
 ): Promise<{ error?: string }> {
   const { supabase, user } = await getAuthedUser();
   if (!user) return { error: 'Niste ulogovani.' };
+  const createdAt = createdAtZaDatumUplate(datum);
+  if (createdAt.error) return { error: createdAt.error };
   const admin = createAdminClient();
   const [{ data: adminRow }, { data: instructor }] = await Promise.all([
     supabase.from('admin_users').select('user_id').eq('user_id', user.id).maybeSingle(),
@@ -2177,6 +2182,7 @@ export async function createUplata(
       broj_casova: Math.max(0, brojCasova),
       popust_percent: popust,
       napomena: napomena?.trim() || null,
+      ...(createdAt.value ? { created_at: createdAt.value } : {}),
     })
     .select('id')
     .single();
@@ -2208,7 +2214,9 @@ export async function updateUplata(
   termTypeId: string | null,
   brojCasova: number,
   popustPercent: number | null,
-  napomena: string | null
+  napomena: string | null,
+  /** YYYY-MM-DD; menja se samo ako se razlikuje od sačuvanog dana uplate. */
+  datum: string | null = null
 ): Promise<{ error?: string }> {
   const { admin, error: authErr, actor } = await requireAdmin();
   if (authErr || !admin) return { error: authErr ?? 'Samo admin.' };
@@ -2216,6 +2224,9 @@ export async function updateUplata(
   const popust = popustPercent != null && Number.isFinite(popustPercent) && popustPercent >= 0 && popustPercent <= 100 ? popustPercent : null;
   const { data: before } = await admin.from('uplate').select('*').eq('id', id).maybeSingle();
   if (!before) return { error: 'Uplata nije pronađena (možda je obrisana).' };
+  const datumPromenjen = !!datum && (!before.created_at || datum !== datumBeograd(before.created_at));
+  const createdAt = datumPromenjen ? createdAtZaDatumUplate(datum) : {};
+  if (createdAt.error) return { error: createdAt.error };
   const { error } = await admin
     .from('uplate')
     .update({
@@ -2226,6 +2237,7 @@ export async function updateUplata(
       broj_casova: Math.max(0, brojCasova),
       popust_percent: popust,
       napomena: napomena?.trim() || null,
+      ...(createdAt.value ? { created_at: createdAt.value } : {}),
     })
     .eq('id', id);
   if (error) return { error: error.message };
@@ -2248,12 +2260,19 @@ const PODRAZUMEVANI_PRIMALAC_UPLATE = { ime: 'Časlav', prezime: 'Mančić' };
 
 /** Vreme časa (datum + početak slota) kao trenutak po beogradskom vremenu, za datum uplate. */
 function vremeCasaBeograd(date: string, slotIndex: number): string {
-  const time = TIME_SLOTS[slotIndex] ?? '12:00';
-  const tz = new Intl.DateTimeFormat('en-US', { timeZone: 'Europe/Belgrade', timeZoneName: 'longOffset' })
-    .formatToParts(new Date(`${date}T12:00:00Z`))
-    .find((p) => p.type === 'timeZoneName')?.value;
-  const offset = tz?.replace('GMT', '') || '+00:00';
-  return `${date}T${time}:00${offset}`;
+  return beogradIso(date, TIME_SLOTS[slotIndex] ?? '12:00');
+}
+
+/**
+ * Datum uplate iz forme → vrednost za created_at. Danas (ili prazno) → sada; raniji dan → u podne tog
+ * dana (beogradsko vreme). Budući datum nije dozvoljen.
+ */
+function createdAtZaDatumUplate(datum: string | null): { value?: string; error?: string } {
+  if (!datum) return {};
+  if (!jeIsoDatum(datum)) return { error: 'Neispravan datum uplate.' };
+  const danas = danasBeograd();
+  if (datum > danas) return { error: 'Datum uplate ne može biti u budućnosti.' };
+  return datum === danas ? { value: new Date().toISOString() } : { value: beogradIso(datum, '12:00') };
 }
 
 /**

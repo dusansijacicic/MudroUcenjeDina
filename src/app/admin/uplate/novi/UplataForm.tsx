@@ -6,6 +6,7 @@ import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { createUplata, updateUplata } from '@/app/admin/actions';
 import SingleKlijentPicker from '@/components/SingleKlijentPicker';
+import { danasBeograd } from '@/lib/datum';
 
 type Option = { id: string; ime?: string; prezime?: string; naziv?: string };
 type ClientOption = Option & { popust_percent?: number };
@@ -21,6 +22,8 @@ export type UplataInitial = {
   brojCasova: number;
   popustPercent: number | null;
   napomena: string | null;
+  /** Dan kada je uplata primljena (YYYY-MM-DD, beogradsko vreme). */
+  datum: string;
 };
 
 type CalcInput = { termTypeId: string; brojCasova: number; popustPercent: string; clientId: string };
@@ -70,6 +73,9 @@ export default function UplataForm({
   const [brojCasova, setBrojCasova] = useState(initial?.brojCasova ?? 1);
   const [popustPercent, setPopustPercent] = useState(initial?.popustPercent != null ? String(initial.popustPercent) : '');
   const [napomena, setNapomena] = useState(initial?.napomena ?? '');
+  const [danas] = useState(danasBeograd);
+  // Podrazumevano danas; može i raniji dan (uplata primljena ranije, a uneta sada).
+  const [datum, setDatum] = useState(() => initial?.datum ?? danasBeograd());
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -91,6 +97,10 @@ export default function UplataForm({
     setError('');
     if (!effectiveInstructorId || !clientId) {
       setError('Izaberite predavača i klijenta.');
+      return;
+    }
+    if (!datum || datum > danas) {
+      setError('Izaberite datum uplate (danas ili raniji dan).');
       return;
     }
     setLoading(true);
@@ -118,7 +128,8 @@ export default function UplataForm({
           termTypeId || null,
           brojCasova,
           popustNum,
-          napomena.trim() || null
+          napomena.trim() || null,
+          datum
         )
       : await createUplata(
           effectiveInstructorId,
@@ -127,7 +138,8 @@ export default function UplataForm({
           termTypeId || null,
           brojCasova,
           popustNum,
-          napomena.trim() || null
+          napomena.trim() || null,
+          datum
         );
     setLoading(false);
     if (result.error) {
@@ -158,6 +170,26 @@ export default function UplataForm({
           </select>
         </div>
       )}
+      <div>
+        <label htmlFor="uplata-datum" className="block text-sm font-medium text-stone-700 mb-1">Datum uplate *</label>
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            id="uplata-datum"
+            type="date"
+            required
+            max={danas}
+            value={datum}
+            onChange={(e) => setDatum(e.target.value)}
+            className="rounded-lg border border-stone-300 px-3 py-2 text-stone-800"
+          />
+          {datum !== danas && (
+            <button type="button" onClick={() => setDatum(danas)} className="text-sm text-amber-700 hover:underline">
+              Vrati na danas
+            </button>
+          )}
+        </div>
+        <p className="mt-1 text-xs text-stone-500">Danas je podrazumevano; ako je novac primljen ranije, izaberite taj dan.</p>
+      </div>
       <div>
         <label className="block text-sm font-medium text-stone-700 mb-1">Klijent *</label>
         <SingleKlijentPicker

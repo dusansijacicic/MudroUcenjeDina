@@ -89,6 +89,7 @@ export default async function DashboardUplatePage() {
                   <td className="p-3 text-stone-700">
                     {u.created_at
                       ? new Date(u.created_at).toLocaleString('sr-Latn-RS', {
+                          timeZone: 'Europe/Belgrade',
                           day: '2-digit',
                           month: '2-digit',
                           year: 'numeric',

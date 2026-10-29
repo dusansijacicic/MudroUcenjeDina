@@ -5,6 +5,7 @@ import Link from 'next/link';
 import UplataForm from '../novi/UplataForm';
 import ObrisiUplatuButton from '../ObrisiUplatuButton';
 import { getTermTypes } from '@/app/admin/actions';
+import { datumBeograd } from '@/lib/datum';
 
 export default async function AdminUplataIzmenaPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -16,7 +17,7 @@ export default async function AdminUplataIzmenaPage({ params }: { params: Promis
   const [{ data: uplata }, { data: instructors }, { data: clients }, termTypes] = await Promise.all([
     adminSupabase
       .from('uplate')
-      .select('id, instructor_id, client_id, iznos, term_type_id, broj_casova, popust_percent, napomena, client:clients(ime, prezime)')
+      .select('id, created_at, instructor_id, client_id, iznos, term_type_id, broj_casova, popust_percent, napomena, client:clients(ime, prezime)')
       .eq('id', id)
       .maybeSingle(),
     // Svi instruktori (i suspendovani) – da se postojeća uplata suspendovanog instruktora i dalje vidi ispravno.
@@ -61,6 +62,7 @@ export default async function AdminUplataIzmenaPage({ params }: { params: Promis
           brojCasova: uplata.broj_casova ?? 0,
           popustPercent: uplata.popust_percent != null ? Number(uplata.popust_percent) : null,
           napomena: uplata.napomena,
+          datum: datumBeograd(uplata.created_at ?? new Date()),
         }}
       />
       <p className="mt-4">
