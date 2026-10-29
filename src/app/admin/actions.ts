@@ -1,7 +1,6 @@
 'use server';
 
 import { buildStanjeFromMaps, type StanjeVrstaRow } from '@/lib/stanje';
-import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import type { TermCategoryRow } from '@/lib/term-categories';
 import { SEEDED_TERM_CATEGORY_INDIVIDUAL_ID, SEEDED_TERM_CATEGORY_GRUPNI_ID } from '@/lib/term-categories';
@@ -14,10 +13,7 @@ import { logActivity, type Actor } from '@/lib/audit';
 import { getAuthedUser, getIsAdmin } from '@/lib/auth';
 
 export async function createInstructorAsAdmin(formData: FormData): Promise<{ error?: string; success?: boolean }> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { supabase, user } = await getAuthedUser();
   if (!user) redirect('/login?reason=no_session');
 
   const { data: admin } = await supabase
@@ -118,10 +114,7 @@ export async function createTermAsAdmin(
   napomena: string | null = null,
   nastavakOfTermId: string | null = null
 ): Promise<{ termId?: string; instructorId?: string; error?: string }> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { supabase, user } = await getAuthedUser();
   if (!user) return { error: 'Niste ulogovani.' };
 
   const { data: admin } = await supabase
@@ -707,8 +700,7 @@ export async function assignTermTypeToZahteviAsAdmin(
 }
 
 export async function getAdminInstructorsList(): Promise<{ id: string; ime: string; prezime: string }[]> {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const { supabase, user } = await getAuthedUser();
   if (!user) return [];
   const { data: admin } = await supabase.from('admin_users').select('user_id').eq('user_id', user.id).single();
   if (!admin) return [];
@@ -2164,12 +2156,13 @@ export async function createUplata(
   popustPercent: number | null,
   napomena: string | null
 ): Promise<{ error?: string }> {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const { supabase, user } = await getAuthedUser();
   if (!user) return { error: 'Niste ulogovani.' };
   const admin = createAdminClient();
-  const { data: adminRow } = await supabase.from('admin_users').select('user_id').eq('user_id', user.id).single();
-  const { data: instructor } = await admin.from('instructors').select('id, ime, prezime').eq('user_id', user.id).single();
+  const [{ data: adminRow }, { data: instructor }] = await Promise.all([
+    supabase.from('admin_users').select('user_id').eq('user_id', user.id).maybeSingle(),
+    admin.from('instructors').select('id, ime, prezime').eq('user_id', user.id).maybeSingle(),
+  ]);
   const isAdmin = !!adminRow;
   const isOwnInstructor = instructor?.id === instructorId;
   if (!isAdmin && !isOwnInstructor) return { error: 'Niste ovlašćeni da unesete uplatu za tog instruktora.' };

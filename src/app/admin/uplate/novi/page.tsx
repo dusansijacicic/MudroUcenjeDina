@@ -15,7 +15,7 @@ export default async function AdminUplateNoviPage() {
   const adminSupabase = createAdminClient();
   const [{ data: instructors }, { data: clients }, termTypes] = await Promise.all([
     adminSupabase.from('instructors').select('id, ime, prezime').eq('aktivan', true).order('prezime').order('ime'),
-    adminSupabase.from('clients').select('id, ime, prezime, popust_percent').order('prezime').order('ime'),
+    adminSupabase.from('clients').select('id, ime, prezime, popust_percent').order('ime').order('prezime'),
     getTermTypes(),
   ]);
 

@@ -27,9 +27,10 @@ export default function UplataForm({
   backHref?: string;
 }) {
   const router = useRouter();
-  const [instructorId, setInstructorId] = useState(fixedInstructorId ?? instructors[0]?.id ?? '');
+  // Bez podrazumevanog izbora: uplata ne sme tiho da ode na prvog instruktora/dete sa liste.
+  const [instructorId, setInstructorId] = useState(fixedInstructorId ?? '');
   const effectiveInstructorId = fixedInstructorId ?? instructorId;
-  const [clientId, setClientId] = useState(clients[0]?.id ?? '');
+  const [clientId, setClientId] = useState('');
   const selectedClient = clients.find((c) => c.id === clientId);
   const clientPopust = selectedClient?.popust_percent ?? 0;
   const [iznos, setIznos] = useState('');

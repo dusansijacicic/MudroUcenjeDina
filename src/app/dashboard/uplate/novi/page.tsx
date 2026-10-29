@@ -10,19 +10,17 @@ export default async function DashboardUplateNoviPage() {
   if (!instructor) redirect('/login?reason=no_instructor');
 
   const admin = createAdminClient();
-  const { data: clientsRaw } = await admin
-    .from('clients')
-    .select('id, ime, prezime, popust_percent')
-    .order('prezime')
-    .order('ime');
+  // Klijenti i vrste časova u istom krugu upita (ranije jedno za drugim).
+  const [{ data: clientsRaw }, termTypes] = await Promise.all([
+    admin.from('clients').select('id, ime, prezime, popust_percent').order('ime').order('prezime'),
+    getTermTypes(),
+  ]);
   const clients = (clientsRaw ?? []).map((c) => ({
     id: c.id,
     ime: c.ime ?? '',
     prezime: c.prezime ?? '',
     popust_percent: c.popust_percent ?? 0,
   }));
-
-  const termTypes = await getTermTypes();
 
   return (
     <div>

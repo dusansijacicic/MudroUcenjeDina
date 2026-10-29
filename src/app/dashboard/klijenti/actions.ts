@@ -1,8 +1,8 @@
 'use server';
 
-import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getDashboardInstructor } from '@/lib/dashboard';
+import { getAuthedUser } from '@/lib/auth';
 import { revalidatePath } from 'next/cache';
 import { normalizeClientPol } from '@/lib/client-pol';
 import { saveClientTermTypeStatuses, saveClientProgrami, type ClientProgramStatus, type ClientProgramSelection } from '@/app/admin/actions';
@@ -37,10 +37,7 @@ export async function createClientAsInstructor(
   linkInstructorId: string
 ): Promise<{ error?: string; clientId?: string }> {
   console.log('[klijenti] createClientAsInstructor', payload.ime, payload.prezime, linkInstructorId);
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { supabase, user } = await getAuthedUser();
   if (!user) return { error: 'Niste ulogovani.' };
 
   let admin;
@@ -109,10 +106,7 @@ export async function updateClientAsInstructor(
   payload: ClientPayload
 ): Promise<{ error?: string }> {
   console.log('[klijenti] updateClientAsInstructor', clientId);
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { supabase, user } = await getAuthedUser();
   if (!user) return { error: 'Niste ulogovani.' };
 
   let admin;
