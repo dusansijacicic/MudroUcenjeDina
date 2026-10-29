@@ -196,6 +196,12 @@ function shortInstructorLabel(ime: string, prezime: string): string {
   return `${a}${b}` || '—';
 }
 
+/** Skraćeno ime učionice (npr. "1-Buzan" → "1") za uske ekrane. Bez crtice vraća naziv nepromenjen. */
+function shortClassroomLabel(naziv: string): string {
+  const idx = naziv.indexOf('-');
+  return idx > 0 ? naziv.slice(0, idx) : naziv;
+}
+
 function swapTermLabel(term: AdminTerm): string {
   const d = new Date(term.date + 'T12:00:00');
   const dateLabel = `${d.getDate()}.${d.getMonth() + 1}.`;
@@ -1615,11 +1621,19 @@ function TermCardVisual({ term, rowOffset = 0 }: { term: AdminTerm; rowOffset?: 
           </span>
           <span className="hidden lg:inline">{instructorName}</span>
         </span>
-        {isTesting ? (
-          <span className="shrink-0 font-bold uppercase tracking-wide text-red-600">Testiranje</span>
-        ) : (
-          vrsta && <span className="shrink-0 truncate text-stone-500">{vrsta}</span>
-        )}
+        <span className="flex min-w-0 items-baseline gap-1">
+          {isTesting ? (
+            <span className="shrink-0 font-bold uppercase tracking-wide text-red-600">Testiranje</span>
+          ) : (
+            vrsta && <span className="truncate text-stone-500">{vrsta}</span>
+          )}
+          {classroomName && (
+            <span className="shrink-0 rounded bg-stone-100 px-1 font-medium text-stone-600">
+              <span className="lg:hidden">{shortClassroomLabel(classroomName)}</span>
+              <span className="hidden lg:inline">{classroomName}</span>
+            </span>
+          )}
+        </span>
       </div>
       {isTesting ? (
         potentialClients.length === 0 ? (
