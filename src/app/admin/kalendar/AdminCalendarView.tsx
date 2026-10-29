@@ -196,13 +196,6 @@ function shortInstructorLabel(ime: string, prezime: string): string {
   return `${a}${b}` || '—';
 }
 
-/** Skraćeno ime učionice (npr. "1-Buzan" → "1") za tablet/telefon – učionice se ovde uglavnom
- * i pominju po broju. Bez crtice u nazivu, vraća naziv nepromenjen. */
-function shortClassroomLabel(naziv: string): string {
-  const idx = naziv.indexOf('-');
-  return idx > 0 ? naziv.slice(0, idx) : naziv;
-}
-
 function swapTermLabel(term: AdminTerm): string {
   const d = new Date(term.date + 'T12:00:00');
   const dateLabel = `${d.getDate()}.${d.getMonth() + 1}.`;
@@ -293,7 +286,7 @@ function TruncatedNameList({
               e.stopPropagation();
               setExpanded(true);
             }}
-            className="text-[11px] font-medium text-stone-500 underline decoration-dotted hover:text-stone-800"
+            className="px-2 py-0.5 text-[11px] font-medium text-stone-500 underline decoration-dotted hover:text-stone-800"
           >
             + {restCount} ostalih
           </button>
@@ -308,7 +301,7 @@ function TruncatedNameList({
               e.stopPropagation();
               setExpanded(false);
             }}
-            className="text-[11px] font-medium text-stone-500 underline decoration-dotted hover:text-stone-800"
+            className="px-2 py-0.5 text-[11px] font-medium text-stone-500 underline decoration-dotted hover:text-stone-800"
           >
             Prikaži manje
           </button>
@@ -1552,97 +1545,118 @@ export default function AdminCalendarView({
   );
 }
 
-/** Vizuelni sadržaj termin-kartice (instruktor/učionica/predavanja ili testiranje) – bez klika/href-a,
- * da se može ponovo iskoristiti i unutar "Zakaži više časova" moda (gde je ceo slot jedno dugme za
- * selekciju, a ne link ka terminu), a ne samo u normalnom prikazu. */
-function TermCardVisual({ term }: { term: AdminTerm }) {
+/** Boje redova za decu u jednom terminu (slotu): 1. dete prva boja, 2. druga… – po redosledu u slotu,
+ * ne po učionici, da se na prvi pogled vidi koliko dece je u isto vreme. */
+const CHILD_ROW_COLORS = [
+  { bg: '#fef3c7', bar: '#f59e0b' }, // žuta
+  { bg: '#dbeafe', bar: '#3b82f6' }, // plava
+  { bg: '#dcfce7', bar: '#22c55e' }, // zelena
+  { bg: '#fce7f3', bar: '#ec4899' }, // roze
+  { bg: '#ede9fe', bar: '#8b5cf6' }, // ljubičasta
+  { bg: '#ffedd5', bar: '#f97316' }, // narandžasta
+];
+
+function isTestingTerm(term: AdminTerm): boolean {
+  const tcRaw = term.term_category;
+  return Array.isArray(tcRaw) ? (tcRaw as { is_testing: boolean }[])[0]?.is_testing === true : tcRaw?.is_testing === true;
+}
+
+/** Koliko redova (dece) termin zauzima u ćeliji – za nastavak boja kroz sve termine u istom slotu. */
+function childRowCount(term: AdminTerm): number {
+  if (isAutoSpillover(term)) return 0;
+  return isTestingTerm(term) ? (term.potential_clients ?? []).length : (term.predavanja ?? []).length;
+}
+
+/** Pomak boje za svaki termin u slotu: drugi termin nastavlja boje tamo gde je prvi stao. */
+function childRowOffsets(terms: AdminTerm[]): number[] {
+  let acc = 0;
+  return terms.map((t) => {
+    const start = acc;
+    acc += childRowCount(t);
+    return start;
+  });
+}
+
+/** Vizuelni sadržaj termin-kartice (instruktor/vrsta + deca u redovima naizmeničnih boja) – bez
+ * klika/href-a, da se može koristiti i u modovima (blokiranje, više časova) i u normalnom prikazu.
+ * rowOffset = koliko je dece već prikazano iznad u istom slotu (da boje idu redom kroz ceo slot). */
+function TermCardVisual({ term, rowOffset = 0 }: { term: AdminTerm; rowOffset?: number }) {
   if (isAutoSpillover(term)) {
     const instructorName = term.instructor ? `${term.instructor.ime} ${term.instructor.prezime}` : '—';
     return (
-      <div
-        className="rounded-lg border-2 border-dashed p-2 text-xs text-stone-500 bg-stone-50"
-        style={{ borderColor: term.classroom?.color ?? '#94a3b8' }}
-      >
+      <div className="rounded-lg border-2 border-dashed border-stone-300 p-2 text-xs text-stone-500 bg-stone-50">
         <span className="font-medium">↳ Nastavak dužeg časa</span>
-        <span className="block text-[11px] mt-0.5">{instructorName} · {term.classroom?.naziv ?? 'Učionica'}</span>
+        <span className="block text-[11px] mt-0.5">{instructorName}</span>
       </div>
     );
   }
   const instructorColor = term.instructor?.color ?? DEFAULT_COLOR;
-  const classroomColor = term.classroom?.color ?? '#64748b'; // fallback siva
-  const bg = `${classroomColor}20`;
   const predavanja = term.predavanja ?? [];
   const instructorName = term.instructor ? `${term.instructor.ime} ${term.instructor.prezime}` : '—';
   const classroomName = term.classroom?.naziv ?? null;
-  const tcRaw = term.term_category;
-  const isTesting = Array.isArray(tcRaw) ? (tcRaw as { is_testing: boolean }[])[0]?.is_testing === true : tcRaw?.is_testing === true;
+  const isTesting = isTestingTerm(term);
   const potentialClients = term.potential_clients ?? [];
+  const tt = predavanja[0]?.term_type;
+  const vrsta = Array.isArray(tt) ? tt[0]?.naziv : tt?.naziv;
+  const rowStyle = (i: number) => {
+    const c = CHILD_ROW_COLORS[(rowOffset + i) % CHILD_ROW_COLORS.length];
+    return { backgroundColor: c.bg, borderLeft: `4px solid ${c.bar}` };
+  };
 
   return (
-    <div className="rounded-lg border-2 p-2 text-sm" style={{ borderColor: classroomColor, backgroundColor: bg, color: instructorColor }}>
-      <span className="font-medium">
-        <span className="lg:hidden">
-          {term.instructor ? shortInstructorLabel(term.instructor.ime, term.instructor.prezime) : '—'}
-        </span>
-        <span className="hidden lg:inline">{instructorName}</span>
-      </span>
-      <span className={`ml-1 text-[0.7rem] uppercase tracking-wide ${classroomName ? 'opacity-80' : 'italic opacity-60'}`}>
-        (
-        <span className="lg:hidden">{classroomName ? shortClassroomLabel(classroomName) : 'bez uč.'}</span>
-        <span className="hidden lg:inline">{classroomName ?? 'bez učionice'}</span>
-        )
-      </span>
-      {isTesting ? (
-        <div className="mt-1 border-t border-stone-200/80 pt-1">
-          <span className="block text-[11px] font-bold uppercase tracking-wide mb-1 text-red-600">
-            Testiranje
+    <div
+      className="rounded-lg border border-stone-200 bg-white overflow-hidden text-sm"
+      title={`${instructorName} · ${classroomName ? `učionica ${classroomName}` : 'bez učionice'}`}
+    >
+      <div className="flex items-baseline justify-between gap-1 px-2 py-0.5 text-[11px] leading-tight">
+        <span className="font-semibold truncate" style={{ color: instructorColor }}>
+          <span className="lg:hidden">
+            {term.instructor ? shortInstructorLabel(term.instructor.ime, term.instructor.prezime) : '—'}
           </span>
-          {potentialClients.length === 0 ? (
-            <span className="text-xs text-stone-400">Nema prijavljenih</span>
-          ) : (
-            <ul className="space-y-1 pl-0 list-none">
-              <TruncatedNameList
-                itemClassName="text-[12px] leading-snug text-stone-900"
-                items={sortByFullName(potentialClients, (pc) => `${pc.ime ?? ''} ${pc.prezime ?? ''}`.trim()).map((pc) => ({
-                  key: pc.id,
-                  content: (
-                    <>
-                      <span className="font-semibold">{pc.ime}{pc.prezime ? ` ${pc.prezime}` : ''}</span>
-                      {pc.ime_roditelja && (
-                        <span className="block text-stone-500">rod: {pc.ime_roditelja}</span>
-                      )}
-                      {pc.mobilni_roditelja && (
-                        <span className="block text-stone-500">{pc.mobilni_roditelja}</span>
-                      )}
-                    </>
-                  ),
-                }))}
-              />
-            </ul>
-          )}
-        </div>
+          <span className="hidden lg:inline">{instructorName}</span>
+        </span>
+        {isTesting ? (
+          <span className="shrink-0 font-bold uppercase tracking-wide text-red-600">Testiranje</span>
+        ) : (
+          vrsta && <span className="shrink-0 truncate text-stone-500">{vrsta}</span>
+        )}
+      </div>
+      {isTesting ? (
+        potentialClients.length === 0 ? (
+          <span className="block px-2 pb-1 text-xs text-stone-400">Nema prijavljenih</span>
+        ) : (
+          <ul className="pl-0 list-none">
+            <TruncatedNameList
+              itemClassName=""
+              items={sortByFullName(potentialClients, (pc) => `${pc.ime ?? ''} ${pc.prezime ?? ''}`.trim()).map((pc, i) => ({
+                key: pc.id,
+                content: (
+                  <div style={rowStyle(i)} className="px-2 py-1 text-[12px] leading-snug text-stone-900">
+                    <span className="font-semibold">{pc.ime}{pc.prezime ? ` ${pc.prezime}` : ''}</span>
+                    {pc.ime_roditelja && <span className="block text-stone-600">rod: {pc.ime_roditelja}</span>}
+                    {pc.mobilni_roditelja && <span className="block text-stone-600">{pc.mobilni_roditelja}</span>}
+                  </div>
+                ),
+              }))}
+            />
+          </ul>
+        )
+      ) : predavanja.length > 0 ? (
+        <ul className="pl-0 list-none">
+          <TruncatedNameList
+            itemClassName=""
+            items={sortByFullName(predavanja, (p) => (p.client ? `${p.client.ime ?? ''} ${p.client.prezime ?? ''}`.trim() : '')).map((p, i) => ({
+              key: p.id,
+              content: (
+                <div style={rowStyle(i)} className="px-2 py-1 text-[13px] sm:text-sm leading-snug font-semibold text-stone-900 break-words antialiased">
+                  {p.client ? `${p.client.ime ?? ''} ${p.client.prezime ?? ''}`.trim() || '—' : '—'}
+                </div>
+              ),
+            }))}
+          />
+        </ul>
       ) : (
-        <>
-          {(() => {
-            const tt = predavanja[0]?.term_type;
-            const naziv = Array.isArray(tt) ? tt[0]?.naziv : tt?.naziv;
-            return naziv ? <span className="block text-[11px] font-semibold mt-0.5 opacity-90">{naziv}</span> : null;
-          })()}
-          {predavanja.length > 0 && (
-            <ul className="mt-1.5 space-y-1 pl-0 list-none border-t border-stone-200/80 pt-1.5">
-              <TruncatedNameList
-                itemClassName="text-[13px] sm:text-sm leading-snug font-semibold text-stone-900 break-words antialiased"
-                items={sortByFullName(predavanja, (p) => (p.client ? `${p.client.ime ?? ''} ${p.client.prezime ?? ''}`.trim() : '')).map((p) => ({
-                  key: p.id,
-                  content: p.client ? `${p.client.ime ?? ''} ${p.client.prezime ?? ''}`.trim() || '—' : '—',
-                }))}
-              />
-            </ul>
-          )}
-          {predavanja.length === 0 && (
-            <span className="text-stone-500 text-xs">+ radionica</span>
-          )}
-        </>
+        <span className="block px-2 pb-1 text-xs text-stone-500">+ radionica</span>
       )}
     </div>
   );
@@ -1700,11 +1714,13 @@ function AdminCellContent({
     </div>
   ) : null;
 
+  const rowOffsets = childRowOffsets(termsInSlot);
+
   if (swap.bulkMode && blocked) {
     return (
       <div className="space-y-1.5 min-h-[52px] cursor-not-allowed">
         {BlockedBadge}
-        {termsInSlot.map((term) => <TermCardVisual key={term.id} term={term} />)}
+        {termsInSlot.map((term, ti) => <TermCardVisual key={term.id} term={term} rowOffset={rowOffsets[ti]} />)}
       </div>
     );
   }
@@ -1731,7 +1747,7 @@ function AdminCellContent({
         {slotCount === 0 ? (
           <span className="block text-stone-400">prazno</span>
         ) : (
-          termsInSlot.map((term) => <TermCardVisual key={term.id} term={term} />)
+          termsInSlot.map((term, ti) => <TermCardVisual key={term.id} term={term} rowOffset={rowOffsets[ti]} />)
         )}
         {bulkSelected && <span className="block font-semibold text-emerald-700 mt-0.5">✓ izabrano</span>}
       </div>
@@ -1853,7 +1869,7 @@ function AdminCellContent({
         }`}
       >
         {BlockedBadge}
-        {termsInSlot.map((term) =>
+        {termsInSlot.map((term, ti) =>
           isAutoSpillover(term) ? (
             <TermCardVisual key={term.id} term={term} />
           ) : (
@@ -1867,7 +1883,7 @@ function AdminCellContent({
               onDragStart={() => setDraggedTermId(term.id)}
               onDragEnd={() => setDraggedTermId(null)}
             >
-              <TermCardVisual term={term} />
+              <TermCardVisual term={term} rowOffset={rowOffsets[ti]} />
             </Link>
           )
         )}
@@ -1939,7 +1955,7 @@ function AdminCellContent({
       }}
     >
       {BlockedBadge}
-      {termsInSlot.map((term) => {
+      {termsInSlot.map((term, ti) => {
         if (isAutoSpillover(term)) {
           return (
             <Link key={term.id} href={`/admin/termin/${term.nastavak_of_term_id}`} className="block rounded-lg hover:opacity-90">
@@ -1981,7 +1997,7 @@ function AdminCellContent({
               }
             }}
           >
-            <TermCardVisual term={term} />
+            <TermCardVisual term={term} rowOffset={rowOffsets[ti]} />
           </Link>
         );
       })}

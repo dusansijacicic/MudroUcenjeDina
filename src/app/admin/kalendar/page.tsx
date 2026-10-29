@@ -212,7 +212,7 @@ export default async function AdminKalendarPage({
             </div>
           </div>
           <div className="text-xs text-stone-600">
-            Boja okvira/bloka označava učionicu (podešava se u „Učionice”).
+            Svako dete je u svom redu – boje redova (žuta, plava, zelena…) idu redom unutar termina, da se vidi koliko dece je u isto vreme. Učionica se vidi kad se pređe mišem preko termina.
           </div>
         </div>
       )}
