@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useKalendarRealtime } from '@/lib/use-kalendar-realtime';
 import { TIME_SLOTS, AUTO_SPILLOVER_NAPOMENA } from '@/lib/constants';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
@@ -243,6 +244,7 @@ function CalendarViewInner({
 }) {
   const router = useRouter();
   const [draggedTermId, setDraggedTermId] = useState<string | null>(null);
+  useKalendarRealtime(draggedTermId !== null);
 
   const handleDrop = async (date: string, slot: number) => {
     if (!draggedTermId) return;

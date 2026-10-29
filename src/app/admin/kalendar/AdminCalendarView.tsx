@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useKalendarRealtime } from '@/lib/use-kalendar-realtime';
 import toast from 'react-hot-toast';
 import { TIME_SLOTS, AUTO_SPILLOVER_NAPOMENA } from '@/lib/constants';
 import Link from 'next/link';
@@ -323,6 +324,36 @@ const DEFAULT_MAX_TERMINA_PO_SLOTU = 4;
 
 const NO_BLOCKED_SLOTS: BlokiranTermin[] = [];
 
+// Traži se prvi VIDLJIV element – desktop i tablet tabela su obe u DOM-u.
+function firstVisible(selector: string): HTMLElement | null {
+  return Array.from(document.querySelectorAll<HTMLElement>(selector)).find((el) => el.offsetParent !== null) ?? null;
+}
+
+/** Klik na datum u traci "termini bez instruktora/učionice" vodi tačno do tog zahteva (bez animacije). */
+function scrollToZahtev(d: string): boolean {
+  const visible = firstVisible(`[data-zahtev-date="${d}"]`);
+  if (!visible) return false;
+  visible.scrollIntoView({ behavior: 'auto', block: 'center' });
+  return true;
+}
+
+/** Povratak posle "Zakaži termin" (?fokus=datum&slot=N): glatko do te ćelije + kratak ljubičasti
+ * bljesak (iste boje kao hover), da se odmah vidi gde je termin upisan. */
+function scrollToCell(d: string, slot: number): boolean {
+  const cell = firstVisible(`td[data-date="${d}"][data-slot="${slot}"]`);
+  if (!cell) return false;
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  cell.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'center', inline: 'center' });
+  if (!reduceMotion) {
+    const on = { boxShadow: 'inset 0 0 0 4px #7e22ce', backgroundColor: 'rgb(147 51 234 / 0.28)' };
+    cell.animate(
+      [on, { ...on, offset: 0.6 }, { boxShadow: 'inset 0 0 0 4px rgb(126 34 206 / 0)', backgroundColor: 'rgb(147 51 234 / 0)' }],
+      { duration: 3000, delay: 350, easing: 'ease-out' }
+    );
+  }
+  return true;
+}
+
 export default function AdminCalendarView({
   headerContent,
   terms: termsProp,
@@ -340,6 +371,7 @@ export default function AdminCalendarView({
   pendingZahtevi: pendingZahteviProp = [],
   allPendingZahteviDates = [],
   focusDate,
+  focusSlot,
   blockedSlots: blockedSlotsProp = NO_BLOCKED_SLOTS,
 }: {
   /** Naslov/filteri/legenda iznad kalendara (server-renderovani deo iz page.tsx). */
@@ -366,6 +398,8 @@ export default function AdminCalendarView({
   allPendingZahteviDates?: string[];
   /** ?fokus=YYYY-MM-DD – posle klika na datum u traci zahteva, skroluje se do tog zahteva. */
   focusDate?: string;
+  /** ?slot=N uz ?fokus – posle "Zakaži termin" glatko skroluje do te ćelije (datum + vreme) i kratko je istakne. */
+  focusSlot?: number;
   /** Blokirani slotovi u prikazanom opsegu (Admin → Blokiraj termin(e)). */
   blockedSlots?: BlokiranTermin[];
 }) {
@@ -391,22 +425,16 @@ export default function AdminCalendarView({
     setPendingZahtevi(pendingZahteviProp);
   }, [pendingZahteviProp]);
 
-  // Klik na datum u traci "termini bez instruktora/učionice" vodi tačno do tog zahteva na rasporedu
-  // (bez animacije). Traži se prvi VIDLJIV element – desktop i tablet tabela su obe u DOM-u.
-  const scrollToZahtev = (d: string): boolean => {
-    const els = Array.from(document.querySelectorAll<HTMLElement>(`[data-zahtev-date="${d}"]`));
-    const visible = els.find((el) => el.offsetParent !== null);
-    if (!visible) return false;
-    visible.scrollIntoView({ behavior: 'auto', block: 'center' });
-    return true;
-  };
-  // Posle navigacije na drugu nedelju (?fokus=datum) lokalni pendingZahtevi se osveže tek u
-  // narednom renderu – zato se pokušava i kad se oni promene, ali samo jednom po datumu.
+  // Posle navigacije na drugu nedelju (?fokus=datum) lokalni pendingZahtevi/termini se osveže tek u
+  // narednom renderu – zato se pokušava i kad se oni promene, ali samo jednom po cilju.
   const focusedForRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!focusDate || focusedForRef.current === focusDate) return;
-    if (scrollToZahtev(focusDate)) focusedForRef.current = focusDate;
-  }, [focusDate, pendingZahtevi]);
+    if (!focusDate) return;
+    const key = `${focusDate}|${focusSlot ?? ''}`;
+    if (focusedForRef.current === key) return;
+    const ok = focusSlot != null ? scrollToCell(focusDate, focusSlot) : scrollToZahtev(focusDate);
+    if (ok) focusedForRef.current = key;
+  }, [focusDate, focusSlot, pendingZahtevi, terms]);
 
   const openZahtevDate = (d: string) => {
     const weekEnd = new Date(startOfWeek + 'T12:00:00');
@@ -500,6 +528,8 @@ export default function AdminCalendarView({
     setBlokirani(blockedSlotsProp);
   }, [blockedSlotsProp]);
   const blokiraniByKey = useMemo(() => new Map(blokirani.map((b) => [`${b.date}|${b.slot_index}`, b])), [blokirani]);
+
+  useKalendarRealtime(swapMode || copyMode || deleteMode || bulkMode || assignMode || blockMode || draggedTermId !== null);
 
   // Swap/Copy/Delete/Bulk/Assign/Block su međusobno isključivi – uključivanje jednog gasi ostale da
   // klikovi na kalendaru ne budu dvosmisleni.
@@ -1012,6 +1042,41 @@ export default function AdminCalendarView({
     );
   }
 
+  // Potvrda aktivnog moda stoji i u zamrznutoj traci pored "Print / PDF" – posle klikanja po
+  // kalendaru ne mora da se skroluje nazad do panela. Isti uslovi kao dugme u panelu ispod.
+  const deleteCount = deleteSelection.size + deleteOtkazaniSelection.size + deleteZahteviSelection.size;
+  const deleteDisabled = deleteCount === 0 || deleteLoading;
+  const assignCount = assignSelection.size + assignZahteviSelection.size;
+  const assignDisabled = (!assignInstructorChoice && !assignClassroomChoice && !assignTermTypeChoice) || assignCount === 0 || assignLoading;
+  const swapDisabled = !swapFirst || !swapSecond || !anyFieldChecked;
+  const copyDisabled = copyTargets.size === 0 || !copyFieldsAnyChecked || copyLoading;
+  const bulkDisabled =
+    (bulkGroupMode
+      ? bulkGroupClientIds.length === 0 || !bulkInstructorChoice || !bulkTermCategoryId || bulkSlots.size === 0
+      : !bulkClientId || bulkSlots.size === 0) || bulkLoading;
+  const blockDisabled = blockSlots.size === 0 || blockLoading;
+  const activeConfirm = blockMode
+    ? { label: `Blokiraj (${blockSlots.size})`, disabled: blockDisabled, color: 'bg-stone-800 hover:bg-stone-900' }
+    : deleteMode
+      ? { label: `Potvrdi brisanje (${deleteCount})`, disabled: deleteDisabled, color: 'bg-red-600 hover:bg-red-700' }
+      : assignMode
+        ? { label: `Potvrdi dodelu (${assignCount})`, disabled: assignDisabled, color: 'bg-emerald-600 hover:bg-emerald-700' }
+        : swapMode
+          ? { label: 'Potvrdi zamenu', disabled: swapDisabled, color: 'bg-emerald-600 hover:bg-emerald-700' }
+          : copyMode
+            ? { label: `Potvrdi kopiranje (${copyTargets.size})`, disabled: copyDisabled, color: 'bg-emerald-600 hover:bg-emerald-700' }
+            : bulkMode
+              ? { label: `Potvrdi zakazivanje (${bulkSlots.size})`, disabled: bulkDisabled, color: 'bg-emerald-600 hover:bg-emerald-700' }
+              : null;
+  const runActiveConfirm = () => {
+    if (blockMode) confirmBlock();
+    else if (deleteMode) confirmDelete();
+    else if (assignMode) confirmAssign();
+    else if (swapMode) confirmSwap();
+    else if (copyMode) confirmCopy();
+    else if (bulkMode) confirmBulk();
+  };
+
   return (
     <SwapContext.Provider
       value={{
@@ -1132,12 +1197,24 @@ export default function AdminCalendarView({
             {blockMode ? 'Blokiraj termin(e): uključeno' : 'Blokiraj termin(e)'}
           </button>
           {blockLoading && <span className="text-sm text-stone-500">Blokiram…</span>}
-          <Link
-            href={`/admin/kalendar/print?week=${startOfWeek}`}
-            className="hidden md:inline-flex ml-auto px-3 py-1.5 rounded-lg text-sm font-medium bg-stone-100 text-stone-600 hover:bg-stone-200"
-          >
-            🖨 Print / PDF
-          </Link>
+          <div className="ml-auto flex items-center gap-2">
+            {activeConfirm && (
+              <button
+                type="button"
+                onClick={runActiveConfirm}
+                disabled={activeConfirm.disabled}
+                className={`px-3 py-1.5 min-h-[44px] md:min-h-0 rounded-lg text-sm font-semibold text-white shadow-sm disabled:opacity-40 disabled:cursor-not-allowed ${activeConfirm.color}`}
+              >
+                ✓ {activeConfirm.label}
+              </button>
+            )}
+            <Link
+              href={`/admin/kalendar/print?week=${startOfWeek}`}
+              className="hidden md:inline-flex px-3 py-1.5 rounded-lg text-sm font-medium bg-stone-100 text-stone-600 hover:bg-stone-200"
+            >
+              🖨 Print / PDF
+            </Link>
+          </div>
         </div>
       </StickyBar>
       {/* Polja/potvrde/čipovi aktivnog moda – NIJE zamrznuto, ide normalno u toku stranice, iznad kalendara. */}
@@ -1159,7 +1236,7 @@ export default function AdminCalendarView({
                 <button
                   type="button"
                   onClick={confirmBlock}
-                  disabled={blockSlots.size === 0 || blockLoading}
+                  disabled={blockDisabled}
                   className="px-3 py-2 rounded-lg text-sm font-medium bg-stone-800 text-white hover:bg-stone-900 disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   Blokiraj ({blockSlots.size})
@@ -1183,10 +1260,10 @@ export default function AdminCalendarView({
               <button
                 type="button"
                 onClick={confirmDelete}
-                disabled={deleteSelection.size + deleteOtkazaniSelection.size + deleteZahteviSelection.size === 0}
+                disabled={deleteDisabled}
                 className="px-3 py-1.5 rounded-lg text-sm font-medium bg-red-600 text-white hover:bg-red-700 disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                Potvrdi brisanje ({deleteSelection.size + deleteOtkazaniSelection.size + deleteZahteviSelection.size})
+                Potvrdi brisanje ({deleteCount})
               </button>
               <span className="text-sm text-stone-400">
                 kliknite termine (i sive otkazane/zahteve) da ih označite, klik ponovo za deselekciju – ovo je trajno brisanje BEZ TRAGA, ne otkazivanje
@@ -1229,13 +1306,10 @@ export default function AdminCalendarView({
                 <button
                   type="button"
                   onClick={confirmAssign}
-                  disabled={
-                    (!assignInstructorChoice && !assignClassroomChoice && !assignTermTypeChoice) ||
-                    assignSelection.size + assignZahteviSelection.size === 0
-                  }
+                  disabled={assignDisabled}
                   className="px-3 py-1.5 rounded-lg text-sm font-medium bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed"
                 >
-                  Potvrdi dodelu ({assignSelection.size + assignZahteviSelection.size})
+                  Potvrdi dodelu ({assignCount})
                 </button>
                 <span className="text-sm text-stone-400">
                   izaberite instruktora i/ili učionicu i/ili vrstu časa (može bilo koja kombinacija), pa kliknite termine na kalendaru da ih označite
@@ -1305,7 +1379,7 @@ export default function AdminCalendarView({
                 <button
                   type="button"
                   onClick={confirmSwap}
-                  disabled={!swapFirst || !swapSecond || !anyFieldChecked}
+                  disabled={swapDisabled}
                   className="px-3 py-1.5 rounded-lg text-sm font-medium bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   Potvrdi zamenu
@@ -1418,7 +1492,7 @@ export default function AdminCalendarView({
                   <button
                     type="button"
                     onClick={confirmCopy}
-                    disabled={copyTargets.size === 0 || !copyFieldsAnyChecked}
+                    disabled={copyDisabled}
                     className="px-3 py-1.5 rounded-lg text-sm font-medium bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     Potvrdi kopiranje ({copyTargets.size})
@@ -1527,11 +1601,7 @@ export default function AdminCalendarView({
                 <button
                   type="button"
                   onClick={confirmBulk}
-                  disabled={
-                    bulkGroupMode
-                      ? bulkGroupClientIds.length === 0 || !bulkInstructorChoice || !bulkTermCategoryId || bulkSlots.size === 0
-                      : !bulkClientId || bulkSlots.size === 0
-                  }
+                  disabled={bulkDisabled}
                   className="px-3 py-1.5 rounded-lg text-sm font-medium bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   Potvrdi ({bulkSlots.size})

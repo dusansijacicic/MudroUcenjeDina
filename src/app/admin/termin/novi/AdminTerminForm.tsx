@@ -192,7 +192,7 @@ export default function AdminTerminForm({
         } else {
           toast.success(`Kreirano ${slots.length} zahtev(a) bez instruktora.`);
         }
-        router.push(`/admin/kalendar?week=${monday}`);
+        router.push(`/admin/kalendar?view=nedelja&week=${monday}&fokus=${date}&slot=${slotIndex}`);
         router.refresh();
         return;
       }
@@ -255,7 +255,7 @@ export default function AdminTerminForm({
         }
       }
 
-      router.push(`/admin/kalendar?week=${monday}`);
+      router.push(`/admin/kalendar?view=nedelja&week=${monday}&fokus=${date}&slot=${slotIndex}`);
       router.refresh();
     } finally {
       setLoading(false);

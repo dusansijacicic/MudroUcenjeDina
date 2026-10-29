@@ -11,7 +11,7 @@ import { getTermTypes, getTermCategories } from '@/app/admin/actions';
 export default async function AdminKalendarPage({
   searchParams,
 }: {
-  searchParams: Promise<{ week?: string; day?: string; month?: string; view?: string; instructor?: string; classroom?: string; client?: string; from?: string; fokus?: string }>;
+  searchParams: Promise<{ week?: string; day?: string; month?: string; view?: string; instructor?: string; classroom?: string; client?: string; from?: string; fokus?: string; slot?: string }>;
 }) {
   const { user } = await getAuthedUser();
   if (!user) redirect('/login');
@@ -249,6 +249,7 @@ export default async function AdminKalendarPage({
         pendingZahtevi={pendingZahtevi}
         allPendingZahteviDates={allPendingZahteviDates}
         focusDate={params.fokus?.slice(0, 10)}
+        focusSlot={params.slot && /^\d{1,2}$/.test(params.slot) ? Number(params.slot) : undefined}
         blockedSlots={blockedSlots}
       />
     </div>
