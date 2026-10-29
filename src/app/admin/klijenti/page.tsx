@@ -3,13 +3,11 @@ import { getAuthedUser, getIsAdmin } from '@/lib/auth';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { getStanjePoVrstamaZaKlijenteBatch } from '@/app/admin/actions';
-import { CLIENT_POL_OPTIONS } from '@/lib/client-pol';
+import { buildStanjeFromMaps, type StanjeVrstaRow } from '@/lib/stanje';
 import AdminKlijentiTable, { type AdminKlijentRow } from './AdminKlijentiTable';
 
-function polLabel(pol: string | null | undefined): string {
-  if (!pol) return '—';
-  return CLIENT_POL_OPTIONS.find((o) => o.value === pol)?.label ?? pol;
-}
+/** [client_id, term_type_id, uplaceno, odrzano] – red iz baze funkcije stanje_svih_klijenata (migracija 046). */
+type StanjeTuple = [string, string | null, number, number];
 
 export default async function AdminSviKlijentiPage() {
   const { user } = await getAuthedUser();
@@ -21,10 +19,11 @@ export default async function AdminSviKlijentiPage() {
   const adminSupabase = createAdminClient();
   // Direktno iz clients (ne preko instructor_clients join-a) – tako se ne gube klijenti
   // koji još nemaju dodeljenog instruktora.
-  const [{ data: clients }, { data: links }] = await Promise.all([
+  // Sve u JEDNOM krugu upita: klijenti, instruktori i već sabrano stanje (baza sabira, ne app).
+  const [{ data: clients }, { data: links }, stanjeRpc, { data: termTypes }] = await Promise.all([
     adminSupabase
       .from('clients')
-      .select('id, ime, prezime, pol, login_email, godiste, razred, skola, kontakt_telefon, datum_testiranja')
+      .select('id, ime, prezime, godiste, razred, skola, kontakt_telefon, datum_testiranja')
       .order('ime')
       .order('prezime')
       .limit(2000),
@@ -32,6 +31,8 @@ export default async function AdminSviKlijentiPage() {
       .from('instructor_clients')
       .select('instructor_id, client_id, instructor:instructors(id, ime, prezime)')
       .limit(2000),
+    adminSupabase.rpc('stanje_svih_klijenata'),
+    adminSupabase.from('term_types').select('id, naziv').order('naziv'),
   ]);
 
   const instructorsByClientId = new Map<string, { id: string; ime: string; prezime: string }[]>();
@@ -43,8 +44,26 @@ export default async function AdminSviKlijentiPage() {
     instructorsByClientId.set(row.client_id, list);
   }
 
-  const clientIds = (clients ?? []).map((c) => c.id);
-  const stanjeMap = await getStanjePoVrstamaZaKlijenteBatch(clientIds);
+  let stanjeMap: Map<string, StanjeVrstaRow[]>;
+  if (!stanjeRpc.error && Array.isArray(stanjeRpc.data)) {
+    const uplate = new Map<string, Map<string, number>>();
+    const odrzano = new Map<string, Map<string, number>>();
+    for (const [cid, tid, upl, odr] of stanjeRpc.data as StanjeTuple[]) {
+      const key = tid ?? '__bez_vrste__';
+      if (!uplate.has(cid)) {
+        uplate.set(cid, new Map());
+        odrzano.set(cid, new Map());
+      }
+      uplate.get(cid)!.set(key, upl);
+      odrzano.get(cid)!.set(key, odr);
+    }
+    stanjeMap = new Map(
+      [...uplate.keys()].map((cid) => [cid, buildStanjeFromMaps(uplate.get(cid)!, odrzano.get(cid)!, termTypes ?? [])])
+    );
+  } else {
+    // Migracija 046 još nije pokrenuta – stari (sporiji) način.
+    stanjeMap = await getStanjePoVrstamaZaKlijenteBatch((clients ?? []).map((c) => c.id));
+  }
 
   const rows: AdminKlijentRow[] = (clients ?? []).map((c) => {
     const stanjeAll = stanjeMap.get(c.id) ?? [];
@@ -52,9 +71,6 @@ export default async function AdminSviKlijentiPage() {
       id: c.id,
       ime: c.ime ?? '',
       prezime: c.prezime ?? '',
-      pol: c.pol ?? null,
-      polLabel: polLabel(c.pol),
-      loginEmail: c.login_email ?? null,
       godiste: c.godiste ?? null,
       razred: c.razred ?? null,
       skola: c.skola ?? null,

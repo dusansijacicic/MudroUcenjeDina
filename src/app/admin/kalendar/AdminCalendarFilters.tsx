@@ -3,14 +3,9 @@
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { searchVariants, variantsMatch } from '@/lib/search';
 
 type Option = { id: string; ime?: string; prezime?: string; naziv?: string };
-
-/** Pretraga bez obzira na velika slova i kvačice: "dorde", "djordje" i "Đorđe" nalaze isto dete. */
-function searchVariants(text: string): string[] {
-  const base = text.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
-  return [base.replace(/đ/g, 'd'), base.replace(/đ/g, 'dj')];
-}
 
 /** Polje gde se kuca ime deteta; izbor iz padajuće liste odmah filtrira kalendar. */
 function KlijentFilter({
@@ -35,10 +30,8 @@ function KlijentFilter({
     [clients]
   );
   const matches = useMemo(() => {
-    const q = query.trim();
-    if (!q) return [];
-    const variants = searchVariants(q);
-    return index.filter(({ hay }) => hay.some((h) => variants.some((v) => h.includes(v)))).slice(0, 12).map(({ c }) => c);
+    if (!query.trim()) return [];
+    return index.filter(({ hay }) => variantsMatch(hay, query)).slice(0, 12).map(({ c }) => c);
   }, [index, query]);
 
   const selected = value ? clients.find((c) => c.id === value) : null;
