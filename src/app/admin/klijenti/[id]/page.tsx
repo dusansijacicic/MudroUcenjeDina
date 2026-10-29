@@ -37,7 +37,7 @@ export default async function AdminKlijentEditPage({
     getStanjePoVrstamaZaKlijenta(clientId),
     adminSupabase
       .from('predavanja')
-      .select('id, odrzano, placeno, term_id, term:terms(date, slot_index, instructor:instructors(ime, prezime))')
+      .select('id, odrzano, placeno, term_id, term:terms(date, slot_index, instructor:instructors(ime, prezime)), term_type:term_types(naziv, cena_po_casu)')
       .eq('client_id', clientId),
     // Termini zakazani bez instruktora žive kao zahtevi dok ih neki predavač ne preuzme – bez ovoga
     // se u profilu ne bi videli (ni posle "Zakaži termin" sa podrazumevanim "bez instruktora").
@@ -79,7 +79,15 @@ export default async function AdminKlijentEditPage({
   });
 
   type TermInfo = { date: string; slot_index: number; instructor?: { ime?: string; prezime?: string } | { ime?: string; prezime?: string }[] | null };
-  type PredavanjeRow = { id: string; odrzano: boolean; placeno: boolean; term_id: string; term: TermInfo | TermInfo[] | null };
+  type VrstaInfo = { naziv?: string; cena_po_casu?: number | null };
+  type PredavanjeRow = {
+    id: string;
+    odrzano: boolean;
+    placeno: boolean;
+    term_id: string;
+    term: TermInfo | TermInfo[] | null;
+    term_type?: VrstaInfo | VrstaInfo[] | null;
+  };
   const predavanjaList = (predavanjaRaw ?? []) as PredavanjeRow[];
   const withTerm = predavanjaList
     .map((p) => {
@@ -122,11 +130,15 @@ export default async function AdminKlijentEditPage({
   ].sort(sortByDateSlot);
   const brojBezInstruktora = zahtevi.length;
 
+  const popustDeteta = Math.min(100, Math.max(0, Number(client.popust_percent ?? 0)));
   const renderTermLink = (p: PredavanjeRow & { term: TermInfo }, isOdrzan: boolean) => {
     const t = p.term;
     const instr = t.instructor && !Array.isArray(t.instructor) ? t.instructor : (Array.isArray(t.instructor) ? t.instructor[0] : null);
     const dateStr = t.date ? new Date(t.date + 'T12:00:00').toLocaleDateString('sr-Latn-RS', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' }) : '—';
     const timeStr = TIME_SLOTS[t.slot_index] ?? '—';
+    const vrsta = Array.isArray(p.term_type) ? p.term_type[0] : p.term_type;
+    // Cena časa = cena po času vrste, umanjena za popust deteta (isto kao kod automatskog iznosa uplate).
+    const cena = vrsta?.cena_po_casu != null ? Math.round(Number(vrsta.cena_po_casu) * (1 - popustDeteta / 100)) : null;
     return (
       <Link
         href={`/admin/termin/${p.term_id}`}
@@ -145,9 +157,18 @@ export default async function AdminKlijentEditPage({
             <span className="rounded-full bg-emerald-200/80 px-2.5 py-0.5 text-xs font-medium text-emerald-800">Plaćeno</span>
           )}
         </div>
-        {instr && (
-          <p className="mt-1 text-sm text-stone-600">{instr.ime} {instr.prezime}</p>
-        )}
+        <div className="mt-1 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 text-sm">
+          <span className="text-stone-600">
+            <span className="font-medium text-stone-800">{vrsta?.naziv ?? 'Bez vrste'}</span>
+            {instr && <> · {instr.ime} {instr.prezime}</>}
+          </span>
+          {cena != null && (
+            <span className="font-semibold tabular-nums text-stone-800">
+              {cena.toLocaleString('sr-Latn-RS')} RSD
+              {popustDeteta > 0 && <span className="ml-1 text-xs font-normal text-stone-500">(−{popustDeteta}%)</span>}
+            </span>
+          )}
+        </div>
       </Link>
     );
   };
