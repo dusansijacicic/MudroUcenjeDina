@@ -2234,11 +2234,13 @@ function GridHoverHighlight({ containerRef }: { containerRef: React.RefObject<HT
   const g = '[data-hover-grid]';
   const { date, slot } = hover;
   return (
+    // Neutralna grafitna (siva) – namerno bez boje, da se ne meša sa bojama redova dece
+    // (žuta, plava, zelena, roze, ljubičasta, narandžasta).
     <style>{`
-      ${g} td[data-date="${date}"], ${g} tr[data-row="${slot}"] > td { background-color: rgb(254 243 199 / 0.6); }
-      ${g} th[data-date="${date}"] { background-color: #fde68a; color: #78350f; }
-      ${g} td[data-slot-label="${slot}"] { background-color: #fde68a; color: #78350f; font-weight: 700; }
-      ${g} td[data-date="${date}"][data-slot="${slot}"] { box-shadow: inset 0 0 0 2px #f59e0b; }
+      ${g} td[data-date="${date}"], ${g} tr[data-row="${slot}"] > td { background-color: rgb(71 85 105 / 0.14); }
+      ${g} th[data-date="${date}"], ${g} th[data-date="${date}"] * { background-color: #334155; color: #ffffff; }
+      ${g} td[data-slot-label="${slot}"] { background-color: #334155; color: #ffffff; font-weight: 700; }
+      ${g} td[data-date="${date}"][data-slot="${slot}"] { box-shadow: inset 0 0 0 3px #1e293b; }
     `}</style>
   );
 }
