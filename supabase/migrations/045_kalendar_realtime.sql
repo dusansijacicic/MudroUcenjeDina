@@ -27,7 +27,7 @@ DO $$
 DECLARE
   t TEXT;
 BEGIN
-  FOREACH t IN ARRAY ARRAY['terms', 'predavanja', 'potential_clients', 'otkazani_termini', 'zahtevi_za_cas', 'blokirani_termini'] LOOP
+  FOREACH t IN ARRAY ARRAY['terms', 'predavanja', 'potential_clients', 'otkazani_termini', 'zahtevi_za_cas', 'blokirani_termini', 'uplate'] LOOP
     IF to_regclass('public.' || t) IS NOT NULL THEN
       EXECUTE format('DROP TRIGGER IF EXISTS obavesti_kalendar_ins_del ON public.%I', t);
       EXECUTE format('DROP TRIGGER IF EXISTS obavesti_kalendar_upd ON public.%I', t);

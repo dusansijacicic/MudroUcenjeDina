@@ -74,6 +74,7 @@ export default async function AdminKalendarPage({
     termCategories,
     { data: allPendingZahteviRaw },
     { data: blockedRaw },
+    { data: redniRaw },
   ] = await Promise.all([
     adminSupabase
       .from('terms')
@@ -101,7 +102,10 @@ export default async function AdminKalendarPage({
     adminSupabase.from('zahtevi_za_cas').select('requested_date').eq('status', 'pending').order('requested_date'),
     // Ako migracija 044 još nije pokrenuta, upit vraća grešku → data je null → nema blokiranih.
     adminSupabase.from('blokirani_termini').select('id, date, slot_index, napomena').gte('date', dateFrom).lte('date', dateTo),
+    // "x / y" uz svako dete (koji je čas po redu od plaćenih) – baza računa; bez migracije 047 nema oznaka.
+    adminSupabase.rpc('redni_broj_casova', { p_from: dateFrom, p_to: dateTo }),
   ]);
+  const redniPoPredavanju = (redniRaw ?? {}) as Record<string, [number, number]>;
   const blockedSlots = (blockedRaw ?? []).map((b) => ({
     id: b.id as string,
     date: String(b.date).slice(0, 10),
@@ -131,7 +135,10 @@ export default async function AdminKalendarPage({
       classroom: classroom as AdminTerm['classroom'],
       instructor: instructor as AdminTerm['instructor'],
       term_category,
-      predavanja: t.predavanja as AdminTerm['predavanja'],
+      predavanja: ((t.predavanja ?? []) as NonNullable<AdminTerm['predavanja']>).map((p) => ({
+        ...p,
+        redni: redniPoPredavanju[p.id] ?? null,
+      })),
       potential_clients,
       napomena: (t as { napomena?: string | null }).napomena ?? null,
       nastavak_of_term_id: (t as { nastavak_of_term_id?: string | null }).nastavak_of_term_id ?? null,
@@ -266,6 +273,11 @@ export default async function AdminKalendarPage({
           </div>
           <div className="text-xs text-stone-600">
             Svako dete je u svom redu – boje redova (žuta, plava, zelena…) idu redom unutar termina, da se vidi koliko dece je u isto vreme. Učionica je u maloj sivoj oznaci gore desno na terminu.
+            <span className="mt-1 block">
+              <strong>x/y</strong> desno od imena = koji je to čas po redu od plaćenih za tu vrstu časa.{' '}
+              <span className="rounded bg-red-600 px-1 font-bold text-white">! 11/10</span> crveni red = čas nije plaćen;{' '}
+              <span className="font-bold text-amber-700">10/10</span> = poslednji plaćeni čas.
+            </span>
           </div>
         </div>
       )}

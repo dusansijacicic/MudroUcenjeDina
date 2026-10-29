@@ -76,6 +76,8 @@ export type AdminTerm = {
     id: string;
     client?: { id: string; ime: string; prezime: string } | null;
     term_type?: { naziv: string } | { naziv: string }[] | null;
+    /** [x, y] – x-ti čas deteta te vrste od y plaćenih (migracija 047); null ako nije poznato. */
+    redni?: [number, number] | null;
   }>;
   potential_clients?: PotentialClientCalendar[];
   /** Napomena termina – koristi se i za prepoznavanje automatski kreiranog "dvočas" bloka. */
@@ -1708,6 +1710,33 @@ const CHILD_ROW_COLORS = [
   { bg: '#ffedd5', bar: '#f97316' }, // narandžasta
 ];
 
+/** Red deteta čiji čas nije plaćen (x > y) – jače crvena od roze reda, uz "!" oznaku. */
+const UNPAID_ROW_STYLE = { backgroundColor: '#fecaca', borderLeft: '4px solid #dc2626' };
+
+function isUnpaid(redni: [number, number] | null | undefined): boolean {
+  return !!redni && redni[0] > redni[1];
+}
+
+/** "x/y" desno od imena deteta: crveno sa "!" kad čas nije plaćen, narandžasto za poslednji plaćeni. */
+function RedniBroj({ redni }: { redni: [number, number] }) {
+  const [x, y] = redni;
+  if (x > y) {
+    return <span className="shrink-0 rounded bg-red-600 px-1 text-[11px] font-bold tabular-nums text-white">! {x}/{y}</span>;
+  }
+  return (
+    <span className={`shrink-0 text-[11px] tabular-nums ${x === y ? 'font-bold text-amber-700' : 'font-medium text-stone-500'}`}>
+      {x}/{y}
+    </span>
+  );
+}
+
+function redniTitle(redni: [number, number] | null | undefined): string | undefined {
+  if (!redni) return undefined;
+  const [x, y] = redni;
+  if (x > y) return `Nije plaćeno: ${x}. čas, a plaćeno je ${y}.`;
+  return x === y ? `${x}. čas od ${y} plaćenih – poslednji plaćeni.` : `${x}. čas od ${y} plaćenih.`;
+}
+
 function isTestingTerm(term: AdminTerm): boolean {
   const tcRaw = term.term_category;
   return Array.isArray(tcRaw) ? (tcRaw as { is_testing: boolean }[])[0]?.is_testing === true : tcRaw?.is_testing === true;
@@ -1755,9 +1784,11 @@ function TermCardVisual({ term, rowOffset = 0 }: { term: AdminTerm; rowOffset?: 
     return { backgroundColor: c.bg, borderLeft: `4px solid ${c.bar}` };
   };
 
+  const anyUnpaid = !isTesting && predavanja.some((p) => isUnpaid(p.redni));
+
   return (
     <div
-      className="rounded-lg border border-stone-200 bg-white overflow-hidden text-sm"
+      className={`rounded-lg border bg-white overflow-hidden text-sm ${anyUnpaid ? 'border-red-500 ring-1 ring-red-500' : 'border-stone-200'}`}
       title={`${instructorName} · ${classroomName ? `učionica ${classroomName}` : 'bez učionice'}`}
     >
       <div className="flex items-baseline justify-between gap-1 px-2 py-0.5 text-[11px] leading-tight">
@@ -1808,8 +1839,15 @@ function TermCardVisual({ term, rowOffset = 0 }: { term: AdminTerm; rowOffset?: 
             items={sortByFullName(predavanja, (p) => (p.client ? `${p.client.ime ?? ''} ${p.client.prezime ?? ''}`.trim() : '')).map((p, i) => ({
               key: p.id,
               content: (
-                <div style={rowStyle(i)} className="px-2 py-1 text-[13px] sm:text-sm leading-snug font-semibold text-stone-900 break-words antialiased">
-                  {p.client ? `${p.client.ime ?? ''} ${p.client.prezime ?? ''}`.trim() || '—' : '—'}
+                <div
+                  style={isUnpaid(p.redni) ? UNPAID_ROW_STYLE : rowStyle(i)}
+                  title={redniTitle(p.redni)}
+                  className="flex items-start justify-between gap-1 px-2 py-1 text-[13px] sm:text-sm leading-snug font-semibold text-stone-900 antialiased"
+                >
+                  <span className="min-w-0 break-words">
+                    {p.client ? `${p.client.ime ?? ''} ${p.client.prezime ?? ''}`.trim() || '—' : '—'}
+                  </span>
+                  {p.redni && <RedniBroj redni={p.redni} />}
                 </div>
               ),
             }))}
@@ -2531,6 +2569,8 @@ type MonthEntry = {
   title: string;
   color: string;
   zahtev: boolean;
+  /** Bar jedno dete u terminu ima čas koji nije plaćen (x > y). */
+  unpaid: boolean;
 };
 
 function AdminMonthView({
@@ -2586,11 +2626,19 @@ function AdminMonthView({
       slot: t.slot_index,
       href: `/admin/termin/${t.id}`,
       text,
-      title: [time, people.map((x) => `${x.ime ?? ''} ${x.prezime ?? ''}`.trim()).join(', '), instr, t.classroom?.naziv, vrsta]
+      title: [
+        (t.predavanja ?? []).some((p) => isUnpaid(p.redni)) && !testing ? 'NIJE PLAĆENO' : null,
+        time,
+        people.map((x) => `${x.ime ?? ''} ${x.prezime ?? ''}`.trim()).join(', '),
+        instr,
+        t.classroom?.naziv,
+        vrsta,
+      ]
         .filter(Boolean)
         .join(' · '),
       color: t.instructor?.color ?? '#a8a29e',
       zahtev: false,
+      unpaid: !testing && (t.predavanja ?? []).some((p) => isUnpaid(p.redni)),
     });
   }
   for (const z of pendingZahtevi) {
@@ -2605,6 +2653,7 @@ function AdminMonthView({
         .join(' · '),
       color: '#f59e0b',
       zahtev: true,
+      unpaid: false,
     });
   }
 
@@ -2635,10 +2684,11 @@ function AdminMonthView({
                     href={e.href}
                     title={e.title}
                     className={`block truncate rounded px-1 py-0.5 text-[11px] leading-tight text-stone-800 hover:brightness-95 ${
-                      e.zahtev ? 'border border-dashed border-amber-400 bg-amber-50' : 'bg-stone-50'
+                      e.zahtev ? 'border border-dashed border-amber-400 bg-amber-50' : e.unpaid ? 'bg-red-100 text-red-900' : 'bg-stone-50'
                     }`}
-                    style={e.zahtev ? undefined : { borderLeft: `3px solid ${e.color}` }}
+                    style={e.zahtev ? undefined : { borderLeft: `3px solid ${e.unpaid ? '#dc2626' : e.color}` }}
                   >
+                    {e.unpaid && <span className="mr-0.5 font-bold text-red-700">!</span>}
                     <span className="font-semibold tabular-nums">{TIME_SLOTS[e.slot]}</span> {e.text}
                   </Link>
                 ))}
