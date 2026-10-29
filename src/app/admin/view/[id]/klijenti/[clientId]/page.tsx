@@ -49,8 +49,13 @@ export default async function AdminViewKlijentEditPage({
       <h1 className="text-xl font-semibold text-stone-800 mb-2">
         Izmena klijenta – {client.ime} {client.prezime}
       </h1>
-      <p className="text-stone-500 text-sm mb-6">
+      <p className="text-stone-500 text-sm mb-2">
         Instruktor: {instructor.ime} {instructor.prezime}
+      </p>
+      <p className="mb-6">
+        <Link href={`/admin/klijenti/${clientId}`} className="text-sm text-amber-700 hover:underline">
+          Pun profil klijenta i istorija termina →
+        </Link>
       </p>
       <ClientForm
         instructorId={instructor.id}

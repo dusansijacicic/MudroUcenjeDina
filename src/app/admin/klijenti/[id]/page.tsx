@@ -9,6 +9,13 @@ import { TIME_SLOTS, isTermInPast } from '@/lib/constants';
 import type { Client } from '@/types/database';
 import OtkazaniTerminiSection from './OtkazaniTerminiSection';
 
+function getMonday(iso: string): string {
+  const d = new Date(iso + 'T12:00:00');
+  const dow = d.getDay();
+  d.setDate(d.getDate() - (dow === 0 ? 6 : dow - 1));
+  return d.toISOString().slice(0, 10);
+}
+
 export default async function AdminKlijentEditPage({
   params,
 }: {
@@ -24,13 +31,20 @@ export default async function AdminKlijentEditPage({
   await markPastPredavanjaAsOdrzano(clientId);
 
   const adminSupabase = createAdminClient();
-  const [{ data: client, error }, stanjePoVrstama, { data: predavanjaRaw }, termTypes, otkazani, programStatuses, programs, programiSelections] = await Promise.all([
+  const [{ data: client, error }, stanjePoVrstama, { data: predavanjaRaw }, { data: zahteviRaw }, termTypes, otkazani, programStatuses, programs, programiSelections] = await Promise.all([
     adminSupabase.from('clients').select('*, popust_percent, napomena, accessible_term_type_ids').eq('id', clientId).single(),
     getStanjePoVrstamaZaKlijenta(clientId),
     adminSupabase
       .from('predavanja')
       .select('id, odrzano, placeno, term_id, term:terms(date, slot_index, instructor:instructors(ime, prezime))')
       .eq('client_id', clientId),
+    // Termini zakazani bez instruktora žive kao zahtevi dok ih neki predavač ne preuzme – bez ovoga
+    // se u profilu ne bi videli (ni posle "Zakaži termin" sa podrazumevanim "bez instruktora").
+    adminSupabase
+      .from('zahtevi_za_cas')
+      .select('id, requested_date, requested_slot_index, instructor:instructors!instructor_id(ime, prezime), term_type:term_types(naziv), classroom:classrooms(naziv)')
+      .eq('client_id', clientId)
+      .eq('status', 'pending'),
     getTermTypes(),
     getOtkazaneTermineZaKlijenta(clientId),
     getClientTermTypeStatuses(clientId),
@@ -59,7 +73,33 @@ export default async function AdminKlijentEditPage({
   const sortByDateSlotDesc = (a: { term: TermInfo }, b: { term: TermInfo }) => -sortByDateSlot(a, b);
   const isPast = (p: { term: TermInfo }) => isTermInPast(p.term.date, p.term.slot_index ?? 0);
   const odrzani = withTerm.filter((p) => p.odrzano || isPast(p)).sort(sortByDateSlotDesc);
-  const zakazani = withTerm.filter((p) => !p.odrzano && !isPast(p)).sort(sortByDateSlot);
+  const zakazaniPredavanja = withTerm.filter((p) => !p.odrzano && !isPast(p));
+
+  type Naziv = { naziv?: string } | { naziv?: string }[] | null;
+  type ZahtevRow = {
+    id: string;
+    requested_date: string;
+    requested_slot_index: number;
+    instructor: TermInfo['instructor'];
+    term_type: Naziv;
+    classroom: Naziv;
+  };
+  const one = <T,>(v: T | T[] | null | undefined): T | null => (Array.isArray(v) ? (v[0] ?? null) : (v ?? null));
+  const zahtevi = ((zahteviRaw ?? []) as ZahtevRow[]).map((z) => ({
+    id: z.id,
+    term: { date: z.requested_date, slot_index: z.requested_slot_index, instructor: z.instructor },
+    vrsta: one(z.term_type)?.naziv ?? null,
+    ucionica: one(z.classroom)?.naziv ?? null,
+  }));
+
+  type ZakazanItem =
+    | { kind: 'predavanje'; p: (typeof zakazaniPredavanja)[number]; term: TermInfo }
+    | { kind: 'zahtev'; z: (typeof zahtevi)[number]; term: TermInfo };
+  const zakazani: ZakazanItem[] = [
+    ...zakazaniPredavanja.map((p) => ({ kind: 'predavanje' as const, p, term: p.term })),
+    ...zahtevi.map((z) => ({ kind: 'zahtev' as const, z, term: z.term })),
+  ].sort(sortByDateSlot);
+  const brojBezInstruktora = zahtevi.length;
 
   const renderTermLink = (p: PredavanjeRow & { term: TermInfo }, isOdrzan: boolean) => {
     const t = p.term;
@@ -87,6 +127,35 @@ export default async function AdminKlijentEditPage({
         {instr && (
           <p className="mt-1 text-sm text-stone-600">{instr.ime} {instr.prezime}</p>
         )}
+      </Link>
+    );
+  };
+
+  const renderZahtevLink = (z: (typeof zahtevi)[number]) => {
+    const t = z.term;
+    const instr = one(t.instructor);
+    const dateStr = new Date(t.date + 'T12:00:00').toLocaleDateString('sr-Latn-RS', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' });
+    const timeStr = TIME_SLOTS[t.slot_index] ?? '—';
+    const prosao = isTermInPast(t.date, t.slot_index);
+    return (
+      <Link
+        href={`/admin/kalendar?view=nedelja&week=${getMonday(t.date)}&fokus=${t.date}`}
+        className="block rounded-xl border border-dashed border-amber-300 bg-amber-50/70 px-4 py-3 ui-transition hover:shadow-lg hover:bg-amber-100/70 hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-amber-400 focus:ring-offset-2"
+      >
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <span className="font-semibold text-stone-900">{dateStr}</span>
+            <span className="text-stone-600 ml-2">{timeStr}</span>
+          </div>
+          <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${prosao ? 'bg-red-100 text-red-800' : 'bg-amber-200/80 text-amber-900'}`}>
+            {prosao ? 'Prošlo – niko nije preuzeo' : 'Čeka instruktora'}
+          </span>
+        </div>
+        <p className="mt-1 text-sm text-stone-600">
+          {instr ? `${instr.ime} ${instr.prezime}` : 'Bez instruktora'}
+          {z.vrsta && ` · ${z.vrsta}`}
+          {z.ucionica && ` · ${z.ucionica}`}
+        </p>
       </Link>
     );
   };
@@ -154,13 +223,22 @@ export default async function AdminKlijentEditPage({
               </span>
               <h3 className="font-semibold text-stone-800">Zakazani za budućnost</h3>
             </div>
+            {brojBezInstruktora > 0 && (
+              <p className="text-xs text-amber-800 mb-3">
+                Od toga {brojBezInstruktora} bez instruktora (isprekidani okvir) – čekaju da ih neki predavač preuzme.
+              </p>
+            )}
             {zakazani.length === 0 ? (
               <p className="text-sm text-stone-500">Nema zakazanih termina u budućnosti.</p>
             ) : (
-              <ul className="space-y-2 max-h-[320px] overflow-y-auto pr-1">
-                {zakazani.map((p) => (
-                  <li key={p.id}>{renderTermLink(p, false)}</li>
-                ))}
+              <ul className="space-y-2 max-h-[420px] overflow-y-auto pr-1">
+                {zakazani.map((item) =>
+                  item.kind === 'predavanje' ? (
+                    <li key={item.p.id}>{renderTermLink(item.p, false)}</li>
+                  ) : (
+                    <li key={`z-${item.z.id}`}>{renderZahtevLink(item.z)}</li>
+                  )
+                )}
               </ul>
             )}
           </div>
@@ -174,7 +252,7 @@ export default async function AdminKlijentEditPage({
             {odrzani.length === 0 ? (
               <p className="text-sm text-stone-500">Nema održanih termina.</p>
             ) : (
-              <ul className="space-y-2 max-h-[320px] overflow-y-auto pr-1">
+              <ul className="space-y-2 max-h-[420px] overflow-y-auto pr-1">
                 {odrzani.map((p) => (
                   <li key={p.id}>{renderTermLink(p, true)}</li>
                 ))}

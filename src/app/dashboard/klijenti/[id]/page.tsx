@@ -38,8 +38,7 @@ export default async function KlijentPage({
   const { data: predavanja } = await admin
     .from('predavanja')
     .select('*, term:terms(date, slot_index, instructor_id)')
-    .eq('client_id', id)
-    .limit(100);
+    .eq('client_id', id);
 
   const allLessons = predavanja ?? [];
   type TermShape = { date: string; slot_index: number; instructor_id?: string };
