@@ -140,7 +140,9 @@ export default function AdminKlijentiTable({ rows }: { rows: AdminKlijentRow[] }
               return (
                 <tr key={r.id} className="border-b border-stone-100 hover:bg-amber-50/50 ui-transition">
                   <td className="p-3 font-medium text-stone-800">
-                    {r.ime} {r.prezime}
+                    <Link href={`/admin/klijenti/${r.id}`} className="hover:text-amber-700 hover:underline">
+                      {r.ime} {r.prezime}
+                    </Link>
                     {hasWarning && (
                       <span
                         className="ml-2 inline-flex items-center rounded-md bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800"
@@ -149,6 +151,12 @@ export default function AdminKlijentiTable({ rows }: { rows: AdminKlijentRow[] }
                         Nema kupljenih časova ({r.problemTypes.join(', ')})
                       </span>
                     )}
+                    <Link
+                      href={`/admin/klijenti/${r.id}`}
+                      className="mt-0.5 block text-xs font-medium text-amber-700 hover:text-amber-800"
+                    >
+                      Profil, uplate i održani časovi →
+                    </Link>
                   </td>
                   <td className="p-3 text-stone-600 whitespace-nowrap">
                     {r.datumTestiranja
