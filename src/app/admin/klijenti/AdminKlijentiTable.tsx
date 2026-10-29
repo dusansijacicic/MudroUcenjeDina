@@ -2,7 +2,10 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import toast from 'react-hot-toast';
 import { searchVariants, variantsMatch } from '@/lib/search';
+import { oznaciKaoPlaceno } from '@/app/admin/actions';
 
 /** Koliko redova se crta odjednom; sledeća grupa se dodaje kad se skroluje do dna (ili odmah, ako stane na ekran). */
 const PAGE_SIZE = 50;
@@ -20,6 +23,53 @@ export type AdminKlijentRow = {
   problemTypes: string[];
   stanje: { term_type_id: string | null; term_type_naziv: string; uplaceno: number; odrzano: number; ostalo: number }[];
 };
+
+/** Upisuje uplatu za neplaćene održane časove te vrste (primio Časlav Mančić, datum poslednjeg održanog časa). */
+function OznaciPlacenoButton({
+  clientId,
+  imeDeteta,
+  termTypeId,
+  vrsta,
+  brojCasova,
+}: {
+  clientId: string;
+  imeDeteta: string;
+  termTypeId: string | null;
+  vrsta: string;
+  brojCasova: number;
+}) {
+  const router = useRouter();
+  const [loading, setLoading] = useState(false);
+  const handleClick = async () => {
+    const ok = window.confirm(
+      `Označiti kao plaćeno: ${imeDeteta} – ${brojCasova} čas(a) ${vrsta}?
+
+` +
+        'Upisuje se uplata koju je primio Časlav Mančić, sa datumom poslednjeg održanog časa. ' +
+        'Kasnije se može izmeniti ili obrisati u Evidenciji uplata.'
+    );
+    if (!ok) return;
+    setLoading(true);
+    const res = await oznaciKaoPlaceno(clientId, termTypeId);
+    setLoading(false);
+    if (res.error) {
+      toast.error(res.error);
+      return;
+    }
+    toast.success(`Upisana uplata: ${res.brojCasova} čas(a) ${vrsta}.`);
+    router.refresh();
+  };
+  return (
+    <button
+      type="button"
+      onClick={handleClick}
+      disabled={loading}
+      className="ml-1.5 rounded-md border border-emerald-300 bg-emerald-50 px-1.5 py-0.5 text-xs font-semibold text-emerald-800 hover:bg-emerald-100 disabled:opacity-50"
+    >
+      {loading ? 'Upisujem…' : '✓ Označi kao plaćeno'}
+    </button>
+  );
+}
 
 export default function AdminKlijentiTable({ rows }: { rows: AdminKlijentRow[] }) {
   const [search, setSearch] = useState('');
@@ -127,7 +177,16 @@ export default function AdminKlijentiTable({ rows }: { rows: AdminKlijentRow[] }
                               <span className="text-stone-600">kupljeno {s.uplaceno}</span>
                               <span className="text-stone-400 mx-1">·</span>
                               {duguje > 0 ? (
-                                <span className="rounded bg-red-100 px-1 font-semibold text-red-700">nije plaćeno {duguje}</span>
+                                <>
+                                  <span className="rounded bg-red-100 px-1 font-semibold text-red-700">nije plaćeno {duguje}</span>
+                                  <OznaciPlacenoButton
+                                    clientId={r.id}
+                                    imeDeteta={`${r.ime} ${r.prezime}`}
+                                    termTypeId={s.term_type_id}
+                                    vrsta={s.term_type_naziv}
+                                    brojCasova={duguje}
+                                  />
+                                </>
                               ) : (
                                 <span className="font-medium text-amber-700">preostalo {s.ostalo}</span>
                               )}
