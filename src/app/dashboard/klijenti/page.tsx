@@ -2,13 +2,13 @@ import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getDashboardInstructor } from '@/lib/dashboard';
-import { getStanjePoVrstamaZaKlijenteBatch } from '@/app/admin/actions';
+import { getStanjeSvihKlijenata } from '@/lib/stanje-svih';
 import ClientRow from './ClientRow';
 import type { Client } from '@/types/database';
 
 export type StanjeVrsta = { term_type_naziv: string; uplaceno: number; odrzano: number; ostalo: number };
 
-/** Svi klijenti – instruktor vidi sve. Za svaki tip časa gde je plaćen makar jedan: plaćeno / održano / preostalo. Sortirano po datumu testiranja (noviji prvi). */
+/** Svi klijenti – instruktor vidi sve. Za svaki tip časa gde ima plaćenih ili održanih: plaćeno / održano do danas / preostalo. Sortirano po datumu testiranja (noviji prvi). */
 export default async function KlijentiPage() {
   const { instructor } = await getDashboardInstructor();
   if (!instructor) redirect('/login?reason=no_instructor');
@@ -17,17 +17,17 @@ export default async function KlijentiPage() {
   let rows: Row[] = [];
   try {
     const admin = createAdminClient();
-    const [{ data: clients }, { data: icRows }] = await Promise.all([
+    // Stanje svih klijenata sabira baza (046) – u istom krugu upita, bez ogromnog .in(id-jevi).
+    const [{ data: clients }, { data: icRows }, batchStanje] = await Promise.all([
       admin.from('clients').select('*').order('ime').order('prezime'),
       admin.from('instructor_clients').select('client_id, placeno_casova').eq('instructor_id', instructor.id),
+      getStanjeSvihKlijenata(),
     ]);
     const placenoMap = new Map((icRows ?? []).map((r) => [r.client_id, r.placeno_casova ?? 0]));
-    const clientIds = (clients ?? []).map((c) => c.id);
-    const batchStanje = await getStanjePoVrstamaZaKlijenteBatch(clientIds);
     const stanjeMap = new Map(
       (clients ?? []).map((c) => [
         c.id,
-        (batchStanje.get(c.id) ?? []).filter((s) => s.uplaceno >= 1).map((s) => ({
+        (batchStanje.get(c.id) ?? []).map((s) => ({
           term_type_naziv: s.term_type_naziv,
           uplaceno: s.uplaceno,
           odrzano: s.odrzano,
@@ -56,7 +56,7 @@ export default async function KlijentiPage() {
         </Link>
       </div>
       <p className="text-stone-500 text-sm mb-4">
-        Svi klijenti. Za svaki tip časa gde je plaćen makar jedan: plaćeno / održano / preostalo.
+        Svi klijenti. Za svaki tip časa gde ima plaćenih ili održanih: plaćeno / održano do danas / preostalo.
       </p>
       <div className="rounded-xl border border-stone-200 bg-white overflow-hidden">
         <table className="w-full text-sm">

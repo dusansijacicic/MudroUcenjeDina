@@ -78,7 +78,7 @@ export default async function KlijentPage({
     getPrograms(),
     getClientProgrami(id),
   ]);
-  const stanjePoVrstama = stanjePoVrstamaRaw.filter((s) => s.uplaceno >= 1);
+  const stanjePoVrstama = stanjePoVrstamaRaw;
 
   return (
     <div className="space-y-8">
@@ -136,7 +136,7 @@ export default async function KlijentPage({
         <section className="rounded-2xl border border-stone-200 bg-white shadow-sm overflow-hidden">
           <div className="border-b border-stone-100 bg-stone-50/80 px-5 py-3">
             <h2 className="text-base font-semibold text-stone-800">Pregled po vrstama časova</h2>
-            <p className="text-xs text-stone-500 mt-0.5">Plaćeno / održano / preostalo – samo vrste gde je plaćen makar jedan čas.</p>
+            <p className="text-xs text-stone-500 mt-0.5">Plaćeno / održano / preostalo – sve vrste gde ima plaćenih ili održanih časova.</p>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">

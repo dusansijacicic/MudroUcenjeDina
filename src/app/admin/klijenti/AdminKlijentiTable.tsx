@@ -79,7 +79,7 @@ export default function AdminKlijentiTable({ rows }: { rows: AdminKlijentRow[] }
               <th className="text-left p-3 font-medium text-stone-600">Godište / Razred</th>
               <th className="text-left p-3 font-medium text-stone-600">Škola</th>
               <th className="text-left p-3 font-medium text-stone-600">Kontakt telefon</th>
-              <th className="text-left p-3 font-medium text-stone-600">Kupljeno / Održano do danas / Preostalo po vrsti</th>
+              <th className="text-left p-3 font-medium text-stone-600">Održano do danas / kupljeno / preostalo, po vrsti časa</th>
               <th className="text-left p-3 font-medium text-stone-600">Instruktori</th>
               <th className="text-right p-3 font-medium text-stone-600">Akcija</th>
             </tr>
@@ -114,17 +114,26 @@ export default function AdminKlijentiTable({ rows }: { rows: AdminKlijentRow[] }
                     {r.stanje.length === 0 ? (
                       <span className="text-stone-400">—</span>
                     ) : (
-                      <div className="flex flex-wrap gap-x-3 gap-y-1">
-                        {r.stanje.map((s) => (
-                          <span key={s.term_type_id ?? 'bez'} className="whitespace-nowrap">
-                            <span className="font-medium text-stone-700">{s.term_type_naziv}:</span>{' '}
-                            <span className="text-stone-600">{s.uplaceno} kupljeno</span>
-                            <span className="text-stone-400 mx-0.5">/</span>
-                            <span className="text-stone-600">{s.odrzano} održano</span>
-                            <span className="text-stone-400 mx-0.5">/</span>
-                            <span className="text-amber-700 font-medium">{s.ostalo} preostalo</span>
-                          </span>
-                        ))}
+                      <div className="flex flex-col gap-0.5">
+                        {r.stanje.map((s) => {
+                          const duguje = s.odrzano - s.uplaceno;
+                          return (
+                            <span key={s.term_type_id ?? 'bez'} className="whitespace-nowrap tabular-nums">
+                              <span className="font-medium text-stone-800">{s.term_type_naziv}:</span>{' '}
+                              <span className="text-stone-800">
+                                održano <strong>{s.odrzano}</strong>
+                              </span>
+                              <span className="text-stone-400 mx-1">·</span>
+                              <span className="text-stone-600">kupljeno {s.uplaceno}</span>
+                              <span className="text-stone-400 mx-1">·</span>
+                              {duguje > 0 ? (
+                                <span className="rounded bg-red-100 px-1 font-semibold text-red-700">nije plaćeno {duguje}</span>
+                              ) : (
+                                <span className="font-medium text-amber-700">preostalo {s.ostalo}</span>
+                              )}
+                            </span>
+                          );
+                        })}
                       </div>
                     )}
                   </td>
