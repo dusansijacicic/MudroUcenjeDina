@@ -2199,6 +2199,72 @@ export async function createUplata(
   return {};
 }
 
+/** Izmena unete uplate (samo admin). Menja broj plaćenih časova klijenta, pa se osvežavaju i kalendar i profil. */
+export async function updateUplata(
+  id: string,
+  instructorId: string,
+  clientId: string,
+  iznos: number | null,
+  termTypeId: string | null,
+  brojCasova: number,
+  popustPercent: number | null,
+  napomena: string | null
+): Promise<{ error?: string }> {
+  const { admin, error: authErr, actor } = await requireAdmin();
+  if (authErr || !admin) return { error: authErr ?? 'Samo admin.' };
+  if (!instructorId || !clientId) return { error: 'Izaberite predavača i klijenta.' };
+  const popust = popustPercent != null && Number.isFinite(popustPercent) && popustPercent >= 0 && popustPercent <= 100 ? popustPercent : null;
+  const { data: before } = await admin.from('uplate').select('*').eq('id', id).maybeSingle();
+  if (!before) return { error: 'Uplata nije pronađena (možda je obrisana).' };
+  const { error } = await admin
+    .from('uplate')
+    .update({
+      instructor_id: instructorId,
+      client_id: clientId,
+      iznos: iznos != null && Number.isFinite(iznos) ? iznos : null,
+      term_type_id: termTypeId || null,
+      broj_casova: Math.max(0, brojCasova),
+      popust_percent: popust,
+      napomena: napomena?.trim() || null,
+    })
+    .eq('id', id);
+  if (error) return { error: error.message };
+  revalidatePath('/admin/uplate');
+  revalidatePath('/dashboard/uplate');
+  revalidatePath(`/admin/klijenti/${clientId}`);
+  if (before.client_id !== clientId) revalidatePath(`/admin/klijenti/${before.client_id}`);
+  if (actor) {
+    logActivity(actor, 'uplata.update', `Izmenjena uplata (${brojCasova} čas(ova)${iznos != null ? `, ${iznos} din` : ''}).`, {
+      entityType: 'uplata',
+      entityId: id,
+      metadata: { pre: before, posle: { instructorId, clientId, iznos, termTypeId, brojCasova, popust, napomena } },
+    });
+  }
+  return {};
+}
+
+/** Brisanje uplate (samo admin). Ceo red se čuva u dnevniku aktivnosti, da se može ručno vratiti. */
+export async function deleteUplata(id: string): Promise<{ error?: string }> {
+  const { admin, error: authErr, actor } = await requireAdmin();
+  if (authErr || !admin) return { error: authErr ?? 'Samo admin.' };
+  const { data: before } = await admin.from('uplate').select('*').eq('id', id).maybeSingle();
+  if (!before) return { error: 'Uplata nije pronađena (možda je već obrisana).' };
+  const { error } = await admin.from('uplate').delete().eq('id', id);
+  if (error) return { error: error.message };
+  revalidatePath('/admin/uplate');
+  revalidatePath('/dashboard/uplate');
+  revalidatePath(`/admin/klijenti/${before.client_id}`);
+  if (actor) {
+    logActivity(
+      actor,
+      'uplata.delete',
+      `Obrisana uplata (${before.broj_casova} čas(ova)${before.iznos != null ? `, ${before.iznos} din` : ''}).`,
+      { entityType: 'uplata', entityId: id, metadata: { obrisano: before } }
+    );
+  }
+  return {};
+}
+
 // ─── Potencijalni klijenti (testiranje) ───────────────────────────────────────
 
 export type PotentialClientStatus = 'zakazan' | 'pojavio_se' | 'nije_se_pojavio' | 'prebacen_u_klijenta';

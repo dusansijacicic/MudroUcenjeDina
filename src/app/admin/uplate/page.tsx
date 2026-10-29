@@ -2,6 +2,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { getAuthedUser, getIsAdmin } from '@/lib/auth';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
+import ObrisiUplatuButton from './ObrisiUplatuButton';
 
 export default async function AdminUplatePage() {
   const { user } = await getAuthedUser();
@@ -81,12 +82,13 @@ export default async function AdminUplatePage() {
               <th className="text-right p-3 font-medium text-stone-600">Br. časova</th>
               <th className="text-left p-3 font-medium text-stone-600">Vrsta</th>
               <th className="text-left p-3 font-medium text-stone-600">Napomena</th>
+              <th className="text-right p-3 font-medium text-stone-600">Akcije</th>
             </tr>
           </thead>
           <tbody>
             {list.length === 0 ? (
               <tr>
-                <td colSpan={8} className="p-8 text-center text-stone-500">
+                <td colSpan={9} className="p-8 text-center text-stone-500">
                   Nema unetih uplata. Kliknite „Unesi uplatu”.
                 </td>
               </tr>
@@ -118,6 +120,18 @@ export default async function AdminUplatePage() {
                   <td className="p-3 text-stone-600">{u.term_type?.naziv ?? '—'}</td>
                   <td className="p-3 text-stone-500 max-w-[180px] truncate" title={u.napomena ?? ''}>
                     {u.napomena ?? '—'}
+                  </td>
+                  <td className="p-3 text-right whitespace-nowrap">
+                    <Link href={`/admin/uplate/${u.id}`} className="font-medium text-amber-700 hover:text-amber-800">
+                      Izmeni
+                    </Link>
+                    <span className="mx-1.5 text-stone-300">|</span>
+                    <ObrisiUplatuButton
+                      id={u.id}
+                      opis={`${u.iznos != null ? `${Number(u.iznos).toLocaleString('sr-Latn-RS')} RSD` : 'bez iznosa'} za ${
+                        u.client ? `${u.client.ime} ${u.client.prezime}` : 'klijenta'
+                      } (${u.broj_casova ?? 0} čas.)`}
+                    />
                   </td>
                 </tr>
               ))

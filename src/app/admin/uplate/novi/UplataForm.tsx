@@ -1,15 +1,45 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
-import { createUplata } from '@/app/admin/actions';
+import { createUplata, updateUplata } from '@/app/admin/actions';
 import SingleKlijentPicker from '@/components/SingleKlijentPicker';
 
 type Option = { id: string; ime?: string; prezime?: string; naziv?: string };
 type ClientOption = Option & { popust_percent?: number };
 type TermTypeOption = Option & { cena_po_casu?: number | null };
+
+/** Postojeća uplata – forma je tada u režimu izmene. */
+export type UplataInitial = {
+  id: string;
+  instructorId: string;
+  clientId: string;
+  iznos: number | null;
+  termTypeId: string | null;
+  brojCasova: number;
+  popustPercent: number | null;
+  napomena: string | null;
+};
+
+type CalcInput = { termTypeId: string; brojCasova: number; popustPercent: string; clientId: string };
+
+/** Cena po času × broj časova − popust (popust uplate, a ako je prazan – popust klijenta). */
+function izracunaj(termTypes: TermTypeOption[], clients: ClientOption[], f: CalcInput) {
+  const tt = termTypes.find((t) => t.id === f.termTypeId);
+  const cena = tt?.cena_po_casu != null && Number.isFinite(Number(tt.cena_po_casu)) ? Number(tt.cena_po_casu) : null;
+  const clientPopust = Number(clients.find((c) => c.id === f.clientId)?.popust_percent ?? 0);
+  const zaUplatu = f.popustPercent.trim() ? parseFloat(f.popustPercent.replace(',', '.')) : null;
+  const popust =
+    zaUplatu != null && Number.isFinite(zaUplatu) && zaUplatu >= 0 && zaUplatu <= 100
+      ? zaUplatu
+      : clientPopust >= 0 && clientPopust <= 100
+        ? clientPopust
+        : 0;
+  const iznos = cena != null && f.brojCasova >= 0 ? Math.round(cena * f.brojCasova * (1 - popust / 100)) : null;
+  return { cena, popust, clientPopust, iznos };
+}
 
 export default function UplataForm({
   instructors,
@@ -17,6 +47,7 @@ export default function UplataForm({
   termTypes,
   fixedInstructorId,
   backHref = '/admin/uplate',
+  initial,
 }: {
   instructors: Option[];
   clients: ClientOption[];
@@ -25,38 +56,35 @@ export default function UplataForm({
   fixedInstructorId?: string;
   /** Link za „Nazad” i redirect posle unosa (default admin uplate). */
   backHref?: string;
+  /** Izmena postojeće uplate: polja kreću od sačuvanih vrednosti, a iznos se ne preračunava dok se nešto ne promeni. */
+  initial?: UplataInitial;
 }) {
   const router = useRouter();
   // Bez podrazumevanog izbora: uplata ne sme tiho da ode na prvog instruktora/dete sa liste.
-  const [instructorId, setInstructorId] = useState(fixedInstructorId ?? '');
+  const [instructorId, setInstructorId] = useState(fixedInstructorId ?? initial?.instructorId ?? '');
   const effectiveInstructorId = fixedInstructorId ?? instructorId;
-  const [clientId, setClientId] = useState('');
+  const [clientId, setClientId] = useState(initial?.clientId ?? '');
   const selectedClient = clients.find((c) => c.id === clientId);
-  const clientPopust = selectedClient?.popust_percent ?? 0;
-  const [iznos, setIznos] = useState('');
-  const [termTypeId, setTermTypeId] = useState('');
-  const [brojCasova, setBrojCasova] = useState(1);
-  const [popustPercent, setPopustPercent] = useState('');
-  const [napomena, setNapomena] = useState('');
+  const [iznos, setIznos] = useState(initial?.iznos != null ? String(initial.iznos) : '');
+  const [termTypeId, setTermTypeId] = useState(initial?.termTypeId ?? '');
+  const [brojCasova, setBrojCasova] = useState(initial?.brojCasova ?? 1);
+  const [popustPercent, setPopustPercent] = useState(initial?.popustPercent != null ? String(initial.popustPercent) : '');
+  const [napomena, setNapomena] = useState(initial?.napomena ?? '');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const selectedTermType = termTypes.find((t) => t.id === termTypeId);
-  const cenaPoCasu = selectedTermType?.cena_po_casu != null && Number.isFinite(selectedTermType.cena_po_casu) ? Number(selectedTermType.cena_po_casu) : null;
-  const popustZaUplatu = popustPercent.trim() ? parseFloat(popustPercent.replace(',', '.')) : null;
-  const effectivePopust = (popustZaUplatu != null && Number.isFinite(popustZaUplatu) && popustZaUplatu >= 0 && popustZaUplatu <= 100)
-    ? popustZaUplatu
-    : (Number(clientPopust) >= 0 && Number(clientPopust) <= 100 ? Number(clientPopust) : 0);
-  const iznosCalculated =
-    cenaPoCasu != null && brojCasova >= 0
-      ? Math.round(cenaPoCasu * brojCasova * (1 - effectivePopust / 100))
-      : null;
+  const calc = izracunaj(termTypes, clients, { termTypeId, brojCasova, popustPercent, clientId });
+  const cenaPoCasu = calc.cena;
+  const clientPopust = calc.clientPopust;
+  const effectivePopust = calc.popust;
+  const iznosCalculated = calc.iznos;
 
-  useEffect(() => {
-    if (iznosCalculated != null && iznosCalculated >= 0) {
-      setIznos(String(iznosCalculated));
-    }
-  }, [iznosCalculated]);
+  // Iznos se preračuna kad se promeni nešto što utiče na cenu (vrsta, broj časova, popust, klijent);
+  // ručno uneti iznos ostaje dok se neko od tih polja ne promeni.
+  const recalc = (patch: Partial<CalcInput>) => {
+    const next = izracunaj(termTypes, clients, { termTypeId, brojCasova, popustPercent, clientId, ...patch });
+    if (next.iznos != null && next.iznos >= 0) setIznos(String(next.iznos));
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -81,22 +109,33 @@ export default function UplataForm({
       setLoading(false);
       return;
     }
-    const result = await createUplata(
-      effectiveInstructorId,
-      clientId,
-      iznosNum,
-      termTypeId || null,
-      brojCasova,
-      popustNum,
-      napomena.trim() || null
-    );
+    const result = initial
+      ? await updateUplata(
+          initial.id,
+          effectiveInstructorId,
+          clientId,
+          iznosNum,
+          termTypeId || null,
+          brojCasova,
+          popustNum,
+          napomena.trim() || null
+        )
+      : await createUplata(
+          effectiveInstructorId,
+          clientId,
+          iznosNum,
+          termTypeId || null,
+          brojCasova,
+          popustNum,
+          napomena.trim() || null
+        );
     setLoading(false);
     if (result.error) {
       setError(result.error);
       toast.error(result.error);
       return;
     }
-    toast.success('Uplata uneta.');
+    toast.success(initial ? 'Uplata izmenjena.' : 'Uplata uneta.');
     router.push(backHref);
     router.refresh();
   };
@@ -124,7 +163,10 @@ export default function UplataForm({
         <SingleKlijentPicker
           clients={clients.map((c) => ({ id: c.id, ime: c.ime ?? '', prezime: c.prezime ?? '' }))}
           value={clientId}
-          onChange={setClientId}
+          onChange={(id) => {
+            setClientId(id);
+            recalc({ clientId: id });
+          }}
           disabled={loading}
           inputId="uplata-klijent-search"
         />
@@ -138,7 +180,10 @@ export default function UplataForm({
         <label className="block text-sm font-medium text-stone-700 mb-1">Vrsta časa</label>
         <select
           value={termTypeId}
-          onChange={(e) => setTermTypeId(e.target.value)}
+          onChange={(e) => {
+            setTermTypeId(e.target.value);
+            recalc({ termTypeId: e.target.value });
+          }}
           className="w-full rounded-lg border border-stone-300 px-3 py-2 text-stone-800"
         >
           <option value="">—</option>
@@ -158,7 +203,11 @@ export default function UplataForm({
           type="number"
           min={0}
           value={brojCasova}
-          onChange={(e) => setBrojCasova(Math.max(0, parseInt(e.target.value, 10) || 0))}
+          onChange={(e) => {
+            const n = Math.max(0, parseInt(e.target.value, 10) || 0);
+            setBrojCasova(n);
+            recalc({ brojCasova: n });
+          }}
           className="w-full rounded-lg border border-stone-300 px-3 py-2 text-stone-800 max-w-[120px]"
         />
       </div>
@@ -167,7 +216,10 @@ export default function UplataForm({
         <input
           type="text"
           value={popustPercent}
-          onChange={(e) => setPopustPercent(e.target.value)}
+          onChange={(e) => {
+            setPopustPercent(e.target.value);
+            recalc({ popustPercent: e.target.value });
+          }}
           placeholder={`npr. ${clientPopust > 0 ? clientPopust : '10'}`}
           className="w-full rounded-lg border border-stone-300 px-3 py-2 text-stone-800 max-w-[100px]"
         />
@@ -218,7 +270,7 @@ export default function UplataForm({
           disabled={loading}
           className="rounded-lg bg-amber-600 px-4 py-2 text-white font-medium hover:bg-amber-700 disabled:opacity-50"
         >
-          {loading ? 'Unos...' : 'Unesi uplatu'}
+          {loading ? (initial ? 'Čuvam…' : 'Unos...') : initial ? 'Sačuvaj izmene' : 'Unesi uplatu'}
         </button>
         <Link href={backHref} className="rounded-lg border border-stone-300 px-4 py-2 text-stone-700 hover:bg-stone-100">
           Nazad
