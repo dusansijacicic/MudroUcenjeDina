@@ -85,10 +85,10 @@ export default async function AdminKalendarPage({
     adminSupabase.from('instructors').select('id, ime, prezime, color, aktivan').order('prezime').order('ime'),
     adminSupabase.from('classrooms').select('id, naziv').order('naziv'),
     adminSupabase.from('clients').select('id, ime, prezime, godiste, datum_testiranja').order('ime').order('prezime'),
-    adminSupabase.from('otkazani_termini').select('id, client_ime, client_prezime, instructor_id, instructor_ime, instructor_prezime, term_date, slot_index, term_type_naziv, placeno').gte('term_date', dateFrom).lte('term_date', dateTo),
+    adminSupabase.from('otkazani_termini').select('id, client_id, client_ime, client_prezime, instructor_id, instructor_ime, instructor_prezime, term_date, slot_index, term_type_naziv, placeno').gte('term_date', dateFrom).lte('term_date', dateTo),
     adminSupabase
       .from('zahtevi_za_cas')
-      .select('id, requested_date, requested_slot_index, client:clients(ime, prezime), term_type:term_types(naziv), classroom:classrooms(naziv)')
+      .select('id, client_id, requested_date, requested_slot_index, client:clients(ime, prezime), term_type:term_types(naziv), classroom:classrooms(naziv)')
       .eq('status', 'pending')
       .gte('requested_date', dateFrom)
       .lte('requested_date', dateTo),
@@ -142,7 +142,8 @@ export default async function AdminKalendarPage({
   if (filterClassroomId) terms = terms.filter((t) => t.classroom?.id === filterClassroomId);
   if (filterClientId) terms = terms.filter((t) => (t.predavanja ?? []).some((p) => (p.client as { id?: string })?.id === filterClientId));
 
-  const pendingZahtevi = (zahteviRaw ?? []).map((z) => {
+  // Filter po detetu važi i za zahteve (termini bez instruktora) i otkazane termine tog deteta.
+  const pendingZahtevi = (zahteviRaw ?? []).filter((z) => !filterClientId || z.client_id === filterClientId).map((z) => {
     const client = Array.isArray(z.client) ? z.client[0] : z.client;
     const termType = Array.isArray(z.term_type) ? z.term_type[0] : z.term_type;
     const classroom = Array.isArray(z.classroom) ? z.classroom[0] : z.classroom;
@@ -157,9 +158,26 @@ export default async function AdminKalendarPage({
     };
   });
 
+  const otkazaniTermini = ((otkazaniRaw ?? []) as (OtkazaniTerminCalendar & { client_id?: string | null })[]).filter(
+    (ot) => !filterClientId || ot.client_id === filterClientId
+  );
+
   const base = '/admin/kalendar';
-  const month = params.month || new Date().toISOString().slice(0, 7);
-  const day = singleDay ?? todayStr;
+  // Aktivni filteri idu uz svaki link kalendara (Prethodna/Sledeća, dan, mesec…), da ne nestanu pri promeni perioda.
+  const filterParams = new URLSearchParams();
+  if (filterInstructorId) filterParams.set('instructor', filterInstructorId);
+  if (filterClassroomId) filterParams.set('classroom', filterClassroomId);
+  if (filterClientId) filterParams.set('client', filterClientId);
+  const filterQuery = filterParams.size > 0 ? `&${filterParams.toString()}` : '';
+
+  const filterClient = filterClientId ? (clientsList ?? []).find((c) => c.id === filterClientId) : null;
+  const periodLabel = view === 'dan' ? 'ovog dana' : view === 'mesec' ? 'ovog meseca' : 'ove dve nedelje';
+  const clearClientParams = new URLSearchParams(filterParams);
+  clearClientParams.delete('client');
+  if (params.view) clearClientParams.set('view', params.view);
+  if (params.week) clearClientParams.set('week', params.week);
+  if (params.day) clearClientParams.set('day', params.day);
+  if (params.month) clearClientParams.set('month', params.month);
   // Suspendovan instruktor se nigde ne nudi kao opcija (ni u filteru, ni u legendi, ni u pickerima za
   // dodelu novog posla) – i dalje se vidi NA SAMOM rasporedu ako već ima zakazane termine (ti termini
   // se ne diraju), samo se ne pojavljuje po imenu u listama za izbor.
@@ -188,6 +206,9 @@ export default async function AdminKalendarPage({
             filterClientId={filterClientId}
             currentView={view}
             currentParams={{ week: params.week, day: params.day, month: params.month, view: params.view }}
+            shownStartOfWeek={startOfWeek}
+            shownDay={singleDay}
+            shownMonth={monthStart?.slice(0, 7)}
             base={base}
           />
           <Link href="/admin/termin/novi" className="inline-flex rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700">
@@ -195,6 +216,38 @@ export default async function AdminKalendarPage({
           </Link>
         </div>
       </div>
+      {filterClientId && (
+        <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border border-violet-300 bg-violet-50 px-4 py-2.5 text-sm text-violet-950">
+          <span>
+            Prikazani su samo termini za: <strong>{filterClient ? `${filterClient.ime} ${filterClient.prezime}` : 'izabrano dete'}</strong>
+            {' – '}
+            {periodLabel}: <strong className="tabular-nums">{terms.length}</strong> zakazano
+            {pendingZahtevi.length > 0 && (
+              <>
+                , <strong className="tabular-nums">{pendingZahtevi.length}</strong> bez instruktora
+              </>
+            )}
+            .
+          </span>
+          {view !== 'mesec' && (
+            <Link
+              href={`${base}?view=mesec&month=${(singleDay ?? startOfWeek).slice(0, 7)}${filterQuery}`}
+              className="font-medium text-violet-800 underline-offset-2 hover:underline"
+            >
+              Ceo mesec za ovo dete →
+            </Link>
+          )}
+          <Link href={`/admin/klijenti/${filterClientId}`} className="font-medium text-violet-800 underline-offset-2 hover:underline">
+            Profil klijenta →
+          </Link>
+          <Link
+            href={clearClientParams.size > 0 ? `${base}?${clearClientParams.toString()}` : base}
+            className="ml-auto rounded-md px-2 py-1 font-medium text-violet-800 hover:bg-violet-100"
+          >
+            ✕ Ukloni filter
+          </Link>
+        </div>
+      )}
       {legendInstructors.length > 0 && (
         <div className="mb-4 flex flex-wrap items-start gap-4 rounded-lg border border-stone-200 bg-stone-50/80 px-4 py-2 text-sm">
           <div className="flex flex-col gap-1">
@@ -229,7 +282,9 @@ export default async function AdminKalendarPage({
       <AdminCalendarView
         headerContent={headerContent}
         terms={terms}
-        otkazaniTermini={(otkazaniRaw ?? []) as OtkazaniTerminCalendar[]}
+        otkazaniTermini={otkazaniTermini}
+        filterQuery={filterQuery}
+        filterClientId={filterClientId}
         view={view}
         startOfWeek={startOfWeek}
         singleDay={singleDay}

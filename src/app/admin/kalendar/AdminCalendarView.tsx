@@ -435,6 +435,8 @@ export default function AdminCalendarView({
   focusDate,
   focusSlot,
   blockedSlots: blockedSlotsProp = NO_BLOCKED_SLOTS,
+  filterQuery = '',
+  filterClientId = null,
 }: {
   /** Naslov/filteri/legenda iznad kalendara (server-renderovani deo iz page.tsx). */
   headerContent?: React.ReactNode;
@@ -464,6 +466,10 @@ export default function AdminCalendarView({
   focusSlot?: number;
   /** Blokirani slotovi u prikazanom opsegu (Admin → Blokiraj termin(e)). */
   blockedSlots?: BlokiranTermin[];
+  /** Aktivni filteri kao "&instructor=…&client=…" – dodaju se na svaki link perioda da filter ostane uključen. */
+  filterQuery?: string;
+  /** Filter po detetu – mesečni prikaz tada ispisuje sve termine tog deteta (bez skraćivanja). */
+  filterClientId?: string | null;
 }) {
   const router = useRouter();
   const [draggedTermId, setDraggedTermId] = useState<string | null>(null);
@@ -504,7 +510,7 @@ export default function AdminCalendarView({
     const inView = view === 'nedelja' && d >= startOfWeek && d <= weekEnd.toISOString().slice(0, 10);
     if (inView && scrollToZahtev(d)) return;
     focusedForRef.current = null;
-    router.push(`/admin/kalendar?view=nedelja&week=${getMonday(d)}&fokus=${d}`);
+    router.push(`/admin/kalendar?view=nedelja&week=${getMonday(d)}&fokus=${d}${filterQuery}`);
   };
 
   const handleDeleteOtkazani = async (id: string) => {
@@ -1061,7 +1067,7 @@ export default function AdminCalendarView({
     router.refresh();
   };
   const base = '/admin/kalendar';
-  const linkSuffix = '';
+  const linkSuffix = filterQuery;
 
   let body: React.ReactNode;
   if (view === 'dan' && singleDay) {
@@ -1083,6 +1089,8 @@ export default function AdminCalendarView({
       <AdminMonthView
         monthStart={monthStart}
         terms={terms}
+        pendingZahtevi={pendingZahtevi}
+        showAll={!!filterClientId}
         linkSuffix={linkSuffix}
         base={base}
       />
@@ -2508,14 +2516,36 @@ function AdminDateStrip({
   );
 }
 
+/** Mesečni prikaz bez filtera po detetu: koliko termina se ispisuje po danu (ostalo je "+N još"). */
+const MONTH_DAY_MAX = 4;
+
+function shortPersonName(ime?: string | null, prezime?: string | null): string {
+  return `${ime ?? ''}${prezime ? ` ${prezime[0]}.` : ''}`.trim();
+}
+
+type MonthEntry = {
+  key: string;
+  slot: number;
+  href: string;
+  text: string;
+  title: string;
+  color: string;
+  zahtev: boolean;
+};
+
 function AdminMonthView({
   monthStart,
   terms,
+  pendingZahtevi,
+  showAll,
   linkSuffix,
   base,
 }: {
   monthStart: string;
   terms: AdminTerm[];
+  pendingZahtevi: PendingZahtevCalendar[];
+  /** Filter po detetu: ispisuju se svi termini dana i umesto imena deteta piše instruktor + vrsta časa. */
+  showAll: boolean;
   linkSuffix: string;
   base: string;
 }) {
@@ -2532,6 +2562,52 @@ function AdminMonthView({
     days.push(`${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`);
   }
 
+  const entriesByDate = new Map<string, MonthEntry[]>();
+  const push = (date: string, e: MonthEntry) => {
+    const list = entriesByDate.get(date);
+    if (list) list.push(e);
+    else entriesByDate.set(date, [e]);
+  };
+  for (const t of terms) {
+    if (isAutoSpillover(t)) continue;
+    const time = TIME_SLOTS[t.slot_index] ?? '';
+    const testing = isTestingTerm(t);
+    const people = testing
+      ? (t.potential_clients ?? []).map((pc) => ({ ime: pc.ime, prezime: pc.prezime }))
+      : (t.predavanja ?? []).map((p) => ({ ime: p.client?.ime, prezime: p.client?.prezime }));
+    const tt = t.predavanja?.[0]?.term_type;
+    const vrsta = testing ? 'Testiranje' : ((Array.isArray(tt) ? tt[0]?.naziv : tt?.naziv) ?? null);
+    const instr = t.instructor ? `${t.instructor.ime} ${t.instructor.prezime}` : 'bez instruktora';
+    const text = showAll
+      ? [t.instructor?.ime ?? 'bez instr.', vrsta].filter(Boolean).join(' · ')
+      : people.map((x) => shortPersonName(x.ime, x.prezime)).join(', ') || (vrsta ?? 'termin');
+    push(t.date, {
+      key: t.id,
+      slot: t.slot_index,
+      href: `/admin/termin/${t.id}`,
+      text,
+      title: [time, people.map((x) => `${x.ime ?? ''} ${x.prezime ?? ''}`.trim()).join(', '), instr, t.classroom?.naziv, vrsta]
+        .filter(Boolean)
+        .join(' · '),
+      color: t.instructor?.color ?? '#a8a29e',
+      zahtev: false,
+    });
+  }
+  for (const z of pendingZahtevi) {
+    const time = TIME_SLOTS[z.slot_index] ?? '';
+    push(z.date, {
+      key: `z-${z.id}`,
+      slot: z.slot_index,
+      href: `${base}?view=nedelja&week=${getMonday(z.date)}&fokus=${z.date}${linkSuffix}`,
+      text: showAll ? ['bez instruktora', z.term_type_naziv].filter(Boolean).join(' · ') : shortPersonName(z.client_ime, z.client_prezime),
+      title: [time, `${z.client_ime} ${z.client_prezime ?? ''}`.trim(), 'bez instruktora – čeka preuzimanje', z.classroom_naziv, z.term_type_naziv]
+        .filter(Boolean)
+        .join(' · '),
+      color: '#f59e0b',
+      zahtev: true,
+    });
+  }
+
   return (
     <div className="space-y-4">
       <div className="rounded-xl border border-stone-200 bg-white overflow-hidden">
@@ -2543,20 +2619,32 @@ function AdminMonthView({
         <div className="grid grid-cols-7">
           {days.map((date, i) => {
             if (!date) {
-              return <div key={`e-${i}`} className="min-h-[80px] border-b border-r border-stone-100 bg-stone-50/50" />;
+              return <div key={`e-${i}`} className="min-h-[96px] border-b border-r border-stone-100 bg-stone-50/50" />;
             }
-            const dayTerms = terms.filter((t) => t.date === date);
-            const slotCount = dayTerms.length;
+            const entries = (entriesByDate.get(date) ?? []).sort((a, b) => a.slot - b.slot);
+            const shown = showAll ? entries : entries.slice(0, MONTH_DAY_MAX);
+            const dayHref = `${base}?view=dan&day=${date}${linkSuffix}`;
             return (
-              <div key={date} className="min-h-[80px] border-b border-r border-stone-100 p-1">
-                <div className="text-xs text-stone-400 mb-1">{new Date(date + 'T12:00:00').getDate()}.</div>
-                {slotCount > 0 ? (
-                  <Link href={`${base}?view=dan&day=${date}${linkSuffix}`} className="text-xs hover:underline text-amber-700">
-                    {slotCount} termin(a)
+              <div key={date} className="min-h-[96px] min-w-0 border-b border-r border-stone-100 p-1 flex flex-col gap-0.5">
+                <Link href={dayHref} className="self-start rounded px-1 text-xs text-stone-500 hover:bg-amber-50 hover:text-amber-800">
+                  {new Date(date + 'T12:00:00').getDate()}.
+                </Link>
+                {shown.map((e) => (
+                  <Link
+                    key={e.key}
+                    href={e.href}
+                    title={e.title}
+                    className={`block truncate rounded px-1 py-0.5 text-[11px] leading-tight text-stone-800 hover:brightness-95 ${
+                      e.zahtev ? 'border border-dashed border-amber-400 bg-amber-50' : 'bg-stone-50'
+                    }`}
+                    style={e.zahtev ? undefined : { borderLeft: `3px solid ${e.color}` }}
+                  >
+                    <span className="font-semibold tabular-nums">{TIME_SLOTS[e.slot]}</span> {e.text}
                   </Link>
-                ) : (
-                  <Link href={`${base}?view=dan&day=${date}${linkSuffix}`} className="text-xs text-stone-400 hover:opacity-70">
-                    +
+                ))}
+                {entries.length > shown.length && (
+                  <Link href={dayHref} className="px-1 text-[11px] font-medium text-amber-700 hover:underline">
+                    +{entries.length - shown.length} još →
                   </Link>
                 )}
               </div>
