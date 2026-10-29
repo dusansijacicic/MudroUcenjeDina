@@ -1,20 +1,45 @@
 import Link from 'next/link';
+import {
+  M,
+  SemaBlokiranje,
+  SemaBlokirani,
+  SemaDnevnik,
+  SemaFilter,
+  SemaInstruktori,
+  SemaKalendar,
+  SemaKartica,
+  SemaKlijenti,
+  SemaMeni,
+  SemaModovi,
+  SemaPodesavanja,
+  SemaProfil,
+  SemaSifarnici,
+  SemaTermin,
+  SemaTestiranja,
+  SemaUplataForma,
+  SemaUplateLista,
+  SemaZakazivanje,
+} from './sheme';
 
 /**
- * Uputstvo klik po klik za svaku admin stranicu. Vidljivo samo adminima – provera je u
- * src/app/admin/layout.tsx. Dugme „Uputstvo“ u meniju vodi direktno na sekciju za stranicu na kojoj
- * se korisnik nalazi (id-jevi sekcija ispod moraju da odgovaraju mapi u AdminNav.tsx).
+ * Uputstvo klik po klik za svaku admin stranicu, sa šemama ekrana (./sheme.tsx) čiji numerisani
+ * markeri odgovaraju koracima. Vidljivo samo adminima – provera je u src/app/admin/layout.tsx.
+ * Dugme „Uputstvo“ u meniju vodi direktno na sekciju za trenutnu stranicu (id-jevi sekcija ispod
+ * moraju da odgovaraju mapi UPUTSTVO_ZA_STRANICU u AdminNav.tsx).
  */
 
 const SADRZAJ: { id: string; naslov: string }[] = [
   { id: 'pocetak', naslov: 'Tipičan dan – brzi početak' },
   { id: 'kalendar', naslov: 'Kalendar' },
-  { id: 'kalendar-modovi', naslov: 'Kalendar – dugmad Swap, Copy, Delete…' },
+  { id: 'kalendar-citanje', naslov: 'Kalendar – kako čitati termin' },
+  { id: 'kalendar-filter', naslov: 'Kalendar – filter po detetu' },
+  { id: 'kalendar-modovi', naslov: 'Kalendar – Swap, Copy, Delete…' },
+  { id: 'kalendar-blokiranje', naslov: 'Kalendar – blokiranje' },
   { id: 'zakazivanje-termina', naslov: 'Zakaži termin' },
   { id: 'termin', naslov: 'Stranica termina' },
   { id: 'klijenti', naslov: 'Klijenti (lista)' },
   { id: 'profil-klijenta', naslov: 'Profil deteta' },
-  { id: 'uplate', naslov: 'Evidencija uplata' },
+  { id: 'uplate', naslov: 'Uplate' },
   { id: 'blokirani', naslov: 'Blokirani termini' },
   { id: 'testiranja', naslov: 'Testiranja' },
   { id: 'instruktori', naslov: 'Instruktori' },
@@ -46,99 +71,113 @@ export default function AdminUputstvoPage() {
         <header>
           <h1 className="text-2xl font-semibold text-stone-800 mb-2">Uputstvo</h1>
           <p className="text-stone-600 text-sm leading-relaxed">
-            Kako se radi na svakoj stranici, korak po korak. Dugme <Ui>Uputstvo</Ui> u gornjem meniju uvek otvara deo
+            Kako se radi na svakoj stranici, klik po klik. Uz svaku stranicu je šema ekrana: brojevi u narandžastim kružićima{' '}
+            <M n={1} /> <M n={2} /> odgovaraju koracima ispod slike. Dugme <Ui>❓ Uputstvo</Ui> u gornjem meniju uvek otvara deo
             uputstva za stranicu na kojoj se trenutno nalazite.
           </p>
         </header>
 
         <Sekcija id="pocetak" naslov="Tipičan dan – brzi početak">
+          <SemaMeni />
           <Koraci>
-            <li>Otvorite <Ui>Kalendar</Ui> – vidite ovu i sledeću nedelju za sve instruktore.</li>
-            <li>Novo dete ili novi čas: gore levo kliknite <Ui>+ Zakaži termin</Ui> (ili <Ui>+</Ui> u praznoj ćeliji kalendara).</li>
-            <li>Kad roditelj plati: kliknite <Ui>+ Unesi uplatu</Ui> u meniju (ili <Ui>+ Dodaj uplatu</Ui> na profilu deteta).</li>
+            <li><Ui>Kalendar</Ui> – pregled ove i sledeće nedelje za sve instruktore. Ovde provodite najviše vremena.</li>
+            <li>Novo dete ili novi čas: <Ui>+ Zakaži termin</Ui> (ili <Ui>+</Ui> u praznoj ćeliji kalendara – datum i vreme se sami popune).</li>
+            <li>Roditelj je platio: <Ui>+ Unesi uplatu</Ui> (ili <Ui>+ Dodaj uplatu</Ui> na profilu deteta).</li>
             <li>
-              Proverite neplaćeno: na kalendaru crveni red sa <span className="rounded bg-red-600 px-1 text-xs font-bold text-white">! 11/10</span>{' '}
-              znači da čas nije plaćen; na stranici <Ui>Klijenti</Ui> crveno „nije plaćeno N“.
+              Ko duguje: na kalendaru crveni red sa <Crveno>! 11/10</Crveno>; na stranici <Ui>Klijenti</Ui> crveno „nije plaćeno N“ i
+              dugme <Ui>✓ Označi kao plaćeno</Ui>.
             </li>
-            <li>Kraj dana: u <Ui>Podešavanja</Ui> preuzmite bekap baze (preporuka: jednom dnevno).</li>
+            <li>Kraj dana: <Ui>Podešavanja</Ui> → <Ui>⬇ Preuzmi bekap baze (JSON)</Ui>.</li>
           </Koraci>
         </Sekcija>
 
         <Sekcija id="kalendar" naslov="Kalendar">
-          <Podnaslov>Pregled i kretanje</Podnaslov>
+          <SemaKalendar />
           <Koraci>
-            <li>Gore desno birate prikaz: <Ui>Dan</Ui>, <Ui>Nedelja</Ui> (ova + sledeća nedelja) ili <Ui>Mesec</Ui>.</li>
-            <li>Za prethodni/sledeći period kliknite <Ui>← Prethodna</Ui> / <Ui>Sledeća →</Ui> u traci sa dugmićima (traka ostaje na vrhu dok skrolujete).</li>
-            <li>Pređite mišem preko ćelije – ljubičasto se obeleže dan i vreme, da lakše pratite red i kolonu.</li>
-          </Koraci>
-
-          <Podnaslov>Kako čitati termin</Podnaslov>
-          <ul className="list-disc space-y-1.5 pl-5 text-sm text-stone-800 marker:text-amber-600">
-            <li>Gore levo u terminu je instruktor (boja slova = boja instruktora iz legende), desno vrsta časa i učionica (siva oznaka).</li>
             <li>
-              Svako dete je u svom redu. Boje redova (žuta, plava, zelena…) idu redom unutar istog vremena – da se na prvi pogled vidi
+              Izaberite prikaz: <Ui>Dan</Ui> (jedan dan), <Ui>Nedelja</Ui> (ova + sledeća nedelja, 14 dana) ili <Ui>Mesec</Ui> (ceo mesec,
+              po danu do 4 termina i „+N još“ – klik na broj dana otvara taj dan).
+            </li>
+            <li>
+              <Ui>← Prethodna</Ui> / <Ui>Sledeća →</Ui> pomera period. Ova traka ostaje zalepljena na vrhu dok skrolujete, zajedno sa
+              dugmićima Swap, Copy…
+            </li>
+            <li>Pređite mišem preko bilo koje ćelije – ljubičasto se oboje taj dan (kolona) i to vreme (red), da se lako prati.</li>
+          </Koraci>
+          <Podnaslov>Brze radnje na samom kalendaru</Podnaslov>
+          <Lista>
+            <li>Klik na termin otvara <a href="#termin" className="text-amber-700 underline">stranicu termina</a>.</li>
+            <li>Premeštanje: uhvatite termin mišem, prevucite ga u drugu ćeliju, pustite i potvrdite.</li>
+            <li><Ui>+</Ui> u praznoj ćeliji = novi termin za taj dan i vreme; <Ui>+ Testiranje</Ui> = termin testiranja.</li>
+            <li><Ui>+ Dodaj još termin u ovom slotu</Ui> ispod postojećih = još jedan paralelan termin u istom vremenu (drugi instruktor/učionica).</li>
+            <li>Žuta traka na vrhu „termini bez instruktora/učionice“: klik na datum vodi pravo do tog časa.</li>
+            <li><Ui>🖨 Print / PDF</Ui> = raspored spreman za štampu ili čuvanje kao PDF.</li>
+            <li>Kalendar se sam osvežava kad bilo ko nešto promeni (drugi admin, predavač, nova uplata) – ne treba F5.</li>
+          </Lista>
+        </Sekcija>
+
+        <Sekcija id="kalendar-citanje" naslov="Kalendar – kako čitati termin">
+          <SemaKartica />
+          <Lista>
+            <li><M n="A" /> Gore levo: instruktor. Boja slova je boja instruktora iz legende iznad kalendara.</li>
+            <li><M n="B" /> <M n="C" /> Gore desno: vrsta časa i učionica (siva oznaka).</li>
+            <li>
+              <M n="D" /> Svako dete je u svom redu. Boje redova (žuta, plava, zelena…) idu redom u istom vremenu – da se na prvi pogled vidi
               koliko je dece u isto vreme.
             </li>
             <li>
-              Desno od imena: <strong>x/y · još N</strong> = ovo je x-ti čas te vrste od y plaćenih, posle njega ostaje još N plaćenih.{' '}
-              <span className="font-bold text-amber-700">10/10 · poslednji</span> = poslednji plaćeni čas (vreme za naplatu).{' '}
-              <span className="rounded bg-red-600 px-1 text-xs font-bold text-white">! 11/10</span> u crvenom redu = čas nije plaćen.
+              <M n="E" /> Desno od imena <strong>x/y · još N</strong>: ovo je x-ti čas te vrste, od y plaćenih; posle njega ostaje još N
+              plaćenih. <span className="font-bold text-amber-700">10/10 · poslednji</span> = poslednji plaćeni čas – vreme za naplatu.
             </li>
-            <li>Narandžaste kartice sa isprekidanim okvirom = čas zakazan bez instruktora (čeka da ga neki predavač preuzme).</li>
-            <li>Sive kartice = otkazani časovi (istorija). Prugasto „⛔ Blokirano“ = u tom vremenu niko ne može da zakaže.</li>
+            <li><M n="F" /> Crveni red sa <Crveno>! 11/10</Crveno> i crveni okvir termina = taj čas nije plaćen.</li>
+            <li><M n="G" /> Narandžasta kartica sa isprekidanim okvirom = čas zakazan bez instruktora; čeka da ga neki predavač preuzme.</li>
+            <li><M n="H" /> Siva = otkazan čas (istorija). Prugasto „⛔ Blokirano“ = u tom vremenu niko ne može da zakaže.</li>
             <li>
-              U jednom vremenu (npr. 9:00) može biti više paralelnih termina – svaki svoj instruktor i svoja učionica (koliko najviše,
-              podešava se u <Ui>Podešavanja</Ui>). Termin može biti individualni (jedno dete) ili grupni (više dece).
+              U jednom vremenu (npr. 9:00) može biti više paralelnih termina – svaki ima svog instruktora i svoju učionicu. Koliko najviše,
+              podešava se u <Ui>Podešavanja</Ui>.
             </li>
-          </ul>
-
-          <Podnaslov>Filter – samo jedno dete, instruktor ili učionica</Podnaslov>
-          <Koraci>
-            <li>U polje <Ui>Dete:</Ui> počnite da kucate ime (može i bez kvačica: „djordje“ nalazi „Đorđe“).</li>
-            <li>Kliknite dete u listi (ili strelicama + Enter). Kalendar sada pokazuje samo termine tog deteta.</li>
-            <li>Ljubičasta traka ispod pokazuje koliko je časova u prikazanom periodu; <Ui>Ceo mesec za ovo dete →</Ui> otvara mesečni pregled.</li>
-            <li>Filter ostaje i kad idete na sledeću/prethodnu nedelju ili menjate Dan/Nedelja/Mesec. Uklanja se klikom na <Ui>✕</Ui> pored imena.</li>
-            <li>Isto radi i za <Ui>Instruktor:</Ui> i <Ui>Učionica:</Ui> (padajuće liste).</li>
-          </Koraci>
-
-          <Podnaslov>Brze radnje na samom kalendaru</Podnaslov>
-          <ul className="list-disc space-y-1.5 pl-5 text-sm text-stone-800 marker:text-amber-600">
-            <li>Klik na termin otvara stranicu termina (deca, uplate, izmena).</li>
-            <li>Premeštanje: uhvatite termin mišem i prevucite ga u drugu ćeliju, pa potvrdite.</li>
-            <li><Ui>+</Ui> u praznoj ćeliji = novi termin za taj dan i vreme; <Ui>+ Testiranje</Ui> = termin testiranja.</li>
-            <li><Ui>+ Dodaj još termin u ovom slotu</Ui> ispod postojećih = još jedan paralelan termin u istom vremenu.</li>
-            <li>Žuta traka na vrhu „termini bez instruktora/učionice“: klik na datum vodi pravo do tog časa.</li>
-            <li><Ui>🖨 Print / PDF</Ui> = raspored za štampu.</li>
-            <li>Kalendar se sam osvežava kad bilo ko nešto promeni (drugi admin, predavač) – ne treba F5.</li>
-          </ul>
+          </Lista>
         </Sekcija>
 
-        <Sekcija id="kalendar-modovi" naslov="Kalendar – dugmad Swap, Copy, Delete…">
+        <Sekcija id="kalendar-filter" naslov="Kalendar – filter po detetu">
+          <SemaFilter />
+          <Koraci>
+            <li>U polje <Ui>Dete:</Ui> počnite da kucate ime ili prezime. Kvačice nisu bitne: „djordje“ i „dorde“ nalaze „Đorđe“.</li>
+            <li>Kliknite dete u listi (ili strelicama ↑↓ pa Enter). Kalendar sada pokazuje samo termine tog deteta.</li>
+            <li>Ljubičasta traka pokazuje koliko časova ima u prikazanom periodu; <Ui>Ceo mesec za ovo dete →</Ui> otvara mesečni pregled.</li>
+            <li>Filter ostaje i kad idete na sledeću/prethodnu nedelju ili menjate Dan/Nedelja/Mesec. Uklanja se klikom na <Ui>✕</Ui>.</li>
+            <li>Isto rade i <Ui>Instruktor:</Ui> i <Ui>Učionica:</Ui> – mogu se kombinovati sa detetom.</li>
+          </Koraci>
+        </Sekcija>
+
+        <Sekcija id="kalendar-modovi" naslov="Kalendar – Swap, Copy, Delete, Zakaži više časova, Dodeli">
+          <SemaModovi />
           <Napomena>
-            Uvek isto: uključite dugme (postane obojeno), kliknite termine na kalendaru, pa potvrdite zelenim dugmetom{' '}
-            <Ui>✓ Potvrdi…</Ui> koje se pojavi gore desno, pored <Ui>Print / PDF</Ui>. Ponovni klik na dugme moda ga isključuje.
+            Svi modovi rade isto: <strong>uključite dugme</strong> (postane obojeno) → <strong>kliknite termine</strong> na kalendaru →{' '}
+            <strong>potvrdite</strong> zelenim dugmetom gore desno, pored <Ui>Print / PDF</Ui>. Ponovni klik na dugme moda ga isključuje.
+            Dok je mod uključen, kalendar se ne osvežava sam (da se ništa ne pomeri dok birate).
           </Napomena>
 
-          <Podnaslov>Swap – zamena dva termina</Podnaslov>
+          <Podnaslov>Swap – zamena dva termina (slika iznad)</Podnaslov>
           <Koraci>
             <li>Kliknite <Ui>Swap</Ui>.</li>
-            <li>Čekirajte šta se menja: Termin (vreme), Instruktor, Učionica i/ili Klijent.</li>
+            <li>Čekirajte šta se menja: <Ui>Termin</Ui> (vreme), <Ui>Instruktor</Ui>, <Ui>Učionica</Ui> i/ili <Ui>Klijent</Ui>.</li>
             <li>Kliknite prvi, pa drugi termin.</li>
             <li>Kliknite <Ui>✓ Potvrdi zamenu</Ui>.</li>
           </Koraci>
 
           <Podnaslov>Copy – kopiranje termina</Podnaslov>
           <Koraci>
-            <li>Kliknite <Ui>Copy</Ui>, pa termin koji kopirate.</li>
-            <li>Čekirajte šta se kopira (instruktor, učionica, dete) i po želji drugu vrstu časa.</li>
+            <li>Kliknite <Ui>Copy</Ui>, pa termin koji kopirate („Kopiraj iz:“ pokazuje koji je izabran).</li>
+            <li>Čekirajte šta se kopira (instruktor, učionica, dete); po želji izaberite drugu vrstu časa.</li>
             <li>Kliknite jednu ili više praznih ćelija gde ide kopija.</li>
-            <li>Kliknite <Ui>✓ Potvrdi kopiranje (N)</Ui>. Održano/plaćeno se ne prenosi.</li>
+            <li>Kliknite <Ui>✓ Potvrdi kopiranje (N)</Ui>. Održano i plaćeno se ne prenose.</li>
           </Koraci>
 
           <Podnaslov>Delete – trajno brisanje</Podnaslov>
           <Koraci>
             <li>Kliknite <Ui>Delete</Ui>.</li>
-            <li>Kliknite termine (može i sive otkazane i narandžaste zahteve) koje brišete – postaju crveno obeleženi.</li>
+            <li>Kliknite termine koje brišete (mogu i sivi otkazani i narandžasti zahtevi) – postanu crveno obeleženi.</li>
             <li>Kliknite <Ui>✓ Potvrdi brisanje (N)</Ui>.</li>
           </Koraci>
           <Upozorenje>
@@ -149,179 +188,205 @@ export default function AdminUputstvoPage() {
           <Podnaslov>Zakaži više časova – jedno dete (ili grupa) u više termina odjednom</Podnaslov>
           <Koraci>
             <li>Kliknite <Ui>Zakaži više časova</Ui>.</li>
-            <li>Izaberite dete. Za grupu čekirajte <Ui>Grupa (više dece odjednom u istim terminima)</Ui> i označite decu.</li>
             <li>
-              Po želji izaberite instruktora, učionicu i vrstu časa. Bez instruktora („bez instruktora (zahtev)“) časovi čekaju da ih predavač
-              preuzme; grupa mora imati instruktora.
+              Izaberite dete. Za grupu čekirajte <Ui>Grupa (više dece odjednom u istim terminima)</Ui>, označite decu i izaberite grupnu
+              kategoriju.
             </li>
-            <li>Kliknite sve ćelije (dan + vreme) gde dete dolazi.</li>
+            <li>
+              Po želji: instruktor, učionica, vrsta časa. Bez instruktora („bez instruktora (zahtev)“) časovi čekaju da ih predavač preuzme;
+              grupa mora imati instruktora.
+            </li>
+            <li>Kliknite sve ćelije (dan + vreme) kada dete dolazi.</li>
             <li>Kliknite <Ui>✓ Potvrdi zakazivanje (N)</Ui>.</li>
           </Koraci>
 
           <Podnaslov>Dodeli instruktora/učionicu/vrstu</Podnaslov>
           <Koraci>
             <li>Kliknite <Ui>Dodeli instruktora/učionicu/vrstu</Ui>.</li>
-            <li>Izaberite instruktora i/ili učionicu i/ili vrstu časa (bilo koja kombinacija).</li>
+            <li>Izaberite instruktora i/ili učionicu i/ili vrstu časa (bilo koja kombinacija; prazno = ne menja se).</li>
             <li>Kliknite termine i narandžaste časove bez instruktora kojima to dodeljujete.</li>
             <li>Kliknite <Ui>✓ Potvrdi dodelu (N)</Ui>.</li>
           </Koraci>
+        </Sekcija>
 
-          <Podnaslov>Blokiraj termin(e) – zatvaranje vremena za zakazivanje</Podnaslov>
+        <Sekcija id="kalendar-blokiranje" naslov="Kalendar – blokiranje vremena">
+          <SemaBlokiranje />
           <Koraci>
-            <li>Kliknite <Ui>Blokiraj termin(e)</Ui>.</li>
-            <li>Upišite razlog (npr. praznik, sastanak) – obavezno.</li>
-            <li>Kliknite ćelije (dan + vreme) koje zatvarate. Vide se i postojeći časovi u njima.</li>
+            <li>Kliknite <Ui>Blokiraj termin(e)</Ui>. U ovom modu vide se svi časovi, i oni bez instruktora i učionice.</li>
+            <li>Upišite razlog u <Ui>Napomena – zašto se blokira</Ui> (npr. praznik, sastanak) – obavezno.</li>
+            <li>Kliknite ćelije (dan + vreme) koje zatvarate. Postojeći časovi u njima i dalje se mogu otvoriti ili prevući na drugo vreme.</li>
             <li>
-              Kliknite <Ui>✓ Blokiraj (N)</Ui>. Ako je nešto već zakazano, pojaviće se upozorenje; ti časovi ostaju i vide se u{' '}
-              <Ui>Blokirani termini</Ui> kao „Treba premestiti“.
+              Kliknite <Ui>✓ Blokiraj (N)</Ui>. Ako u izabranom vremenu već ima časova, pojaviće se upozorenje; ti časovi ostaju i vide se na
+              stranici <Ui>Blokirani termini</Ui> kao „Treba premestiti“.
             </li>
             <li>Odblokiranje: <Ui>Odblokiraj</Ui> na samoj ćeliji ili na stranici Blokirani termini.</li>
           </Koraci>
+          <Napomena>Blokada važi za ceo to vreme tog dana: sve učionice, sve instruktore, i za admina, predavače i učenike.</Napomena>
         </Sekcija>
 
         <Sekcija id="zakazivanje-termina" naslov="Zakaži termin">
+          <SemaZakazivanje />
           <Koraci>
-            <li>Kliknite <Ui>+ Zakaži termin</Ui> u meniju (ili <Ui>+</Ui> u ćeliji kalendara – datum i vreme se sami popune).</li>
-            <li>Desno: kucajte ime deteta i kliknite ga u listi. Za grupnu kategoriju čekirajte više dece.</li>
+            <li>Kliknite <Ui>+ Zakaži termin</Ui> u meniju, ili <Ui>+</Ui> u ćeliji kalendara (datum i vreme se sami popune).</li>
+            <li>Desno, u <Ui>Pretraga klijenata</Ui>, kucajte ime i kliknite dete. Za grupnu kategoriju čekirajte više dece.</li>
             <li>Levo: proverite <Ui>Datum</Ui> i <Ui>Vreme (slot)</Ui>, izaberite <Ui>Kategorija termina</Ui> i vrstu časa.</li>
             <li>
-              Instruktor i učionica su po difoltu „Bez instruktora“ / „Bez učionice“. Ako ih ne izaberete, čas čeka da ga neki predavač
-              preuzme. Za grupu i testiranje instruktor je obavezan. „(zauzeto)“ znači da instruktor/učionica već ima čas u tom vremenu.
+              Instruktor i učionica su po difoltu <Ui>Bez instruktora</Ui> / <Ui>Bez učionice</Ui> – tada čas čeka da ga neki predavač
+              preuzme. Za grupu i testiranje instruktor je obavezan. „(zauzeto)“ = taj instruktor/učionica već ima čas u tom vremenu.
             </li>
-            <li>Po želji: <Ui>Napomena za termin</Ui> i „Zakaži isti termin i narednih N dana“ (0 = samo taj dan).</li>
-            <li>Kliknite <Ui>Zakaži termin</Ui>. Vraćate se na kalendar, koji se sam pomeri do tog termina i kratko ga zasvetli.</li>
+            <li>Po želji: napomena i „i narednih N dana“ (isti čas i narednih N uzastopnih dana; 0 = samo taj dan).</li>
+            <li>Kliknite <Ui>Zakaži termin</Ui>. Vraćate se na kalendar, koji se sam pomeri do novog termina i kratko ga zasvetli ljubičasto.</li>
           </Koraci>
-          <ul className="list-disc space-y-1.5 pl-5 text-sm text-stone-800 marker:text-amber-600">
+          <Lista>
             <li>Kategorija „Testiranje“: deca se upisuju odmah (ime obavezno) ili kasnije na stranici termina.</li>
-            <li>
-              Kategorija „Nastavak“: za duži čas koji se nastavlja na prethodni – bira se roditeljski termin, isti instruktor i učionica; ne
-              računa se u plaćene časove.
-            </li>
-            <li>U blokiranom vremenu zakazivanje nije moguće (crvena poruka „Termin je blokiran“).</li>
-          </ul>
+            <li>Kategorija „Nastavak“: za duži čas koji se nastavlja na prethodni – bira se roditeljski termin; ne računa se u plaćene časove.</li>
+            <li>U blokiranom vremenu zakazivanje nije moguće – pojavi se crvena poruka „Termin je blokiran“.</li>
+            <li>Detaljniji link „Uputstvo za zakazivanje →“ na samoj stranici vodi ovde.</li>
+          </Lista>
         </Sekcija>
 
         <Sekcija id="termin" naslov="Stranica termina">
-          <p className="text-sm text-stone-600">Otvara se klikom na termin u kalendaru.</p>
+          <SemaTermin />
           <Koraci>
-            <li>Gore su datum, vreme, instruktor i kategorija. U <Ui>Kategorija i napomena termina</Ui> menjate kategoriju i napomenu.</li>
+            <li><Ui>Kategorija i napomena termina</Ui>: promenite kategoriju ili napomenu i sačuvajte.</li>
             <li>
-              Kod svakog deteta piše koji je to čas od plaćenih („7. čas od 10 plaćenih · preostalo još 3“) i link{' '}
-              <Ui>Profil, uplate i održani časovi →</Ui>.
+              Kod svakog deteta: ime je link na profil, plus <Ui>Profil, uplate i održani časovi →</Ui>. Ispod piše koji je to čas od
+              plaćenih („7. čas od 10 plaćenih · preostalo još 3“, narandžasto „poslednji plaćeni“ ili crveno „Nije plaćeno“).
             </li>
-            <li><Ui>+ Dodaj radionicu</Ui> = još jedno dete u ovom terminu (do limita).</li>
+            <li><Ui>+ Dodaj radionicu</Ui> = još jedno dete u ovom terminu (do limita iz Podešavanja).</li>
             <li><Ui>Izmeni</Ui> kod deteta = održano, plaćeno, vrsta časa, komentar; tamo je i <Ui>Obriši</Ui> (dete izlazi iz termina).</li>
-            <li><Ui>Otkaži termin</Ui> = termin se briše sa kalendara, a ostaje sivi zapis u istoriji (za razliku od Delete na kalendaru).</li>
+            <li><Ui>Otkaži termin</Ui> = termin nestaje sa kalendara, a ostaje sivi zapis u istoriji deteta.</li>
           </Koraci>
         </Sekcija>
 
         <Sekcija id="klijenti" naslov="Klijenti (lista)">
+          <SemaKlijenti />
           <Koraci>
-            <li>Pretraga: kucajte ime, prezime, školu ili telefon – lista se filtrira odmah.</li>
+            <li>Pretraga: kucajte ime, prezime, školu ili telefon – lista se filtrira odmah, bez čekanja.</li>
             <li>
-              Kolona „Održano do danas / kupljeno / preostalo“ po vrsti časa. „Održano“ broji sve časove čije je vreme prošlo. Crveno „nije
-              plaćeno N“ = održano je više nego što je plaćeno.
+              Kolona „Održano do danas / kupljeno / preostalo“, za svaku vrstu časa. „Održano“ broji sve časove čije je vreme prošlo. Crveno
+              „nije plaćeno N“ = održano više nego plaćeno.
             </li>
             <li>
-              <Ui>✓ Označi kao plaćeno</Ui> pored crvenog: potvrdite i upisuje se uplata za te časove (primio Časlav Mančić, datum
-              poslednjeg održanog časa, iznos po ceni vrste i popustu deteta). Kasnije se može izmeniti u Evidenciji uplata.
+              <Ui>✓ Označi kao plaćeno</Ui> → potvrdite. Upisuje se uplata za te časove: primio Časlav Mančić, datum poslednjeg održanog
+              časa, iznos po ceni vrste i popustu deteta. Kasnije se može izmeniti ili obrisati u Evidenciji uplata.
             </li>
             <li>Klik na ime ili <Ui>Profil, uplate i održani časovi →</Ui> otvara profil deteta.</li>
-            <li>Novo dete: <Ui>+ Novi klijent</Ui> gore desno → popunite podatke (kontakt telefon je obavezan) → <Ui>Dodaj klijenta</Ui>.</li>
+            <li><Ui>+ Novi klijent</Ui> → popunite podatke (kontakt telefon je obavezan) → <Ui>Dodaj klijenta</Ui>.</li>
           </Koraci>
         </Sekcija>
 
         <Sekcija id="profil-klijenta" naslov="Profil deteta">
+          <SemaProfil />
           <Koraci>
-            <li><Ui>Pregled po vrstama časova</Ui>: plaćeno / održano / preostalo za svaku vrstu.</li>
+            <li><Ui>Pregled po vrstama časova</Ui>: plaćeno / održano / preostalo za svaku vrstu časa.</li>
             <li>
-              <Ui>Uplate</Ui>: sve uplate deteta sa zbirom. <Ui>+ Dodaj uplatu</Ui> otvara formu odmah tu (dete je već izabrano) →
-              popunite → <Ui>Unesi uplatu</Ui>. Kod svake uplate su <Ui>Izmeni</Ui> i <Ui>Obriši</Ui>.
+              <Ui>Uplate</Ui>: sve uplate deteta, najnovije prve, sa zbirom. <Ui>+ Dodaj uplatu</Ui> otvara formu odmah tu (dete je već
+              izabrano) → popunite → <Ui>Unesi uplatu</Ui>. Kod svake uplate su <Ui>Izmeni</Ui> i <Ui>Obriši</Ui>.
             </li>
             <li>
-              <Ui>Pregled termina</Ui>: levo zakazani (isprekidano = još bez instruktora), desno održani. Klik na termin otvara ga.
+              <Ui>Pregled termina</Ui>: levo zakazani (isprekidano = još bez instruktora), desno održani – sa vrstom časa, instruktorom i
+              cenom časa. Klik na termin ga otvara.
             </li>
-            <li><Ui>Otkazani termini</Ui>: istorija otkazanih; može se označiti naplaćeno ili obrisati.</li>
-            <li><Ui>Izmena podataka klijenta</Ui>: ime, kontakt, popust %, programi… → sačuvajte dugmetom na dnu forme.</li>
+            <li><Ui>Otkazani termini</Ui>: istorija otkazanih časova; može se označiti naplaćeno ili obrisati iz istorije.</li>
+            <li><Ui>Izmena podataka klijenta</Ui>: ime, kontakt, škola, popust %, programi… → sačuvajte dugmetom na dnu forme.</li>
           </Koraci>
         </Sekcija>
 
-        <Sekcija id="uplate" naslov="Evidencija uplata">
-          <Podnaslov>Unos uplate</Podnaslov>
+        <Sekcija id="uplate" naslov="Uplate">
+          <Podnaslov>Unos nove uplate</Podnaslov>
+          <SemaUplataForma />
           <Koraci>
-            <li>Kliknite <Ui>+ Unesi uplatu</Ui> (meni ili stranica Evidencija uplata).</li>
-            <li><Ui>Ko je primio (instruktor)</Ui> – obavezno izabrati.</li>
-            <li><Ui>Datum uplate</Ui> – danas po difoltu; ako je novac primljen ranije, izaberite taj dan.</li>
+            <li>Kliknite <Ui>+ Unesi uplatu</Ui> u meniju (ili na stranici Evidencija uplata).</li>
+            <li><Ui>Ko je primio (instruktor)</Ui> – obavezno izaberite ko je primio novac.</li>
+            <li><Ui>Datum uplate</Ui> – danas po difoltu; ako je novac primljen ranije, izaberite taj dan (budući dan nije moguć).</li>
             <li><Ui>Klijent</Ui> – kucajte ime i kliknite dete.</li>
-            <li><Ui>Vrsta časa</Ui> i <Ui>Broj časova</Ui> – iznos se sam izračuna (cena × broj − popust deteta).</li>
-            <li>Po potrebi <Ui>Popust za ovu uplatu (%)</Ui>, ručno ispravite <Ui>Iznos</Ui>, dodajte <Ui>Napomena</Ui>.</li>
-            <li>Kliknite <Ui>Unesi uplatu</Ui>.</li>
+            <li><Ui>Vrsta časa</Ui> i <Ui>Broj časova</Ui> – iznos se sam izračuna: cena po času × broj časova − popust deteta.</li>
+            <li>Po potrebi: drugi popust za ovu uplatu, ručno ispravljen iznos, napomena.</li>
+            <li>Kliknite <Ui>Unesi uplatu</Ui>. Dete odmah dobija plaćene časove (vidi se i u „x/y“ na kalendaru).</li>
           </Koraci>
           <Podnaslov>Izmena i brisanje</Podnaslov>
+          <SemaUplateLista />
           <Koraci>
-            <li>U listi uplata kliknite <Ui>Izmeni</Ui> → promenite → <Ui>Sačuvaj izmene</Ui>.</li>
-            <li><Ui>Obriši</Ui> → potvrdite. Detetu se smanjuje broj plaćenih časova (vidi se i na kalendaru).</li>
+            <li><Ui>Izmeni</Ui> → promenite šta treba (i datum) → <Ui>Sačuvaj izmene</Ui>.</li>
+            <li><Ui>Obriši</Ui> → potvrdite. Detetu se smanjuje broj plaćenih časova.</li>
           </Koraci>
-          <Napomena>Svaka izmena i brisanje upisuje se u Dnevnik aktivnosti sa starim vrednostima – obrisana uplata može ručno da se vrati.</Napomena>
+          <Napomena>
+            Svaka izmena i brisanje upisuje se u Dnevnik aktivnosti sa starim vrednostima – obrisana uplata može ručno da se vrati. Isto
+            se može i sa profila deteta (sekcija Uplate).
+          </Napomena>
         </Sekcija>
 
         <Sekcija id="blokirani" naslov="Blokirani termini">
+          <SemaBlokirani />
           <Koraci>
-            <li>Lista svih blokada (najnovije prve) sa razlogom.</li>
-            <li>„Treba premestiti“ = u tom vremenu je ostao zakazan čas – kliknite ga i premestite (ili prevucite na kalendaru).</li>
-            <li><Ui>Odblokiraj</Ui> vraća vreme u zakazivanje.</li>
-            <li>Nova blokada se pravi na kalendaru dugmetom <Ui>Blokiraj termin(e)</Ui>.</li>
+            <li>Lista svih blokada (najnovije prve): datum, vreme i razlog.</li>
+            <li>„Treba premestiti“ = u tom vremenu je ostao zakazan čas – kliknite ga i premestite (ili ga prevucite na kalendaru).</li>
+            <li><Ui>Odblokiraj</Ui> vraća to vreme u zakazivanje.</li>
           </Koraci>
+          <Napomena>Nova blokada se pravi na kalendaru – vidi <a href="#kalendar-blokiranje" className="underline">Kalendar – blokiranje</a>.</Napomena>
         </Sekcija>
 
         <Sekcija id="testiranja" naslov="Testiranja">
+          <SemaTestiranja />
           <Koraci>
-            <li>Termin testiranja: na kalendaru <Ui>+ Testiranje</Ui> u ćeliji (ili Zakaži termin → kategorija Testiranje, sa instruktorom).</li>
-            <li>Na stranici termina upišite decu (ime, roditelj, telefon, razred).</li>
-            <li>Posle testiranja promenite status: Pojavio se / Nije se pojavio, uz komentar.</li>
-            <li><Ui>Prebaci u klijenta</Ui> pravi pravog klijenta od potencijalnog.</li>
-            <li>Stranica <Ui>Testiranja</Ui> u meniju: istorija svih testiranja sa pretragom po detetu ili roditelju.</li>
+            <li>
+              Napravite termin testiranja: na kalendaru <Ui>+ Testiranje</Ui> u ćeliji, ili <Ui>+ Zakaži termin</Ui> → kategorija
+              Testiranje (sa instruktorom). Otvorite ga klikom.
+            </li>
+            <li><Ui>+ Dodaj</Ui> → upišite dete (ime obavezno; roditelj, telefon, razred opciono) → <Ui>Sačuvaj</Ui>.</li>
+            <li>Posle testiranja promenite status: <Ui>Pojavio se</Ui> / <Ui>Nije se pojavio</Ui> i upišite komentar.</li>
+            <li><Ui>Prebaci u klijenta</Ui> – od potencijalnog deteta pravi pravog klijenta.</li>
+            <li>Stranica <Ui>Testiranja</Ui> u meniju: istorija svih testiranja, sa pretragom po detetu ili roditelju.</li>
           </Koraci>
         </Sekcija>
 
         <Sekcija id="instruktori" naslov="Instruktori">
+          <SemaInstruktori />
           <Koraci>
-            <li>Novi: <Ui>Instruktori</Ui> → popunite ime, prezime, email i lozinku za prijavu → <Ui>Kreiraj instruktora</Ui>.</li>
-            <li>Izmena: ime, telefon i boja u kalendaru → <Ui>Sačuvaj</Ui>.</li>
+            <li><Ui>+ Novi instruktor</Ui> → email i lozinka za prijavu, ime, prezime → <Ui>Kreiraj instruktora</Ui>.</li>
+            <li><Ui>Uredi</Ui> → ime, telefon i boja u kalendaru → <Ui>Sačuvaj</Ui>.</li>
             <li>
               <Ui>Suspenduj</Ui>: instruktor se više ne nudi u listama za izbor, a već zakazani termini ostaju. <Ui>Aktiviraj</Ui> ga vraća.
             </li>
-            <li><Ui>Pregled →</Ui> kod instruktora: vidite aplikaciju onako kako je vidi on (i dalje ste admin).</li>
+            <li><Ui>Pregled →</Ui>: vidite aplikaciju onako kako je vidi taj instruktor (i dalje ste admin).</li>
           </Koraci>
         </Sekcija>
 
         <Sekcija id="sifarnici" naslov="Vrste časova, kategorije, programi, učionice">
-          <ul className="list-disc space-y-1.5 pl-5 text-sm text-stone-800 marker:text-amber-600">
+          <SemaSifarnici />
+          <Lista>
+            <li><M n="A" /> Gore popunite polja i kliknite <Ui>Dodaj</Ui> (za učionice <Ui>Dodaj učionicu</Ui>).</li>
+            <li><M n="B" /> U listi: <Ui>Izmeni</Ui> (promena) ili brisanje.</li>
             <li>
-              <Ui>Vrste časova</Ui>: naziv, program, cena po času (RSD) i trajanje u minutima. Preko 45 min čas zauzima i sledeći slot.
-              Cena se koristi za automatski iznos u uplatama.
+              <Ui>Vrste časova</Ui>: naziv, program, cena po času (RSD) i trajanje u minutima. Preko 45 min čas zauzima i sledeći slot. Cena se
+              koristi za automatski iznos uplate i za cenu časa u profilu deteta.
             </li>
             <li><Ui>Kategorije termina</Ui>: npr. individualni/grupni – čekirajte „Samo jedno dete u terminu“ za individualne.</li>
             <li><Ui>Programi</Ui>: grupe vrsta časova; „Redosled“ određuje mesto u listi (manji broj = ranije).</li>
-            <li><Ui>Učionice</Ui>: naziv učionice → <Ui>Dodaj učionicu</Ui>; <Ui>Izmeni</Ui> za promenu.</li>
-            <li>Svuda isto: popunite polja gore → dodaj; u listi <Ui>Izmeni</Ui> ili obriši.</li>
-          </ul>
+            <li><Ui>Učionice</Ui>: naziv učionice; prikazuje se na terminu u kalendaru.</li>
+          </Lista>
         </Sekcija>
 
         <Sekcija id="dnevnik" naslov="Dnevnik aktivnosti">
+          <SemaDnevnik />
           <Koraci>
-            <li>Lista ko je šta uradio i kada (zakazivanje, otkazivanje, uplate, blokade…).</li>
-            <li>Filter Admin / Predavač / Sistem i <Ui>Pretraga</Ui> po opisu, imenu ili emailu.</li>
+            <li>Lista ko je šta uradio i kada: zakazivanje, otkazivanje, uplate, izmene uplata, blokade…</li>
+            <li>Suženje: <Ui>Pretraga</Ui> (opis, ime, email), <Ui>Ko</Ui> (Admin / Predavač / Sistem), datumi Od–Do → <Ui>Filtriraj</Ui>.</li>
           </Koraci>
         </Sekcija>
 
         <Sekcija id="podesavanja" naslov="Podešavanja i bekap">
+          <SemaPodesavanja />
           <Koraci>
-            <li>Maks. časova po terminu (koliko dece u jednom terminu) i maks. termina po slotu (koliko paralelnih termina u istom vremenu).</li>
+            <li>
+              Koliko dece najviše u jednom terminu, i koliko paralelnih termina najviše u istom vremenu (različiti instruktori u različitim
+              učionicama).
+            </li>
             <li>Kliknite <Ui>Sačuvaj podešavanja</Ui>.</li>
             <li>
-              <Ui>⬇ Preuzmi bekap baze (JSON)</Ui> – preuzima kompletnu kopiju podataka. Preporuka: jednom dnevno, fajl čuvajte na sigurnom
-              mestu (sadrži lične podatke dece i roditelja).
+              <Ui>⬇ Preuzmi bekap baze (JSON)</Ui> – preuzima kompletnu kopiju podataka. Preporuka: jednom dnevno; fajl čuvajte na sigurnom
+              mestu jer sadrži lične podatke dece i roditelja.
             </li>
           </Koraci>
         </Sekcija>
@@ -394,7 +459,7 @@ function Podnaslov({ children }: { children: React.ReactNode }) {
   return <h3 className="pt-1 text-sm font-semibold text-stone-900">{children}</h3>;
 }
 
-/** Numerisani koraci – redosled je bitan (klik po klik). */
+/** Numerisani koraci – redosled je bitan (klik po klik), brojevi odgovaraju markerima na šemi. */
 function Koraci({ children }: { children: React.ReactNode }) {
   return (
     <ol className="list-decimal space-y-2 pl-6 text-sm leading-relaxed text-stone-800 marker:font-bold marker:text-amber-700">
@@ -403,9 +468,17 @@ function Koraci({ children }: { children: React.ReactNode }) {
   );
 }
 
+function Lista({ children }: { children: React.ReactNode }) {
+  return <ul className="list-disc space-y-1.5 pl-5 text-sm leading-relaxed text-stone-800 marker:text-amber-600">{children}</ul>;
+}
+
 /** Naziv dugmeta/polja tačno kako piše u aplikaciji. */
 function Ui({ children }: { children: React.ReactNode }) {
   return <span className="box-decoration-clone rounded border border-stone-300 bg-stone-50 px-1 py-px text-[0.92em] font-medium text-stone-900">{children}</span>;
+}
+
+function Crveno({ children }: { children: React.ReactNode }) {
+  return <span className="rounded bg-red-600 px-1 text-xs font-bold text-white">{children}</span>;
 }
 
 function Napomena({ children }: { children: React.ReactNode }) {
