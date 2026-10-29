@@ -279,7 +279,20 @@ function AdminPredavanjeRow({
   return (
     <div className="p-4 flex items-start justify-between gap-4">
       <div>
-        <p className="font-medium text-stone-800">{clientName}</p>
+        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+          {predavanje.client ? (
+            <Link href={`/admin/klijenti/${predavanje.client.id}`} className="font-medium text-stone-800 hover:text-amber-700 hover:underline">
+              {clientName}
+            </Link>
+          ) : (
+            <p className="font-medium text-stone-800">{clientName}</p>
+          )}
+          {predavanje.client && (
+            <Link href={`/admin/klijenti/${predavanje.client.id}`} className="text-sm font-medium text-amber-700 hover:text-amber-800">
+              Profil, uplate i održani časovi →
+            </Link>
+          )}
+        </div>
         <div className="flex flex-wrap gap-2 mt-1">
           {redni && <PlacenoStanje redni={redni} />}
           {predavanje.odrzano && (

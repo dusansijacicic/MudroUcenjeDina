@@ -8,6 +8,7 @@ import { getStanjePoVrstamaZaKlijenta, markPastPredavanjaAsOdrzano, getTermTypes
 import { TIME_SLOTS, isTermInPast } from '@/lib/constants';
 import type { Client } from '@/types/database';
 import OtkazaniTerminiSection from './OtkazaniTerminiSection';
+import UplateKlijentaSection, { type UplataKlijentaRow } from './UplateKlijentaSection';
 
 function getMonday(iso: string): string {
   const d = new Date(iso + 'T12:00:00');
@@ -31,7 +32,7 @@ export default async function AdminKlijentEditPage({
   await markPastPredavanjaAsOdrzano(clientId);
 
   const adminSupabase = createAdminClient();
-  const [{ data: client, error }, stanjePoVrstama, { data: predavanjaRaw }, { data: zahteviRaw }, termTypes, otkazani, programStatuses, programs, programiSelections] = await Promise.all([
+  const [{ data: client, error }, stanjePoVrstama, { data: predavanjaRaw }, { data: zahteviRaw }, termTypes, otkazani, programStatuses, programs, programiSelections, { data: uplateRaw }, { data: aktivniInstruktori }] = await Promise.all([
     adminSupabase.from('clients').select('*, popust_percent, napomena, accessible_term_type_ids').eq('id', clientId).single(),
     getStanjePoVrstamaZaKlijenta(clientId),
     adminSupabase
@@ -50,11 +51,32 @@ export default async function AdminKlijentEditPage({
     getClientTermTypeStatuses(clientId),
     getPrograms(),
     getClientProgrami(clientId),
+    adminSupabase
+      .from('uplate')
+      .select('id, created_at, iznos, broj_casova, popust_percent, napomena, instructor:instructors(ime, prezime), term_type:term_types(naziv)')
+      .eq('client_id', clientId)
+      .order('created_at', { ascending: false }),
+    adminSupabase.from('instructors').select('id, ime, prezime').eq('aktivan', true).order('prezime').order('ime'),
   ]);
 
   if (error || !client) notFound();
 
   const stanjePoVrstamaPrikaz = stanjePoVrstama;
+
+  const one = <T,>(v: T | T[] | null | undefined): T | null => (Array.isArray(v) ? (v[0] ?? null) : (v ?? null));
+  const uplate: UplataKlijentaRow[] = (uplateRaw ?? []).map((u) => {
+    const instr = one(u.instructor as { ime?: string; prezime?: string } | { ime?: string; prezime?: string }[] | null);
+    return {
+      id: u.id,
+      createdAt: u.created_at ?? null,
+      iznos: u.iznos != null ? Number(u.iznos) : null,
+      brojCasova: u.broj_casova ?? 0,
+      popustPercent: u.popust_percent != null ? Number(u.popust_percent) : null,
+      napomena: u.napomena ?? null,
+      primio: instr ? `${instr.ime ?? ''} ${instr.prezime ?? ''}`.trim() : null,
+      vrsta: one(u.term_type as { naziv?: string } | { naziv?: string }[] | null)?.naziv ?? null,
+    };
+  });
 
   type TermInfo = { date: string; slot_index: number; instructor?: { ime?: string; prezime?: string } | { ime?: string; prezime?: string }[] | null };
   type PredavanjeRow = { id: string; odrzano: boolean; placeno: boolean; term_id: string; term: TermInfo | TermInfo[] | null };
@@ -84,7 +106,6 @@ export default async function AdminKlijentEditPage({
     term_type: Naziv;
     classroom: Naziv;
   };
-  const one = <T,>(v: T | T[] | null | undefined): T | null => (Array.isArray(v) ? (v[0] ?? null) : (v ?? null));
   const zahtevi = ((zahteviRaw ?? []) as ZahtevRow[]).map((z) => ({
     id: z.id,
     term: { date: z.requested_date, slot_index: z.requested_slot_index, instructor: z.instructor },
@@ -206,6 +227,22 @@ export default async function AdminKlijentEditPage({
               </tbody>
             </table>
           )}
+        </div>
+      </section>
+
+      {/* Uplate – istorija + unos nove uplate za ovo dete */}
+      <section className="rounded-2xl border border-stone-200 bg-white shadow-sm overflow-hidden animate-in-delay-2">
+        <div className="border-b border-stone-100 bg-stone-50/80 px-5 py-3">
+          <h2 className="text-base font-semibold text-stone-800">Uplate</h2>
+          <p className="text-xs text-stone-500 mt-0.5">Sve uplate za ovo dete, najnovije prve. Nova uplata odmah menja stanje gore i „x/y“ na kalendaru.</p>
+        </div>
+        <div className="p-5">
+          <UplateKlijentaSection
+            client={{ id: client.id, ime: client.ime ?? '', prezime: client.prezime ?? '', popust_percent: Number(client.popust_percent ?? 0) }}
+            uplate={uplate}
+            instructors={(aktivniInstruktori ?? []).map((i) => ({ id: i.id, ime: i.ime ?? '', prezime: i.prezime ?? '' }))}
+            termTypes={termTypes.map((t) => ({ id: t.id, naziv: t.naziv, cena_po_casu: t.cena_po_casu ?? null }))}
+          />
         </div>
       </section>
 

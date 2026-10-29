@@ -51,6 +51,8 @@ export default function UplataForm({
   fixedInstructorId,
   backHref = '/admin/uplate',
   initial,
+  fixedClientId,
+  onSaved,
 }: {
   instructors: Option[];
   clients: ClientOption[];
@@ -61,12 +63,16 @@ export default function UplataForm({
   backHref?: string;
   /** Izmena postojeće uplate: polja kreću od sačuvanih vrednosti, a iznos se ne preračunava dok se nešto ne promeni. */
   initial?: UplataInitial;
+  /** Unos sa profila deteta: dete je već izabrano i ne prikazuje se pretraga. */
+  fixedClientId?: string;
+  /** Posle uspešnog čuvanja umesto odlaska na backHref (npr. zatvori formu na profilu i osveži). */
+  onSaved?: () => void;
 }) {
   const router = useRouter();
   // Bez podrazumevanog izbora: uplata ne sme tiho da ode na prvog instruktora/dete sa liste.
   const [instructorId, setInstructorId] = useState(fixedInstructorId ?? initial?.instructorId ?? '');
   const effectiveInstructorId = fixedInstructorId ?? instructorId;
-  const [clientId, setClientId] = useState(initial?.clientId ?? '');
+  const [clientId, setClientId] = useState(fixedClientId ?? initial?.clientId ?? '');
   const selectedClient = clients.find((c) => c.id === clientId);
   const [iznos, setIznos] = useState(initial?.iznos != null ? String(initial.iznos) : '');
   const [termTypeId, setTermTypeId] = useState(initial?.termTypeId ?? '');
@@ -148,6 +154,10 @@ export default function UplataForm({
       return;
     }
     toast.success(initial ? 'Uplata izmenjena.' : 'Uplata uneta.');
+    if (onSaved) {
+      onSaved();
+      return;
+    }
     router.push(backHref);
     router.refresh();
   };
@@ -192,6 +202,11 @@ export default function UplataForm({
       </div>
       <div>
         <label className="block text-sm font-medium text-stone-700 mb-1">Klijent *</label>
+        {fixedClientId ? (
+          <p className="font-medium text-stone-800">
+            {selectedClient ? `${selectedClient.ime} ${selectedClient.prezime}` : '—'}
+          </p>
+        ) : (
         <SingleKlijentPicker
           clients={clients.map((c) => ({ id: c.id, ime: c.ime ?? '', prezime: c.prezime ?? '' }))}
           value={clientId}
@@ -202,6 +217,7 @@ export default function UplataForm({
           disabled={loading}
           inputId="uplata-klijent-search"
         />
+        )}
         {selectedClient != null && (
           <p className="mt-1 text-sm text-amber-700">
             Popust na nivou klijenta: <strong>{clientPopust}%</strong> (možete ga pregaziti poljem „Popust za ovu uplatu” ispod.)
