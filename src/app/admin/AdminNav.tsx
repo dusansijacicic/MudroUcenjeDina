@@ -27,8 +27,33 @@ const entityLinks = [
 const otherLinks = [
   { href: '/admin/dnevnik', label: 'Dnevnik aktivnosti' },
   { href: '/admin/podesavanja', label: 'Podešavanja' },
-  { href: '/admin/uputstvo', label: 'Uputstvo (uloge)' },
 ];
+
+/** Deo uputstva (id sekcije u /admin/uputstvo) za stranicu na kojoj je korisnik – prvi prefiks koji odgovara. */
+const UPUTSTVO_ZA_STRANICU: [string, string][] = [
+  ['/admin/kalendar', 'kalendar'],
+  ['/admin/termin/novi', 'zakazivanje-termina'],
+  ['/admin/termin/', 'termin'],
+  ['/admin/klijenti/novi', 'klijenti'],
+  ['/admin/klijenti/', 'profil-klijenta'],
+  ['/admin/klijenti', 'klijenti'],
+  ['/admin/uplate', 'uplate'],
+  ['/admin/blokirani', 'blokirani'],
+  ['/admin/testiranja', 'testiranja'],
+  ['/admin/predavaci', 'instruktori'],
+  ['/admin/view', 'instruktori'],
+  ['/admin/vrste-termina', 'sifarnici'],
+  ['/admin/kategorije-termina', 'sifarnici'],
+  ['/admin/programi', 'sifarnici'],
+  ['/admin/ucionice', 'sifarnici'],
+  ['/admin/dnevnik', 'dnevnik'],
+  ['/admin/podesavanja', 'podesavanja'],
+];
+
+function uputstvoHref(pathname: string): string {
+  const sekcija = UPUTSTVO_ZA_STRANICU.find(([prefiks]) => pathname.startsWith(prefiks))?.[1];
+  return sekcija ? `/admin/uputstvo#${sekcija}` : '/admin/uputstvo';
+}
 
 const navLinks = [...primaryLinks, ...entityLinks, ...otherLinks];
 
@@ -36,6 +61,10 @@ export default function AdminNav() {
   const router = useRouter();
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const naUputstvu = pathname.startsWith('/admin/uputstvo');
+  const uputstvoClass = `px-3 py-2 rounded-lg text-sm font-semibold ui-transition ${
+    naUputstvu ? 'bg-amber-500 text-white' : 'bg-sky-100 text-sky-900 hover:bg-sky-200'
+  }`;
 
   const signOut = async () => {
     const supabase = createClient();
@@ -53,7 +82,10 @@ export default function AdminNav() {
   return (
     <header className="no-print bg-stone-800 text-white border-b border-stone-700 shadow-lg animate-fade-in">
       <div className="w-[90%] mx-auto px-4">
-        <div className="flex items-center justify-end py-2 md:hidden">
+        <div className="flex items-center justify-end gap-2 py-2 md:hidden">
+          <Link href={uputstvoHref(pathname)} onClick={() => setMobileOpen(false)} className={`${uputstvoClass} min-h-[44px] flex items-center`}>
+            ❓ Uputstvo
+          </Link>
           <button
             type="button"
             onClick={() => setMobileOpen((o) => !o)}
@@ -95,6 +127,9 @@ export default function AdminNav() {
               {label}
             </Link>
           ))}
+          <Link href={uputstvoHref(pathname)} className={uputstvoClass} title="Uputstvo za ovu stranicu">
+            ❓ Uputstvo
+          </Link>
           <Link href="/promena-sifre" className="px-3 py-2 rounded-lg text-sm font-medium text-stone-400 hover:text-white hover:bg-stone-700/80 ui-transition">
             Lozinka
           </Link>
