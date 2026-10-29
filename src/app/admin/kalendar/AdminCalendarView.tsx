@@ -235,6 +235,68 @@ function getWeekDates(start: string): string[] {
   return dates;
 }
 
+function shiftDays(iso: string, days: number): string {
+  const d = new Date(iso + 'T12:00:00');
+  d.setDate(d.getDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+/** Prikazani period + Prethodna/Sledeća – stoji u zamrznutoj traci alata, da ostane vidljivo dok se skroluje. */
+function PeriodNav({
+  view,
+  startOfWeek,
+  singleDay,
+  monthStart,
+  base,
+  linkSuffix,
+}: {
+  view: string;
+  startOfWeek: string;
+  singleDay?: string;
+  monthStart?: string;
+  base: string;
+  linkSuffix: string;
+}) {
+  let label: string;
+  let prevHref: string;
+  let nextHref: string;
+  let prevText = '← Prethodni';
+  let nextText = 'Sledeći →';
+  if (view === 'dan' && singleDay) {
+    label = new Date(singleDay + 'T12:00:00').toLocaleDateString('sr-Latn-RS', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+    prevHref = `${base}?view=dan&day=${shiftDays(singleDay, -1)}${linkSuffix}`;
+    nextHref = `${base}?view=dan&day=${shiftDays(singleDay, 1)}${linkSuffix}`;
+  } else if (view === 'mesec' && monthStart) {
+    const first = new Date(monthStart + 'T12:00:00');
+    const shiftMonth = (n: number) => {
+      const d = new Date(first);
+      d.setMonth(d.getMonth() + n);
+      return d.toISOString().slice(0, 7);
+    };
+    label = first.toLocaleDateString('sr-Latn-RS', { month: 'long', year: 'numeric' });
+    prevHref = `${base}?view=mesec&month=${shiftMonth(-1)}${linkSuffix}`;
+    nextHref = `${base}?view=mesec&month=${shiftMonth(1)}${linkSuffix}`;
+  } else {
+    // Nedeljni prikaz pokazuje dve nedelje (ova + sledeća).
+    const d1 = new Date(startOfWeek + 'T12:00:00');
+    const end = new Date(shiftDays(startOfWeek, 13) + 'T12:00:00');
+    label = `${d1.getDate()}.${d1.getMonth() + 1}. – ${end.getDate()}.${end.getMonth() + 1}.${end.getFullYear()}`;
+    prevHref = `${base}?view=nedelja&week=${shiftDays(startOfWeek, -7)}${linkSuffix}`;
+    nextHref = `${base}?view=nedelja&week=${shiftDays(startOfWeek, 7)}${linkSuffix}`;
+    prevText = '← Prethodna';
+    nextText = 'Sledeća →';
+  }
+  const btn = 'px-3 py-1.5 min-h-[44px] md:min-h-0 inline-flex items-center rounded-lg bg-stone-200 text-stone-700 text-sm hover:bg-stone-300';
+  return (
+    // Dan na telefonu ima svoju traku dana ispod, pa se ovde krije da se ne duplira.
+    <div className={`${view === 'dan' ? 'hidden md:flex' : 'flex'} items-center gap-2`}>
+      <span className="font-medium text-stone-700 text-sm capitalize tabular-nums mr-1">{label}</span>
+      <Link href={prevHref} className={btn}>{prevText}</Link>
+      <Link href={nextHref} className={btn}>{nextText}</Link>
+    </div>
+  );
+}
+
 function formatWeekLabel(start: string): string {
   const d = new Date(start + 'T12:00:00');
   const end = new Date(d);
@@ -1032,8 +1094,6 @@ export default function AdminCalendarView({
         terms={terms}
         otkazaniTermini={otkazaniTermini}
         pendingZahtevi={pendingZahtevi}
-        linkSuffix={linkSuffix}
-        base={base}
         draggedTermId={draggedTermId}
         setDraggedTermId={setDraggedTermId}
         onDropCell={handleDrop}
@@ -1132,8 +1192,8 @@ export default function AdminCalendarView({
           </span>
         </div>
       )}
-      {/* Zamrznuta (sticky) je ISKLJUČIVO ova traka sa dugmićima – ništa što se prikaže nakon
-          izbora moda (polja, potvrde, čipovi) nije ovde, da ne bi zauzelo ekran dok se skroluje. */}
+      {/* Zamrznuta (sticky) je ISKLJUČIVO ova traka: dugmići modova, period sa Prethodna/Sledeća,
+          potvrda aktivnog moda i Print. Polja i čipovi modova nisu ovde, da ne bi zauzeli ekran dok se skroluje. */}
       <StickyBar enabled topOffset={0} className="mb-4 rounded-xl border border-stone-200 bg-white p-3">
         <div className="flex items-center gap-3 flex-wrap">
           <button
@@ -1197,7 +1257,15 @@ export default function AdminCalendarView({
             {blockMode ? 'Blokiraj termin(e): uključeno' : 'Blokiraj termin(e)'}
           </button>
           {blockLoading && <span className="text-sm text-stone-500">Blokiram…</span>}
-          <div className="ml-auto flex items-center gap-2">
+          <div className="ml-auto flex flex-wrap items-center gap-2">
+            <PeriodNav
+              view={view}
+              startOfWeek={startOfWeek}
+              singleDay={singleDay}
+              monthStart={monthStart}
+              base={base}
+              linkSuffix={linkSuffix}
+            />
             {activeConfirm && (
               <button
                 type="button"
@@ -2132,8 +2200,6 @@ function AdminWeekView({
   terms,
   otkazaniTermini,
   pendingZahtevi,
-  linkSuffix,
-  base,
   draggedTermId,
   setDraggedTermId,
   onDropCell,
@@ -2143,8 +2209,6 @@ function AdminWeekView({
   terms: AdminTerm[];
   otkazaniTermini: OtkazaniTerminCalendar[];
   pendingZahtevi: PendingZahtevCalendar[];
-  linkSuffix: string;
-  base: string;
   draggedTermId: string | null;
   setDraggedTermId: (id: string | null) => void;
   onDropCell: (date: string, slot: number) => void | Promise<void>;
@@ -2161,23 +2225,6 @@ function AdminWeekView({
   })();
   const week2Dates = getWeekDates(week2Start);
   const allDates = [...week1Dates, ...week2Dates];
-  const prevWeek = (() => {
-    const d = new Date(startOfWeek + 'T12:00:00');
-    d.setDate(d.getDate() - 7);
-    return d.toISOString().slice(0, 10);
-  })();
-  const nextWeek = (() => {
-    const d = new Date(startOfWeek + 'T12:00:00');
-    d.setDate(d.getDate() + 7);
-    return d.toISOString().slice(0, 10);
-  })();
-  const rangeLabel = (() => {
-    const d1 = new Date(startOfWeek + 'T12:00:00');
-    const d2 = new Date(week2Start + 'T12:00:00');
-    const end2 = new Date(d2);
-    end2.setDate(d2.getDate() + 6);
-    return `${d1.getDate()}.${d1.getMonth() + 1}. – ${end2.getDate()}.${end2.getMonth() + 1}.${end2.getFullYear()}`;
-  })();
 
   // Deljeno telo tabele (redovi po vremenu) – zove se i za 14 dana (desktop, obe nedelje) i za 7
   // (tablet, samo ova nedelja) sa istim AdminCellContent po ćeliji.
@@ -2213,18 +2260,6 @@ function AdminWeekView({
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <span className="font-medium text-stone-700">{rangeLabel}</span>
-        <div className="flex gap-2">
-          <Link href={`${base}?view=nedelja&week=${prevWeek}${linkSuffix}`} className="px-3 py-1.5 rounded-lg bg-stone-200 text-stone-700 text-sm hover:bg-stone-300">
-            ← Prethodna
-          </Link>
-          <Link href={`${base}?view=nedelja&week=${nextWeek}${linkSuffix}`} className="px-3 py-1.5 rounded-lg bg-stone-200 text-stone-700 text-sm hover:bg-stone-300">
-            Sledeća →
-          </Link>
-        </div>
-      </div>
-
       <div ref={gridRef} data-hover-grid="" className="space-y-4">
       <GridHoverHighlight containerRef={gridRef} />
       {/* Desktop (lg+): obe nedelje, netaknuto. */}
@@ -2355,33 +2390,12 @@ function AdminDayView({
     month: 'long',
     year: 'numeric',
   });
-  const prevDay = (() => {
-    const x = new Date(date + 'T12:00:00');
-    x.setDate(x.getDate() - 1);
-    return x.toISOString().slice(0, 10);
-  })();
-  const nextDay = (() => {
-    const x = new Date(date + 'T12:00:00');
-    x.setDate(x.getDate() + 1);
-    return x.toISOString().slice(0, 10);
-  })();
   const weekStart = getMonday(date);
   const weekDates = getWeekDates(weekStart);
 
   return (
     <div className="space-y-4">
-      {/* Desktop/tablet (md+): strelice napred/nazad. */}
-      <div className="hidden md:flex items-center justify-between">
-        <span className="font-medium text-stone-700 capitalize">{label}</span>
-        <div className="flex gap-2">
-          <Link href={`${base}?view=dan&day=${prevDay}${linkSuffix}`} className="px-3 py-1.5 rounded-lg bg-stone-200 text-stone-700 text-sm hover:bg-stone-300">
-            ← Prethodni
-          </Link>
-          <Link href={`${base}?view=dan&day=${nextDay}${linkSuffix}`} className="px-3 py-1.5 rounded-lg bg-stone-200 text-stone-700 text-sm hover:bg-stone-300">
-            Sledeći →
-          </Link>
-        </div>
-      </div>
+      {/* Desktop/tablet (md+): datum i strelice su u zamrznutoj traci alata (PeriodNav). */}
       {/* Telefon (<md): traka dana cele nedelje – tap = prava navigacija (samo taj dan je učitan). */}
       <div className="md:hidden space-y-2">
         <span className="font-medium text-stone-700 capitalize text-sm">{label}</span>
@@ -2511,17 +2525,6 @@ function AdminMonthView({
   const lastDay = new Date(year, month + 1, 0).getDate();
   const startDow = new Date(year, month, 1).getDay();
   const startOffset = startDow === 0 ? 6 : startDow - 1;
-  const prevMonth = (() => {
-    const d = new Date(first);
-    d.setMonth(d.getMonth() - 1);
-    return d.toISOString().slice(0, 7);
-  })();
-  const nextMonth = (() => {
-    const d = new Date(first);
-    d.setMonth(d.getMonth() + 1);
-    return d.toISOString().slice(0, 7);
-  })();
-  const monthLabel = first.toLocaleDateString('sr-Latn-RS', { month: 'long', year: 'numeric' });
 
   const days: (string | null)[] = [];
   for (let i = 0; i < startOffset; i++) days.push(null);
@@ -2531,17 +2534,6 @@ function AdminMonthView({
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <span className="font-medium text-stone-700 capitalize">{monthLabel}</span>
-        <div className="flex gap-2">
-          <Link href={`${base}?view=mesec&month=${prevMonth}${linkSuffix}`} className="px-3 py-1.5 rounded-lg bg-stone-200 text-stone-700 text-sm hover:bg-stone-300">
-            ← Prethodni
-          </Link>
-          <Link href={`${base}?view=mesec&month=${nextMonth}${linkSuffix}`} className="px-3 py-1.5 rounded-lg bg-stone-200 text-stone-700 text-sm hover:bg-stone-300">
-            Sledeći →
-          </Link>
-        </div>
-      </div>
       <div className="rounded-xl border border-stone-200 bg-white overflow-hidden">
         <div className="grid grid-cols-7 border-b border-stone-200 bg-stone-50">
           {DAY_NAMES.map((d) => (
