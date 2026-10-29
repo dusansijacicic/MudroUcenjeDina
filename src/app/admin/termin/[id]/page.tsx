@@ -77,13 +77,17 @@ export default async function AdminTerminDetailPage({
   // Normal term: fetch predavanja
   let predavanja: (Predavanje & { client?: { id: string; ime: string; prezime: string } | null })[] = [];
   let maxCasova = 0;
+  // [x, y] po predavanju: x-ti čas deteta te vrste od y plaćenih (migracija 047; bez nje – ništa).
+  let redniPoPredavanju: Record<string, [number, number]> = {};
   if (!isTesting) {
-    const [predRes, max] = await Promise.all([
+    const [predRes, max, redniRes] = await Promise.all([
       adminSupabase.from('predavanja').select('*, client:clients(id, ime, prezime)').eq('term_id', termId).order('created_at'),
       getMaxCasovaPoTerminu(),
+      adminSupabase.rpc('redni_broj_casova', { p_from: term.date, p_to: term.date }),
     ]);
     predavanja = (predRes.data ?? []) as typeof predavanja;
     maxCasova = max;
+    redniPoPredavanju = (redniRes.data ?? {}) as Record<string, [number, number]>;
   }
 
   const currentCount = isTesting ? potentialClients.length : predavanja.length;
@@ -222,7 +226,7 @@ export default async function AdminTerminDetailPage({
               <div className="p-6 text-center text-stone-500">Nema radionica u ovom terminu.</div>
             ) : (
               predavanja.map((p) => (
-                <AdminPredavanjeRow key={p.id} predavanje={p} termId={termId} />
+                <AdminPredavanjeRow key={p.id} predavanje={p} termId={termId} redni={redniPoPredavanju[p.id] ?? null} />
               ))
             )}
           </div>
@@ -236,12 +240,38 @@ export default async function AdminTerminDetailPage({
   );
 }
 
+/** Koji je ovo čas po redu od plaćenih i koliko plaćenih ostaje posle njega. */
+function PlacenoStanje({ redni }: { redni: [number, number] }) {
+  const [x, y] = redni;
+  if (x > y) {
+    return (
+      <span className="rounded bg-red-600 px-2 py-0.5 text-xs font-semibold text-white">
+        ! Nije plaćeno – {x}. čas, plaćeno {y}
+      </span>
+    );
+  }
+  if (x === y) {
+    return (
+      <span className="rounded bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">
+        {x}. čas od {y} plaćenih · poslednji plaćeni
+      </span>
+    );
+  }
+  return (
+    <span className="rounded bg-stone-100 px-2 py-0.5 text-xs font-medium text-stone-700 tabular-nums">
+      {x}. čas od {y} plaćenih · preostalo još {y - x}
+    </span>
+  );
+}
+
 function AdminPredavanjeRow({
   predavanje,
   termId,
+  redni,
 }: {
   predavanje: Predavanje & { client?: { id: string; ime: string; prezime: string } | null };
   termId: string;
+  redni: [number, number] | null;
 }) {
   const clientName = predavanje.client
     ? `${predavanje.client.ime} ${predavanje.client.prezime}`
@@ -250,7 +280,8 @@ function AdminPredavanjeRow({
     <div className="p-4 flex items-start justify-between gap-4">
       <div>
         <p className="font-medium text-stone-800">{clientName}</p>
-        <div className="flex gap-2 mt-1">
+        <div className="flex flex-wrap gap-2 mt-1">
+          {redni && <PlacenoStanje redni={redni} />}
           {predavanje.odrzano && (
             <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded">Održano</span>
           )}

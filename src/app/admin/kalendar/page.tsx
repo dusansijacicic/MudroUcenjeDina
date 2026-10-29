@@ -275,9 +275,9 @@ export default async function AdminKalendarPage({
           <div className="text-xs text-stone-600">
             Svako dete je u svom redu – boje redova (žuta, plava, zelena…) idu redom unutar termina, da se vidi koliko dece je u isto vreme. Učionica je u maloj sivoj oznaci gore desno na terminu.
             <span className="mt-1 block">
-              <strong>x/y</strong> desno od imena = koji je to čas po redu od plaćenih za tu vrstu časa.{' '}
+              <strong>x/y · još N</strong> uz ime = koji je to čas po redu od plaćenih za tu vrstu časa i koliko plaćenih ostaje posle njega.{' '}
               <span className="rounded bg-red-600 px-1 font-bold text-white">! 11/10</span> crveni red = čas nije plaćen;{' '}
-              <span className="font-bold text-amber-700">10/10</span> = poslednji plaćeni čas.
+              <span className="font-bold text-amber-700">10/10 · poslednji</span> = poslednji plaćeni čas.
             </span>
           </div>
         </div>

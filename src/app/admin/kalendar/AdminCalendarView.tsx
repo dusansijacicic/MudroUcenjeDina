@@ -1719,15 +1719,17 @@ function isUnpaid(redni: [number, number] | null | undefined): boolean {
   return !!redni && redni[0] > redni[1];
 }
 
-/** "x/y" desno od imena deteta: crveno sa "!" kad čas nije plaćen, narandžasto za poslednji plaćeni. */
+/** "x/y · još N" uz ime deteta (N = koliko plaćenih ostaje posle ovog časa): crveno sa "!" kad čas
+ * nije plaćen, narandžasto "poslednji" za poslednji plaćeni. ml-auto: kad nema mesta pored imena,
+ * prelama se u sledeći red umesto da sabije ime. */
 function RedniBroj({ redni }: { redni: [number, number] }) {
   const [x, y] = redni;
   if (x > y) {
-    return <span className="shrink-0 rounded bg-red-600 px-1 text-[11px] font-bold tabular-nums text-white">! {x}/{y}</span>;
+    return <span className="ml-auto shrink-0 rounded bg-red-600 px-1 text-[11px] font-bold tabular-nums text-white">! {x}/{y}</span>;
   }
   return (
-    <span className={`shrink-0 text-[11px] tabular-nums ${x === y ? 'font-bold text-amber-700' : 'font-medium text-stone-500'}`}>
-      {x}/{y}
+    <span className={`ml-auto shrink-0 whitespace-nowrap text-[11px] tabular-nums ${x === y ? 'font-bold text-amber-700' : 'font-medium text-stone-500'}`}>
+      {x}/{y} · {x === y ? 'poslednji' : `još ${y - x}`}
     </span>
   );
 }
@@ -1736,7 +1738,9 @@ function redniTitle(redni: [number, number] | null | undefined): string | undefi
   if (!redni) return undefined;
   const [x, y] = redni;
   if (x > y) return `Nije plaćeno: ${x}. čas, a plaćeno je ${y}.`;
-  return x === y ? `${x}. čas od ${y} plaćenih – poslednji plaćeni.` : `${x}. čas od ${y} plaćenih.`;
+  return x === y
+    ? `${x}. čas od ${y} plaćenih – poslednji plaćeni.`
+    : `${x}. čas od ${y} plaćenih – posle njega ostaje još ${y - x} plaćenih.`;
 }
 
 function isTestingTerm(term: AdminTerm): boolean {
@@ -1844,7 +1848,7 @@ function TermCardVisual({ term, rowOffset = 0 }: { term: AdminTerm; rowOffset?: 
                 <div
                   style={isUnpaid(p.redni) ? UNPAID_ROW_STYLE : rowStyle(i)}
                   title={redniTitle(p.redni)}
-                  className="flex items-start justify-between gap-1 px-2 py-1 text-[13px] sm:text-sm leading-snug font-semibold text-stone-900 antialiased"
+                  className="flex flex-wrap items-baseline gap-x-1 px-2 py-1 text-[13px] sm:text-sm leading-snug font-semibold text-stone-900 antialiased"
                 >
                   <span className="min-w-0 break-words">
                     {p.client ? `${p.client.ime ?? ''} ${p.client.prezime ?? ''}`.trim() || '—' : '—'}
@@ -2029,7 +2033,7 @@ function AdminCellContent({
                 : ' border-amber-500 bg-amber-100'
             }`}
           >
-            <span className="flex items-start justify-between gap-1 font-medium text-amber-950">
+            <span className="flex flex-wrap items-baseline gap-x-1 font-medium text-amber-950">
               <span className="min-w-0 break-words">
                 {z.client_ime}{z.client_prezime ? ` ${z.client_prezime}` : ''}
               </span>
