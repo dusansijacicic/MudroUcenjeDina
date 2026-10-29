@@ -162,6 +162,7 @@ export default async function AdminKalendarPage({
       client_prezime: (client as { prezime?: string } | null)?.prezime ?? null,
       term_type_naziv: (termType as { naziv?: string } | null)?.naziv ?? null,
       classroom_naziv: (classroom as { naziv?: string } | null)?.naziv ?? null,
+      redni: redniPoPredavanju[z.id] ?? null,
     };
   });
 

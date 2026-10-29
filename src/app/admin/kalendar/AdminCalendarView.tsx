@@ -53,6 +53,8 @@ export type PendingZahtevCalendar = {
   client_prezime?: string | null;
   term_type_naziv?: string | null;
   classroom_naziv?: string | null;
+  /** [x, y] – i čas zakazan bez instruktora ima svoj redni broj od plaćenih (migracija 047). */
+  redni?: [number, number] | null;
 };
 
 export type PotentialClientCalendar = {
@@ -2004,6 +2006,7 @@ function AdminCellContent({
       {pendingZahteviInSlot.map((z) => {
         const zahtevAssignSelected = zahtevAssignClickable && swap.isZahtevMarkedForAssign(z.id);
         const zahtevDeleteSelected = swap.deleteMode && swap.isZahtevMarkedForDelete(z.id);
+        const zahtevUnpaid = isUnpaid(z.redni);
         return (
           <div
             key={z.id}
@@ -2013,6 +2016,7 @@ function AdminCellContent({
               else if (zahtevAssignClickable) swap.onToggleAssignZahtevSelect(z.id);
             }}
             data-zahtev-date={z.date}
+            title={redniTitle(z.redni)}
             className={`rounded-lg border border-dashed p-1.5 text-xs text-amber-900${
               zahtevClickable ? ' cursor-pointer' : ''
             }${
@@ -2020,11 +2024,16 @@ function AdminCellContent({
                 ? ' border-red-600 ring-2 ring-offset-1 ring-red-500 bg-red-50'
                 : zahtevAssignSelected
                 ? ' border-blue-600 ring-2 ring-offset-1 ring-blue-500 bg-blue-50'
+                : zahtevUnpaid
+                ? ' border-red-600 bg-red-200'
                 : ' border-amber-500 bg-amber-100'
             }`}
           >
-            <span className="block font-medium text-amber-950">
-              {z.client_ime}{z.client_prezime ? ` ${z.client_prezime}` : ''}
+            <span className="flex items-start justify-between gap-1 font-medium text-amber-950">
+              <span className="min-w-0 break-words">
+                {z.client_ime}{z.client_prezime ? ` ${z.client_prezime}` : ''}
+              </span>
+              {z.redni && <RedniBroj redni={z.redni} />}
             </span>
             {z.term_type_naziv && <span className="block text-[11px]">{z.term_type_naziv}</span>}
             {z.classroom_naziv && <span className="block text-[11px]">🏫 {z.classroom_naziv}</span>}
@@ -2653,7 +2662,7 @@ function AdminMonthView({
         .join(' · '),
       color: '#f59e0b',
       zahtev: true,
-      unpaid: false,
+      unpaid: isUnpaid(z.redni),
     });
   }
 
@@ -2684,7 +2693,13 @@ function AdminMonthView({
                     href={e.href}
                     title={e.title}
                     className={`block truncate rounded px-1 py-0.5 text-[11px] leading-tight text-stone-800 hover:brightness-95 ${
-                      e.zahtev ? 'border border-dashed border-amber-400 bg-amber-50' : e.unpaid ? 'bg-red-100 text-red-900' : 'bg-stone-50'
+                      e.zahtev
+                        ? e.unpaid
+                          ? 'border border-dashed border-red-500 bg-red-100 text-red-900'
+                          : 'border border-dashed border-amber-400 bg-amber-50'
+                        : e.unpaid
+                          ? 'bg-red-100 text-red-900'
+                          : 'bg-stone-50'
                     }`}
                     style={e.zahtev ? undefined : { borderLeft: `3px solid ${e.unpaid ? '#dc2626' : e.color}` }}
                   >
