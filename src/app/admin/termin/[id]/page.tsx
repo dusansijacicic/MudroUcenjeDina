@@ -8,6 +8,7 @@ import type { Predavanje } from '@/types/database';
 import { deleteTermAsAdmin, getTermCategories } from '@/app/admin/actions';
 import { jedanKlijentIzJoina, nazivKategorijeIzJoina, isTestingCategoryJoin } from '@/lib/term-categories';
 import AdminTermMetaForm from '@/app/admin/termin/AdminTermMetaForm';
+import PlacenoStanje from '@/components/PlacenoStanje';
 import AddPotentialClientsInline from './AddPotentialClientsInline';
 import PotentialClientQuickActions from '@/app/admin/termin/PotentialClientQuickActions';
 import type { PotentialClientRow, PotentialClientStatus } from '@/app/admin/actions';
@@ -237,30 +238,6 @@ export default async function AdminTerminDetailPage({
         <Link href="/admin/kalendar" className="text-sm text-amber-700 hover:underline">← Nazad na kalendar</Link>
       </p>
     </div>
-  );
-}
-
-/** Koji je ovo čas po redu od plaćenih i koliko plaćenih ostaje posle njega. */
-function PlacenoStanje({ redni }: { redni: [number, number] }) {
-  const [x, y] = redni;
-  if (x > y) {
-    return (
-      <span className="rounded bg-red-600 px-2 py-0.5 text-xs font-semibold text-white">
-        ! Nije plaćeno – {x}. čas, plaćeno {y}
-      </span>
-    );
-  }
-  if (x === y) {
-    return (
-      <span className="rounded bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">
-        {x}. čas od {y} plaćenih · poslednji plaćeni
-      </span>
-    );
-  }
-  return (
-    <span className="rounded bg-stone-100 px-2 py-0.5 text-xs font-medium text-stone-700 tabular-nums">
-      {x}. čas od {y} plaćenih · preostalo još {y - x}
-    </span>
   );
 }
 

@@ -6,6 +6,7 @@ import { TIME_SLOTS } from '@/lib/constants';
 import { danasBeograd } from '@/lib/datum';
 import { ucitajBlokadeInstruktora } from '@/lib/blokade';
 import BlokadeInstruktora from '@/components/BlokadeInstruktora';
+import PlacenoStanje from '@/components/PlacenoStanje';
 
 /**
  * Stranica jednog instruktora (Admin → Instruktori → Pregled). Najvažnije: kada NE radi (stalni nedeljni
@@ -25,32 +26,41 @@ export default async function AdminViewPage({ params }: { params: Promise<{ id: 
   zaNedelju.setUTCDate(zaNedelju.getUTCDate() + 7);
   const doDatuma = zaNedelju.toISOString().slice(0, 10);
 
-  const [{ data: instructor }, blok, { data: sledeciRaw }, { data: predRows }] = await Promise.all([
+  const [{ data: instructor }, blok, { data: sledeciRaw }, { data: predRows }, { data: redniRaw }] = await Promise.all([
     adminSupabase.from('instructors').select('id, ime, prezime, email, telefon, color, aktivan').eq('id', id).maybeSingle(),
     ucitajBlokadeInstruktora(id, danas),
     adminSupabase
       .from('terms')
-      .select('id, date, slot_index, classroom:classrooms(naziv), predavanja(client:clients(ime, prezime))')
+      .select('id, date, slot_index, classroom:classrooms(naziv), predavanja(id, client:clients(ime, prezime), term_type:term_types(naziv))')
       .eq('instructor_id', id)
       .gte('date', danas)
       .lte('date', doDatuma)
       .order('date')
       .order('slot_index'),
     adminSupabase.from('predavanja').select('client:clients(id, ime, prezime), term:terms!inner(instructor_id)').eq('term.instructor_id', id),
+    // Koji je čas po redu od plaćenih (x / y) – bez migracije 047 nema podataka, pa se bedž ne prikazuje.
+    adminSupabase.rpc('redni_broj_casova', { p_from: danas, p_to: doDatuma }),
   ]);
   if (!instructor) notFound();
 
   type Ime = { ime?: string | null; prezime?: string | null };
+  type Naziv = { naziv?: string | null };
   const one = <T,>(v: T | T[] | null | undefined): T | null => (Array.isArray(v) ? (v[0] ?? null) : (v ?? null));
+  const redni = (redniRaw ?? {}) as Record<string, [number, number]>;
   const sledeci = (sledeciRaw ?? []).map((t) => ({
     id: t.id as string,
     date: String(t.date).slice(0, 10),
     slot: t.slot_index as number,
-    ucionica: one(t.classroom as { naziv?: string } | { naziv?: string }[] | null)?.naziv ?? null,
-    deca: ((t.predavanja ?? []) as { client: Ime | Ime[] | null }[])
-      .map((p) => one(p.client))
-      .filter((c): c is Ime => !!c)
-      .map((c) => `${c.ime ?? ''} ${c.prezime ?? ''}`.trim()),
+    ucionica: one(t.classroom as Naziv | Naziv[] | null)?.naziv ?? null,
+    deca: ((t.predavanja ?? []) as { id: string; client: Ime | Ime[] | null; term_type: Naziv | Naziv[] | null }[])
+      .map((p) => ({ p, c: one(p.client) }))
+      .filter((x): x is { p: (typeof x)['p']; c: Ime } => !!x.c)
+      .map(({ p, c }) => ({
+        id: p.id,
+        ime: `${c.ime ?? ''} ${c.prezime ?? ''}`.trim(),
+        vrsta: one(p.term_type)?.naziv ?? null,
+        redni: redni[p.id] ?? null,
+      })),
   }));
 
   const klijentiMap = new Map<string, string>();
@@ -130,7 +140,19 @@ export default async function AdminViewPage({ params }: { params: Promise<{ id: 
                     {new Date(`${t.date}T12:00:00`).toLocaleDateString('sr-Latn-RS', { weekday: 'short', day: '2-digit', month: '2-digit' })}
                   </span>
                   <span className="w-12 shrink-0 tabular-nums text-stone-600">{TIME_SLOTS[t.slot] ?? '—'}</span>
-                  <span className="min-w-0 flex-1 text-stone-800">{t.deca.length > 0 ? t.deca.join(', ') : '(bez dece)'}</span>
+                  {t.deca.length > 0 ? (
+                    <span className="min-w-0 flex-1 space-y-1">
+                      {t.deca.map((d) => (
+                        <span key={d.id} className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                          <span className="text-stone-800">{d.ime}</span>
+                          {d.vrsta && <span className="rounded bg-amber-50 px-1.5 text-xs font-medium text-amber-800">{d.vrsta}</span>}
+                          {d.redni && <PlacenoStanje redni={d.redni} />}
+                        </span>
+                      ))}
+                    </span>
+                  ) : (
+                    <span className="min-w-0 flex-1 text-stone-500">(bez dece)</span>
+                  )}
                   {t.ucionica && <span className="rounded bg-stone-100 px-1.5 text-xs text-stone-600">{t.ucionica}</span>}
                 </Link>
               </li>
