@@ -52,7 +52,7 @@ const UPUTSTVO_ZA_STRANICU: [string, string][] = [
 
 function uputstvoHref(pathname: string): string {
   const sekcija = UPUTSTVO_ZA_STRANICU.find(([prefiks]) => pathname.startsWith(prefiks))?.[1];
-  return sekcija ? `/admin/uputstvo#${sekcija}` : '/admin/uputstvo';
+  return sekcija ? `/admin/uputstvo?deo=${sekcija}` : '/admin/uputstvo';
 }
 
 const navLinks = [...primaryLinks, ...entityLinks, ...otherLinks];

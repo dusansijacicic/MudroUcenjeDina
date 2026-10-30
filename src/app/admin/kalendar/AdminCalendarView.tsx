@@ -116,10 +116,14 @@ type SwapContextValue = {
   bulkMode: boolean;
   isBulkSelected: (date: string, slot: number) => boolean;
   onToggleBulkSlot: (date: string, slot: number) => void;
+  /** Instruktor izabran u "Zakaži više časova" ('' = bez) – vremena kada on ne radi se ne mogu izabrati. */
+  bulkInstructorId: string;
   blockMode: boolean;
   isBlockSelected: (date: string, slot: number) => boolean;
   onToggleBlockSlot: (date: string, slot: number) => void;
   getBlocked: (date: string, slot: number) => BlokiranTermin | undefined;
+  /** Blokade samo za pojedine instruktore u ovom slotu (ostali mogu da rade). */
+  getInstructorBlocks: (date: string, slot: number) => BlokiranTermin[];
   onUnblock: (id: string) => void;
   assignMode: boolean;
   isMarkedForAssign: (termId: string) => boolean;
@@ -149,10 +153,12 @@ const SwapContext = createContext<SwapContextValue>({
   bulkMode: false,
   isBulkSelected: () => false,
   onToggleBulkSlot: () => {},
+  bulkInstructorId: '',
   blockMode: false,
   isBlockSelected: () => false,
   onToggleBlockSlot: () => {},
   getBlocked: () => undefined,
+  getInstructorBlocks: () => [],
   onUnblock: () => {},
   assignMode: false,
   isMarkedForAssign: () => false,
@@ -594,12 +600,28 @@ export default function AdminCalendarView({
   const [blockMode, setBlockMode] = useState(false);
   const [blockSlots, setBlockSlots] = useState<Set<string>>(new Set());
   const [blockNapomena, setBlockNapomena] = useState('');
+  /** '' = blokada za sve instruktore (ceo slot); inače samo za izabranog instruktora. */
+  const [blockInstructorId, setBlockInstructorId] = useState('');
   const [blockLoading, setBlockLoading] = useState(false);
   const [blokirani, setBlokirani] = useState(blockedSlotsProp);
   useEffect(() => {
     setBlokirani(blockedSlotsProp);
   }, [blockedSlotsProp]);
-  const blokiraniByKey = useMemo(() => new Map(blokirani.map((b) => [`${b.date}|${b.slot_index}`, b])), [blokirani]);
+  // Blokada za sve zatvara ceo slot; blokade po instruktoru (i stalne nedeljne) se samo prikazuju uz
+  // slot – ostali instruktori u to vreme rade normalno.
+  const blokiraniByKey = useMemo(
+    () => new Map(blokirani.filter((b) => b.instructor_id === null).map((b) => [`${b.date}|${b.slot_index}`, b])),
+    [blokirani]
+  );
+  const instruktorBlokadeByKey = useMemo(() => {
+    const m = new Map<string, BlokiranTermin[]>();
+    for (const b of blokirani) {
+      if (b.instructor_id === null) continue;
+      const k = `${b.date}|${b.slot_index}`;
+      m.set(k, [...(m.get(k) ?? []), b]);
+    }
+    return m;
+  }, [blokirani]);
 
   useKalendarRealtime(swapMode || copyMode || deleteMode || bulkMode || assignMode || blockMode || draggedTermId !== null);
 
@@ -752,10 +774,21 @@ export default function AdminCalendarView({
     } else if (!bulkClientId || bulkSlots.size === 0) {
       return;
     }
-    const slots = [...bulkSlots].map((key) => {
-      const [date, slotStr] = key.split('|');
-      return { date, slotIndex: Number(slotStr) };
-    });
+    // Vremena izabrana pre nego što je izabran instruktor, a u kojima on ne radi – preskaču se.
+    const neRadi = (key: string) =>
+      !!bulkInstructorChoice && (instruktorBlokadeByKey.get(key) ?? []).some((b) => b.instructor_id === bulkInstructorChoice);
+    const preskoceno = [...bulkSlots].filter(neRadi).length;
+    const slots = [...bulkSlots]
+      .filter((key) => !neRadi(key))
+      .map((key) => {
+        const [date, slotStr] = key.split('|');
+        return { date, slotIndex: Number(slotStr) };
+      });
+    if (slots.length === 0) {
+      toast.error('Izabrani instruktor ne radi ni u jednom od izabranih vremena.');
+      return;
+    }
+    if (preskoceno > 0) toast(`Preskočeno ${preskoceno} vremena u kojima izabrani instruktor ne radi.`, { icon: '⛔' });
     const instructorId = bulkInstructorChoice;
     const classroomId = bulkClassroomChoice || null;
     const groupClientIds = bulkGroupClientIds;
@@ -811,6 +844,7 @@ export default function AdminCalendarView({
     });
     setBlockSlots(new Set());
     setBlockNapomena('');
+    setBlockInstructorId('');
   };
 
   const onToggleBlockSlot = (date: string, slot: number) => {
@@ -831,6 +865,7 @@ export default function AdminCalendarView({
       const slot = Number(slotStr);
       for (const t of terms) {
         if (t.date !== date || t.slot_index !== slot || isAutoSpillover(t)) continue;
+        if (blockInstructorId && t.instructor_id !== blockInstructorId) continue;
         const deca = (t.predavanja ?? [])
           .map((p) => (p.client ? `${p.client.ime} ${p.client.prezime}` : ''))
           .filter(Boolean)
@@ -839,6 +874,8 @@ export default function AdminCalendarView({
       }
       for (const z of pendingZahtevi) {
         if (z.date !== date || z.slot_index !== slot) continue;
+        // Časovi bez instruktora ne smetaju blokadi jednog instruktora.
+        if (blockInstructorId) continue;
         list.push({
           key: `z-${z.id}`,
           label: `${formatShortDate(z.date)} ${TIME_SLOTS[z.slot_index] ?? ''} · zahtev – ${z.client_ime}${z.client_prezime ? ` ${z.client_prezime}` : ''}`,
@@ -846,7 +883,7 @@ export default function AdminCalendarView({
       }
     }
     return list;
-  }, [blockSlots, terms, pendingZahtevi]);
+  }, [blockSlots, terms, pendingZahtevi, blockInstructorId]);
 
   const confirmBlock = async () => {
     if (blockSlots.size === 0) return;
@@ -863,15 +900,17 @@ export default function AdminCalendarView({
       return { date, slotIndex: Number(slotStr) };
     });
     setBlockLoading(true);
-    const res = await blockSlotsAsAdmin(slots, blockNapomena);
+    const res = await blockSlotsAsAdmin(slots, blockNapomena, blockInstructorId || null);
     setBlockLoading(false);
     if (res.error) {
       toast.error(res.error);
       return;
     }
-    toast.success(`Blokirano ${slots.length} termin(a).`);
+    const zaKoga = blockInstructorId ? instructorsList.find((i) => i.id === blockInstructorId) : null;
+    toast.success(`Blokirano ${slots.length} termin(a)${zaKoga ? ` za ${zaKoga.ime} ${zaKoga.prezime}` : ' za sve'}.`);
     setBlockSlots(new Set());
     setBlockNapomena('');
+    setBlockInstructorId('');
     setBlockMode(false);
     router.refresh();
   };
@@ -1171,10 +1210,12 @@ export default function AdminCalendarView({
         bulkMode,
         isBulkSelected: (date: string, slot: number) => bulkSlots.has(`${date}|${slot}`),
         onToggleBulkSlot,
+        bulkInstructorId: bulkInstructorChoice,
         blockMode,
         isBlockSelected: (date: string, slot: number) => blockSlots.has(`${date}|${slot}`),
         onToggleBlockSlot,
         getBlocked: (date: string, slot: number) => blokiraniByKey.get(`${date}|${slot}`),
+        getInstructorBlocks: (date: string, slot: number) => instruktorBlokadeByKey.get(`${date}|${slot}`) ?? [],
         onUnblock: handleUnblock,
         assignMode,
         isMarkedForAssign: (termId: string) => assignSelection.has(termId),
@@ -1303,6 +1344,21 @@ export default function AdminCalendarView({
           {blockMode && (
             <div className="flex flex-col gap-2 text-sm">
               <div className="flex flex-wrap items-end gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-stone-700 mb-1">Za koga</label>
+                  <select
+                    value={blockInstructorId}
+                    onChange={(e) => setBlockInstructorId(e.target.value)}
+                    className="rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm text-stone-800"
+                  >
+                    <option value="">Svi instruktori (ceo termin)</option>
+                    {instructorsList.map((i) => (
+                      <option key={i.id} value={i.id}>
+                        Samo {i.ime} {i.prezime}
+                      </option>
+                    ))}
+                  </select>
+                </div>
                 <div className="min-w-[260px] flex-1 max-w-xl">
                   <label className="block text-xs font-medium text-stone-700 mb-1">Napomena – zašto se blokira</label>
                   <input
@@ -1918,6 +1974,43 @@ function AdminCellContent({
     </div>
   ) : null;
 
+  const instrBlocks = swap.getInstructorBlocks(emptyDate, emptySlot);
+  const InstructorBlocksBadge = instrBlocks.length > 0 ? (
+    <div className="space-y-0.5">
+      {instrBlocks.map((b) => (
+        <div
+          key={b.id}
+          title={
+            b.nedeljna
+              ? 'Stalna nedeljna blokada instruktora – menja se u Blokirani termini → Nedeljne blokade (ili kod instruktora u Moje blokade).'
+              : 'Ovaj instruktor ne može dobiti čas u ovo vreme; ostali mogu.'
+          }
+          className="flex items-start justify-between gap-1 rounded border border-dashed border-stone-400 bg-stone-100 px-1.5 py-0.5 text-[10px] leading-tight text-stone-700"
+        >
+          <span className="min-w-0 break-words">
+            <span className="font-semibold">⛔ {b.instructor_naziv ?? 'Instruktor'}</span>
+            {b.nedeljna ? ' ↻' : ''}
+            {b.napomena ? ` – ${b.napomena}` : ''}
+          </span>
+          {!b.nedeljna && (
+            <button
+              type="button"
+              title="Ukloni ovu blokadu instruktora"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                swap.onUnblock(b.id);
+              }}
+              className="shrink-0 leading-none text-stone-400 hover:text-red-600"
+            >
+              ✕
+            </button>
+          )}
+        </div>
+      ))}
+    </div>
+  ) : null;
+
   const rowOffsets = childRowOffsets(termsInSlot);
 
   const CancelledEntries = otkazaniInSlot.length > 0 ? (
@@ -2014,8 +2107,23 @@ function AdminCellContent({
     return (
       <div className="space-y-1.5 min-h-[52px] cursor-not-allowed">
         {BlockedBadge}
+        {InstructorBlocksBadge}
         {termsInSlot.map((term, ti) => <TermCardVisual key={term.id} term={term} rowOffset={rowOffsets[ti]} />)}
         {PendingZahteviEntries}
+      </div>
+    );
+  }
+
+  // Izabrani instruktor ne radi u ovo vreme (blokada za datum ili stalna nedeljna) – ne može se izabrati.
+  if (swap.bulkMode && swap.bulkInstructorId && instrBlocks.some((b) => b.instructor_id === swap.bulkInstructorId)) {
+    return (
+      <div className="space-y-1.5 min-h-[52px] cursor-not-allowed" title="Izabrani instruktor ne radi u ovo vreme">
+        {InstructorBlocksBadge}
+        {termsInSlot.map((term, ti) => <TermCardVisual key={term.id} term={term} rowOffset={rowOffsets[ti]} />)}
+        {PendingZahteviEntries}
+        <div className="rounded-lg border-2 border-dashed border-red-300 bg-red-50/70 p-2 text-center text-[11px] font-medium text-red-700">
+          ⛔ izabrani instruktor ne radi
+        </div>
       </div>
     );
   }
@@ -2038,6 +2146,7 @@ function AdminCellContent({
         }}
         className="group w-full min-h-[52px] cursor-pointer space-y-1.5 text-left text-xs"
       >
+        {InstructorBlocksBadge}
         {termsInSlot.map((term, ti) => <TermCardVisual key={term.id} term={term} rowOffset={rowOffsets[ti]} />)}
         {PendingZahteviEntries}
         <div
@@ -2088,6 +2197,7 @@ function AdminCellContent({
         }`}
       >
         {BlockedBadge}
+        {InstructorBlocksBadge}
         {termsInSlot.map((term, ti) =>
           isAutoSpillover(term) ? (
             <TermCardVisual key={term.id} term={term} />
@@ -2117,6 +2227,7 @@ function AdminCellContent({
     return (
       <div className="space-y-1 min-h-[52px]">
         {BlockedBadge}
+        {InstructorBlocksBadge}
         {PendingZahteviEntries}
         {CancelledEntries}
       </div>
@@ -2126,6 +2237,7 @@ function AdminCellContent({
   if (termsInSlot.length === 0) {
     return (
       <div className="space-y-1">
+        {InstructorBlocksBadge}
         <Link
           href={newTermHref}
           className={`block rounded-lg border border-dashed border-stone-200 p-2 text-stone-400 hover:border-amber-400 hover:bg-amber-50/50 min-h-[52px]${
@@ -2174,6 +2286,7 @@ function AdminCellContent({
       }}
     >
       {BlockedBadge}
+      {InstructorBlocksBadge}
       {termsInSlot.map((term, ti) => {
         if (isAutoSpillover(term)) {
           return (

@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { Crveno, Koraci, Lista, Napomena, Podnaslov, Sekcija, Ui, Upozorenje } from '@/components/Uputstvo';
 import {
   M,
   SemaBlokiranje,
@@ -6,6 +7,7 @@ import {
   SemaDnevnik,
   SemaFilter,
   SemaInstruktori,
+  SemaKadaNeRadi,
   SemaKalendar,
   SemaKartica,
   SemaKlijenti,
@@ -43,20 +45,42 @@ const SADRZAJ: { id: string; naslov: string }[] = [
   { id: 'blokirani', naslov: 'Blokirani termini' },
   { id: 'testiranja', naslov: 'Testiranja' },
   { id: 'instruktori', naslov: 'Instruktori' },
+  { id: 'kada-ne-radi', naslov: 'Instruktor – kada ne radi' },
   { id: 'sifarnici', naslov: 'Vrste časova, kategorije, programi, učionice' },
   { id: 'dnevnik', naslov: 'Dnevnik aktivnosti' },
   { id: 'podesavanja', naslov: 'Podešavanja i bekap' },
   { id: 'uloge', naslov: 'Ko šta sme (uloge)' },
 ];
 
-export default function AdminUputstvoPage() {
+/** Koje sekcije pripadaju kojoj stranici (?deo=… iz dugmeta „Uputstvo“ u meniju). */
+const DELOVI: Record<string, { naslov: string; sekcije: string[] }> = {
+  kalendar: { naslov: 'Kalendar', sekcije: ['kalendar', 'kalendar-citanje', 'kalendar-filter', 'kalendar-modovi', 'kalendar-blokiranje'] },
+  'zakazivanje-termina': { naslov: 'Zakaži termin', sekcije: ['zakazivanje-termina'] },
+  termin: { naslov: 'Stranica termina', sekcije: ['termin'] },
+  klijenti: { naslov: 'Klijenti', sekcije: ['klijenti'] },
+  'profil-klijenta': { naslov: 'Profil deteta', sekcije: ['profil-klijenta'] },
+  uplate: { naslov: 'Uplate', sekcije: ['uplate'] },
+  blokirani: { naslov: 'Blokirani termini', sekcije: ['blokirani', 'kalendar-blokiranje'] },
+  testiranja: { naslov: 'Testiranja', sekcije: ['testiranja'] },
+  instruktori: { naslov: 'Instruktori', sekcije: ['instruktori', 'kada-ne-radi'] },
+  sifarnici: { naslov: 'Vrste časova, kategorije, programi, učionice', sekcije: ['sifarnici'] },
+  dnevnik: { naslov: 'Dnevnik aktivnosti', sekcije: ['dnevnik'] },
+  podesavanja: { naslov: 'Podešavanja', sekcije: ['podesavanja'] },
+};
+
+export default async function AdminUputstvoPage({ searchParams }: { searchParams: Promise<{ deo?: string }> }) {
+  const { deo } = await searchParams;
+  const izabrano = deo ? DELOVI[deo] : undefined;
+  // Samo deo za jednu stranicu (iz menija) ili celo uputstvo.
+  const prikazi = izabrano ? new Set(izabrano.sekcije) : null;
+  const sadrzaj = prikazi ? SADRZAJ.filter((s) => prikazi.has(s.id)) : SADRZAJ;
   return (
     <div className="max-w-6xl pb-16 lg:grid lg:grid-cols-[230px_minmax(0,1fr)] lg:gap-10">
       <aside className="mb-8 lg:mb-0">
         <nav aria-label="Sadržaj uputstva" className="lg:sticky lg:top-4 rounded-xl border border-stone-200 bg-white p-4 text-sm">
           <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-stone-500">Sadržaj</p>
           <ul className="space-y-1">
-            {SADRZAJ.map((s) => (
+            {sadrzaj.map((s) => (
               <li key={s.id}>
                 <a href={`#${s.id}`} className="block rounded-md px-2 py-1 text-stone-700 hover:bg-amber-50 hover:text-amber-800">
                   {s.naslov}
@@ -64,12 +88,17 @@ export default function AdminUputstvoPage() {
               </li>
             ))}
           </ul>
+          {prikazi && (
+            <Link href="/admin/uputstvo" className="mt-3 block border-t border-stone-100 pt-2 text-xs font-medium text-amber-700 hover:underline">
+              Prikaži celo uputstvo →
+            </Link>
+          )}
         </nav>
       </aside>
 
       <div className="min-w-0 max-w-3xl space-y-10">
         <header>
-          <h1 className="text-2xl font-semibold text-stone-800 mb-2">Uputstvo</h1>
+          <h1 className="text-2xl font-semibold text-stone-800 mb-2">{izabrano ? `Uputstvo – ${izabrano.naslov}` : 'Uputstvo'}</h1>
           <p className="text-stone-600 text-sm leading-relaxed">
             Kako se radi na svakoj stranici, klik po klik. Uz svaku stranicu je šema ekrana: brojevi u narandžastim kružićima{' '}
             <M n={1} /> <M n={2} /> odgovaraju koracima ispod slike. Dugme <Ui>❓ Uputstvo</Ui> u gornjem meniju uvek otvara deo
@@ -77,7 +106,7 @@ export default function AdminUputstvoPage() {
           </p>
         </header>
 
-        <Sekcija id="pocetak" naslov="Tipičan dan – brzi početak">
+        <Sekcija prikazi={prikazi} id="pocetak" naslov="Tipičan dan – brzi početak">
           <SemaMeni />
           <Koraci>
             <li><Ui>Kalendar</Ui> – pregled ove i sledeće nedelje za sve instruktore. Ovde provodite najviše vremena.</li>
@@ -91,7 +120,7 @@ export default function AdminUputstvoPage() {
           </Koraci>
         </Sekcija>
 
-        <Sekcija id="kalendar" naslov="Kalendar">
+        <Sekcija prikazi={prikazi} id="kalendar" naslov="Kalendar">
           <SemaKalendar />
           <Koraci>
             <li>
@@ -116,7 +145,7 @@ export default function AdminUputstvoPage() {
           </Lista>
         </Sekcija>
 
-        <Sekcija id="kalendar-citanje" naslov="Kalendar – kako čitati termin">
+        <Sekcija prikazi={prikazi} id="kalendar-citanje" naslov="Kalendar – kako čitati termin">
           <SemaKartica />
           <Lista>
             <li><M n="A" /> Gore levo: instruktor. Boja slova je boja instruktora iz legende iznad kalendara.</li>
@@ -139,7 +168,7 @@ export default function AdminUputstvoPage() {
           </Lista>
         </Sekcija>
 
-        <Sekcija id="kalendar-filter" naslov="Kalendar – filter po detetu">
+        <Sekcija prikazi={prikazi} id="kalendar-filter" naslov="Kalendar – filter po detetu">
           <SemaFilter />
           <Koraci>
             <li>U polje <Ui>Dete:</Ui> počnite da kucate ime ili prezime. Kvačice nisu bitne: „djordje“ i „dorde“ nalaze „Đorđe“.</li>
@@ -150,7 +179,7 @@ export default function AdminUputstvoPage() {
           </Koraci>
         </Sekcija>
 
-        <Sekcija id="kalendar-modovi" naslov="Kalendar – Swap, Copy, Delete, Zakaži više časova, Dodeli">
+        <Sekcija prikazi={prikazi} id="kalendar-modovi" naslov="Kalendar – Swap, Copy, Delete, Zakaži više časova, Dodeli">
           <SemaModovi />
           <Napomena>
             Svi modovi rade isto: <strong>uključite dugme</strong> (postane obojeno) → <strong>kliknite termine</strong> na kalendaru →{' '}
@@ -196,7 +225,10 @@ export default function AdminUputstvoPage() {
               Po želji: instruktor, učionica, vrsta časa. Bez instruktora („bez instruktora (zahtev)“) časovi čekaju da ih predavač preuzme;
               grupa mora imati instruktora.
             </li>
-            <li>Kliknite sve ćelije (dan + vreme) kada dete dolazi.</li>
+            <li>
+              Kliknite sve ćelije (dan + vreme) kada dete dolazi. Ispod postojećih časova uvek je prazan deo „+ još jedno dete u ovo vreme“.
+              Ako je izabran instruktor, vremena kada on ne radi su crvena („⛔ izabrani instruktor ne radi“) i ne mogu se izabrati.
+            </li>
             <li>Kliknite <Ui>✓ Potvrdi zakazivanje (N)</Ui>.</li>
           </Koraci>
 
@@ -209,11 +241,14 @@ export default function AdminUputstvoPage() {
           </Koraci>
         </Sekcija>
 
-        <Sekcija id="kalendar-blokiranje" naslov="Kalendar – blokiranje vremena">
+        <Sekcija prikazi={prikazi} id="kalendar-blokiranje" naslov="Kalendar – blokiranje vremena">
           <SemaBlokiranje />
           <Koraci>
             <li>Kliknite <Ui>Blokiraj termin(e)</Ui>. U ovom modu vide se svi časovi, i oni bez instruktora i učionice.</li>
-            <li>Upišite razlog u <Ui>Napomena – zašto se blokira</Ui> (npr. praznik, sastanak) – obavezno.</li>
+            <li>
+              <Ui>Za koga</Ui>: <Ui>Svi instruktori (ceo termin)</Ui> – niko ne može da zakaže; ili <Ui>Samo [instruktor]</Ui> – samo on ne
+              može dobiti čas, ostali rade normalno. Upišite razlog u <Ui>Napomena – zašto se blokira</Ui> (npr. praznik, sastanak).
+            </li>
             <li>Kliknite ćelije (dan + vreme) koje zatvarate. Postojeći časovi u njima i dalje se mogu otvoriti ili prevući na drugo vreme.</li>
             <li>
               Kliknite <Ui>✓ Blokiraj (N)</Ui>. Ako u izabranom vremenu već ima časova, pojaviće se upozorenje; ti časovi ostaju i vide se na
@@ -221,10 +256,14 @@ export default function AdminUputstvoPage() {
             </li>
             <li>Odblokiranje: <Ui>Odblokiraj</Ui> na samoj ćeliji ili na stranici Blokirani termini.</li>
           </Koraci>
-          <Napomena>Blokada važi za ceo to vreme tog dana: sve učionice, sve instruktore, i za admina, predavače i učenike.</Napomena>
+          <Napomena>
+            Blokada „za sve“ zatvara ceo to vreme tog dana: sve učionice, sve instruktore, i za admina, predavače i učenike (prugasto
+            „⛔ Blokirano“). Blokada jednog instruktora se na kalendaru vidi kao mala siva oznaka „⛔ Ime – razlog“ (sa ↻ ako je stalna
+            nedeljna) – taj instruktor se u to vreme ne može izabrati, ostali mogu.
+          </Napomena>
         </Sekcija>
 
-        <Sekcija id="zakazivanje-termina" naslov="Zakaži termin">
+        <Sekcija prikazi={prikazi} id="zakazivanje-termina" naslov="Zakaži termin">
           <SemaZakazivanje />
           <Koraci>
             <li>Kliknite <Ui>+ Zakaži termin</Ui> u meniju, ili <Ui>+</Ui> u ćeliji kalendara (datum i vreme se sami popune).</li>
@@ -232,7 +271,8 @@ export default function AdminUputstvoPage() {
             <li>Levo: proverite <Ui>Datum</Ui> i <Ui>Vreme (slot)</Ui>, izaberite <Ui>Kategorija termina</Ui> i vrstu časa.</li>
             <li>
               Instruktor i učionica su po difoltu <Ui>Bez instruktora</Ui> / <Ui>Bez učionice</Ui> – tada čas čeka da ga neki predavač
-              preuzme. Za grupu i testiranje instruktor je obavezan. „(zauzeto)“ = taj instruktor/učionica već ima čas u tom vremenu.
+              preuzme. Za grupu i testiranje instruktor je obavezan. „(zauzeto)“ = taj instruktor/učionica već ima čas u tom vremenu;
+              „(blokiran – ne radi tada)“ = instruktor je za to vreme blokiran (ne može se izabrati).
             </li>
             <li>Po želji: napomena i „i narednih N dana“ (isti čas i narednih N uzastopnih dana; 0 = samo taj dan).</li>
             <li>Kliknite <Ui>Zakaži termin</Ui>. Vraćate se na kalendar, koji se sam pomeri do novog termina i kratko ga zasvetli ljubičasto.</li>
@@ -245,7 +285,7 @@ export default function AdminUputstvoPage() {
           </Lista>
         </Sekcija>
 
-        <Sekcija id="termin" naslov="Stranica termina">
+        <Sekcija prikazi={prikazi} id="termin" naslov="Stranica termina">
           <SemaTermin />
           <Koraci>
             <li><Ui>Kategorija i napomena termina</Ui>: promenite kategoriju ili napomenu i sačuvajte.</li>
@@ -259,7 +299,7 @@ export default function AdminUputstvoPage() {
           </Koraci>
         </Sekcija>
 
-        <Sekcija id="klijenti" naslov="Klijenti (lista)">
+        <Sekcija prikazi={prikazi} id="klijenti" naslov="Klijenti (lista)">
           <SemaKlijenti />
           <Koraci>
             <li>Pretraga: kucajte ime, prezime, školu ili telefon – lista se filtrira odmah, bez čekanja.</li>
@@ -276,7 +316,7 @@ export default function AdminUputstvoPage() {
           </Koraci>
         </Sekcija>
 
-        <Sekcija id="profil-klijenta" naslov="Profil deteta">
+        <Sekcija prikazi={prikazi} id="profil-klijenta" naslov="Profil deteta">
           <SemaProfil />
           <Koraci>
             <li><Ui>Pregled po vrstama časova</Ui>: plaćeno / održano / preostalo za svaku vrstu časa.</li>
@@ -293,7 +333,7 @@ export default function AdminUputstvoPage() {
           </Koraci>
         </Sekcija>
 
-        <Sekcija id="uplate" naslov="Uplate">
+        <Sekcija prikazi={prikazi} id="uplate" naslov="Uplate">
           <Podnaslov>Unos nove uplate</Podnaslov>
           <SemaUplataForma />
           <Koraci>
@@ -317,7 +357,7 @@ export default function AdminUputstvoPage() {
           </Napomena>
         </Sekcija>
 
-        <Sekcija id="blokirani" naslov="Blokirani termini">
+        <Sekcija prikazi={prikazi} id="blokirani" naslov="Blokirani termini">
           <SemaBlokirani />
           <Koraci>
             <li>Lista svih blokada (najnovije prve): datum, vreme i razlog.</li>
@@ -327,7 +367,7 @@ export default function AdminUputstvoPage() {
           <Napomena>Nova blokada se pravi na kalendaru – vidi <a href="#kalendar-blokiranje" className="underline">Kalendar – blokiranje</a>.</Napomena>
         </Sekcija>
 
-        <Sekcija id="testiranja" naslov="Testiranja">
+        <Sekcija prikazi={prikazi} id="testiranja" naslov="Testiranja">
           <SemaTestiranja />
           <Koraci>
             <li>
@@ -341,7 +381,7 @@ export default function AdminUputstvoPage() {
           </Koraci>
         </Sekcija>
 
-        <Sekcija id="instruktori" naslov="Instruktori">
+        <Sekcija prikazi={prikazi} id="instruktori" naslov="Instruktori">
           <SemaInstruktori />
           <Koraci>
             <li><Ui>+ Novi instruktor</Ui> → email i lozinka za prijavu, ime, prezime → <Ui>Kreiraj instruktora</Ui>.</li>
@@ -349,11 +389,36 @@ export default function AdminUputstvoPage() {
             <li>
               <Ui>Suspenduj</Ui>: instruktor se više ne nudi u listama za izbor, a već zakazani termini ostaju. <Ui>Aktiviraj</Ui> ga vraća.
             </li>
-            <li><Ui>Pregled →</Ui>: vidite aplikaciju onako kako je vidi taj instruktor (i dalje ste admin).</li>
+            <li>
+              <Ui>Pregled →</Ui>: stranica instruktora – <Ui>Kalendar ovog instruktora</Ui>, <Ui>Uredi podatke</Ui>, <strong>Kada ne radi</strong>{' '}
+              (vidi ispod), sledećih 7 dana i (sklopljen) spisak klijenata.
+            </li>
           </Koraci>
         </Sekcija>
 
-        <Sekcija id="sifarnici" naslov="Vrste časova, kategorije, programi, učionice">
+        <Sekcija prikazi={prikazi} id="kada-ne-radi" naslov="Instruktor – kada ne radi">
+          <SemaKadaNeRadi />
+          <Koraci>
+            <li>
+              <Ui>Svake nedelje (stalno)</Ui>: kliknite polja (dan × vreme) kada instruktor NE radi – postanu tamna sa ✕. Važi svake nedelje,
+              sve dok se ne promeni.
+            </li>
+            <li>Klik na naziv dana (npr. <Ui>Sub</Ui>) označi ili skine ceo dan odjednom.</li>
+            <li>Po želji razlog, pa <Ui>Sačuvaj nedeljni raspored</Ui>. <Ui>Poništi izmene</Ui> vraća poslednje sačuvano.</li>
+            <li>
+              <Ui>Pojedinačni dani</Ui> (odmor, lekar…): izaberite datum, kliknite vremena (ili <Ui>Ceo dan</Ui>), razlog →{' '}
+              <Ui>Blokiraj (N)</Ui>.
+            </li>
+            <li>Ispod je spisak predstojećih blokada po danima; <Ui>✕</Ui> na vremenu je uklanja.</li>
+          </Koraci>
+          <Napomena>
+            Isto ovo svaki predavač vidi kod sebe u meniju <Ui>Kada ne radim</Ui> i može da menja samo svoja vremena. U tim vremenima mu niko
+            ne može zakazati čas: forma (piše „blokiran“), Zakaži više časova (crveno), Dodeli instruktora, Swap, prevlačenje i zahtev
+            učenika – baza to odbije sa porukom.
+          </Napomena>
+        </Sekcija>
+
+        <Sekcija prikazi={prikazi} id="sifarnici" naslov="Vrste časova, kategorije, programi, učionice">
           <SemaSifarnici />
           <Lista>
             <li><M n="A" /> Gore popunite polja i kliknite <Ui>Dodaj</Ui> (za učionice <Ui>Dodaj učionicu</Ui>).</li>
@@ -368,7 +433,7 @@ export default function AdminUputstvoPage() {
           </Lista>
         </Sekcija>
 
-        <Sekcija id="dnevnik" naslov="Dnevnik aktivnosti">
+        <Sekcija prikazi={prikazi} id="dnevnik" naslov="Dnevnik aktivnosti">
           <SemaDnevnik />
           <Koraci>
             <li>Lista ko je šta uradio i kada: zakazivanje, otkazivanje, uplate, izmene uplata, blokade…</li>
@@ -376,7 +441,7 @@ export default function AdminUputstvoPage() {
           </Koraci>
         </Sekcija>
 
-        <Sekcija id="podesavanja" naslov="Podešavanja i bekap">
+        <Sekcija prikazi={prikazi} id="podesavanja" naslov="Podešavanja i bekap">
           <SemaPodesavanja />
           <Koraci>
             <li>
@@ -391,7 +456,7 @@ export default function AdminUputstvoPage() {
           </Koraci>
         </Sekcija>
 
-        <Sekcija id="uloge" naslov="Ko šta sme (uloge)">
+        <Sekcija prikazi={prikazi} id="uloge" naslov="Ko šta sme (uloge)">
           <RoleBlock
             title="Admin"
             badgeClass="bg-amber-600 text-white"
@@ -442,51 +507,6 @@ export default function AdminUputstvoPage() {
       </div>
     </div>
   );
-}
-
-function Sekcija({ id, naslov, children }: { id: string; naslov: string; children: React.ReactNode }) {
-  return (
-    <section id={id} className="scroll-mt-6 rounded-xl border border-stone-200 bg-white shadow-sm overflow-hidden">
-      <div className="px-5 py-3 bg-stone-700 text-white">
-        <h2 className="text-lg font-semibold text-balance">{naslov}</h2>
-      </div>
-      <div className="px-5 py-4 space-y-4">{children}</div>
-    </section>
-  );
-}
-
-function Podnaslov({ children }: { children: React.ReactNode }) {
-  return <h3 className="pt-1 text-sm font-semibold text-stone-900">{children}</h3>;
-}
-
-/** Numerisani koraci – redosled je bitan (klik po klik), brojevi odgovaraju markerima na šemi. */
-function Koraci({ children }: { children: React.ReactNode }) {
-  return (
-    <ol className="list-decimal space-y-2 pl-6 text-sm leading-relaxed text-stone-800 marker:font-bold marker:text-amber-700">
-      {children}
-    </ol>
-  );
-}
-
-function Lista({ children }: { children: React.ReactNode }) {
-  return <ul className="list-disc space-y-1.5 pl-5 text-sm leading-relaxed text-stone-800 marker:text-amber-600">{children}</ul>;
-}
-
-/** Naziv dugmeta/polja tačno kako piše u aplikaciji. */
-function Ui({ children }: { children: React.ReactNode }) {
-  return <span className="box-decoration-clone rounded border border-stone-300 bg-stone-50 px-1 py-px text-[0.92em] font-medium text-stone-900">{children}</span>;
-}
-
-function Crveno({ children }: { children: React.ReactNode }) {
-  return <span className="rounded bg-red-600 px-1 text-xs font-bold text-white">{children}</span>;
-}
-
-function Napomena({ children }: { children: React.ReactNode }) {
-  return <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-stone-800">{children}</p>;
-}
-
-function Upozorenje({ children }: { children: React.ReactNode }) {
-  return <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-900">{children}</p>;
 }
 
 function RoleBlock({

@@ -4,8 +4,10 @@ import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { TIME_SLOTS, AUTO_SPILLOVER_NAPOMENA } from '@/lib/constants';
 import UnblockButton from './UnblockButton';
+import { DANI_U_NEDELJI, mapBlokada, mapNedeljna } from '@/lib/blokade';
 
-type Conflict = { id: string; href: string; label: string };
+/** instructorId: čiji je termin (null = zahtev bez instruktora) – blokada jednog instruktora smeta samo njegovim časovima. */
+type Conflict = { id: string; href: string; label: string; instructorId: string | null };
 
 function formatDate(iso: string): string {
   return new Date(iso + 'T12:00:00').toLocaleDateString('sr-Latn-RS', {
@@ -34,11 +36,13 @@ export default async function AdminBlokiraniPage() {
   if (!isAdmin) redirect('/login');
 
   const admin = createAdminClient();
-  const { data: blocksRaw, error } = await admin
-    .from('blokirani_termini')
-    .select('id, date, slot_index, napomena, created_at')
-    .order('date', { ascending: false })
-    .order('slot_index');
+  // select('*') – radi i pre migracije 048 (tada nema instructor_id = sve blokade su "za sve").
+  const [{ data: blocksRaw, error }, { data: instructorsRaw }, { data: nedeljneRaw }] = await Promise.all([
+    admin.from('blokirani_termini').select('*').order('date', { ascending: false }).order('slot_index'),
+    admin.from('instructors').select('id, ime, prezime').order('ime'),
+    admin.from('instruktor_nedeljne_blokade').select('*'),
+  ]);
+  const imeInstruktora = new Map((instructorsRaw ?? []).map((i) => [i.id as string, `${i.ime ?? ''} ${i.prezime ?? ''}`.trim()]));
 
   if (error) {
     return (
@@ -51,12 +55,21 @@ export default async function AdminBlokiraniPage() {
     );
   }
 
-  const blocks = (blocksRaw ?? []).map((b) => ({
-    id: b.id as string,
-    date: String(b.date).slice(0, 10),
-    slot: b.slot_index as number,
-    napomena: (b.napomena as string | null) ?? null,
+  const blocks = (blocksRaw ?? []).map(mapBlokada).map((b) => ({
+    id: b.id,
+    date: b.date,
+    slot: b.slot_index,
+    napomena: b.napomena,
+    instructorId: b.instructor_id,
   }));
+
+  // Stalne nedeljne blokade, po instruktoru: "Pon 9:00, 9:45 · Uto 16:30…"
+  const nedeljnePoInstruktoru = new Map<string, Map<number, number[]>>();
+  for (const n of (nedeljneRaw ?? []).map(mapNedeljna)) {
+    const dani = nedeljnePoInstruktoru.get(n.instructor_id) ?? new Map<number, number[]>();
+    dani.set(n.dan, [...(dani.get(n.dan) ?? []), n.slot_index].sort((a, b) => a - b));
+    nedeljnePoInstruktoru.set(n.instructor_id, dani);
+  }
   const dates = [...new Set(blocks.map((b) => b.date))];
 
   // Termini i zahtevi koji su ostali u blokiranim slotovima (zakazani pre blokiranja) – treba ih premestiti.
@@ -64,7 +77,7 @@ export default async function AdminBlokiraniPage() {
     ? await Promise.all([
         admin
           .from('terms')
-          .select('id, date, slot_index, napomena, nastavak_of_term_id, instructor:instructors(ime, prezime), classroom:classrooms(naziv), predavanja(client:clients(ime, prezime))')
+          .select('id, date, slot_index, napomena, nastavak_of_term_id, instructor_id, instructor:instructors(ime, prezime), classroom:classrooms(naziv), predavanja(client:clients(ime, prezime))')
           .in('date', dates),
         admin
           .from('zahtevi_za_cas')
@@ -90,6 +103,7 @@ export default async function AdminBlokiraniPage() {
       id: `t-${t.id}`,
       href: `/admin/termin/${t.id}`,
       label: `${instr ? `${instr.ime} ${instr.prezime}` : '—'}${room ? ` (${room.naziv})` : ''}${deca ? ` – ${deca}` : ''}`,
+      instructorId: (t.instructor_id as string | null) ?? null,
     });
   }
   for (const z of zahteviRaw ?? []) {
@@ -99,20 +113,49 @@ export default async function AdminBlokiraniPage() {
       id: `z-${z.id}`,
       href: `/admin/kalendar?view=nedelja&week=${getMonday(date)}&fokus=${date}`,
       label: `Zahtev bez instruktora – ${c ? `${c.ime} ${c.prezime}` : '—'}`,
+      instructorId: null,
     });
   }
 
   const today = new Date().toISOString().slice(0, 10);
-  const needMoving = blocks.filter((b) => b.date >= today && (conflictsByKey.get(`${b.date}|${b.slot}`)?.length ?? 0) > 0);
+  // Blokada za sve smeta svim časovima u slotu; blokada jednog instruktora – samo njegovim.
+  const conflictsFor = (b: (typeof blocks)[number]) =>
+    (conflictsByKey.get(`${b.date}|${b.slot}`) ?? []).filter((c) => b.instructorId === null || c.instructorId === b.instructorId);
+  const needMoving = blocks.filter((b) => b.date >= today && conflictsFor(b).length > 0);
 
   return (
     <div className="max-w-3xl space-y-6">
       <div>
         <h1 className="text-xl font-semibold text-stone-800">Blokirani termini</h1>
         <p className="text-stone-500 text-sm mt-0.5">
-          Blokiraju se na kalendaru dugmetom „Blokiraj termin(e)“. U blokiranom terminu niko ne može da zakaže.
+          Blokiraju se na kalendaru dugmetom „Blokiraj termin(e)“ – za sve instruktore (u tom terminu niko ne može da zakaže) ili samo
+          za jednog. Stalna nedeljna nedostupnost instruktora podešava se na njegovoj stranici (Instruktori → Pregled).
         </p>
       </div>
+
+      {nedeljnePoInstruktoru.size > 0 && (
+        <div className="rounded-xl border border-stone-200 bg-white">
+          <p className="border-b border-stone-100 px-4 py-2.5 text-sm font-semibold text-stone-800">Stalno svake nedelje – instruktori ne rade</p>
+          <ul className="divide-y divide-stone-100">
+            {[...nedeljnePoInstruktoru.entries()].map(([iid, dani]) => (
+              <li key={iid} className="flex flex-wrap items-start justify-between gap-2 px-4 py-2.5 text-sm">
+                <div className="min-w-0">
+                  <p className="font-medium text-stone-800">{imeInstruktora.get(iid) ?? 'Instruktor'}</p>
+                  <p className="text-xs text-stone-600">
+                    {[...dani.entries()]
+                      .sort((a, b) => a[0] - b[0])
+                      .map(([dan, slotovi]) => `${DANI_U_NEDELJI[dan - 1]}: ${slotovi.map((x) => TIME_SLOTS[x]).join(', ')}`)
+                      .join(' · ')}
+                  </p>
+                </div>
+                <Link href={`/admin/view/${iid}`} className="shrink-0 text-amber-700 hover:underline">
+                  Uredi →
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {needMoving.length > 0 && (
         <div className="rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-800">
@@ -125,7 +168,7 @@ export default async function AdminBlokiraniPage() {
           <div className="p-6 text-center text-stone-500">Nema blokiranih termina.</div>
         ) : (
           blocks.map((b) => {
-            const conflicts = conflictsByKey.get(`${b.date}|${b.slot}`) ?? [];
+            const conflicts = conflictsFor(b);
             const past = b.date < today;
             return (
               <div key={b.id} className={`p-4 flex items-start justify-between gap-4${past ? ' opacity-60' : ''}`}>
@@ -133,6 +176,9 @@ export default async function AdminBlokiraniPage() {
                   <p className="font-medium text-stone-800">
                     ⛔ {formatDate(b.date)} · {TIME_SLOTS[b.slot] ?? `slot ${b.slot}`}
                     {past && <span className="ml-2 text-xs font-normal text-stone-500">(prošlo)</span>}
+                  </p>
+                  <p className="text-xs font-medium text-stone-500">
+                    Za: {b.instructorId ? `samo ${imeInstruktora.get(b.instructorId) ?? 'instruktora'}` : 'sve instruktore (ceo termin)'}
                   </p>
                   <p className="text-sm text-stone-600 mt-0.5">{b.napomena || <span className="italic text-stone-400">bez napomene</span>}</p>
                   {conflicts.length > 0 && (

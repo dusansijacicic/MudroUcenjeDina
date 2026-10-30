@@ -12,6 +12,7 @@ import { normalizeClientPol } from '@/lib/client-pol';
 import { logActivity, type Actor } from '@/lib/audit';
 import { getAuthedUser, getIsAdmin } from '@/lib/auth';
 import { beogradIso, danasBeograd, datumBeograd, jeIsoDatum } from '@/lib/datum';
+import { danUNedelji, mapBlokada, sacuvajNedeljneBlokade, upisiBlokade } from '@/lib/blokade';
 
 export async function createInstructorAsAdmin(formData: FormData): Promise<{ error?: string; success?: boolean }> {
   const { supabase, user } = await getAuthedUser();
@@ -85,24 +86,41 @@ export async function createInstructorAsAdmin(formData: FormData): Promise<{ err
   return { success: true };
 }
 
-/** Vraća ID-eve predavača i učionica koji su već zauzeti u datom slotu (date + slot_index), i da li je
- * slot blokiran (blocked = null ako nije; napomena može biti prazna i kad jeste). */
+/** Vraća ID-eve predavača i učionica koji su već zauzeti u datom slotu (date + slot_index), da li je
+ * ceo slot blokiran za sve (blocked = null ako nije; napomena može biti prazna i kad jeste) i koji su
+ * instruktori blokirani samo za sebe u tom slotu (ne mogu se izabrati). */
 export async function getTakenForSlot(
   date: string,
   slotIndex: number
-): Promise<{ takenInstructorIds: string[]; takenClassroomIds: string[]; blocked: { napomena: string | null } | null }> {
+): Promise<{
+  takenInstructorIds: string[];
+  takenClassroomIds: string[];
+  blocked: { napomena: string | null } | null;
+  blockedInstructorIds: string[];
+}> {
   const slot = Math.min(15, Math.max(0, slotIndex));
   const dateStr = date.slice(0, 10);
   const admin = createAdminClient();
-  const [{ data: terms }, { data: block }] = await Promise.all([
+  const [{ data: terms }, { data: blockRows }, { data: nedeljneRows }] = await Promise.all([
     admin.from('terms').select('instructor_id, classroom_id').eq('date', dateStr).eq('slot_index', slot),
-    admin.from('blokirani_termini').select('napomena').eq('date', dateStr).eq('slot_index', slot).maybeSingle(),
+    // select('*') – radi i pre migracije 048 (tada nema instructor_id = sve blokade su "za sve").
+    admin.from('blokirani_termini').select('*').eq('date', dateStr).eq('slot_index', slot),
+    // Stalne nedeljne blokade (048); pre migracije upit vraća grešku → data null → nema ih.
+    admin.from('instruktor_nedeljne_blokade').select('instructor_id').eq('dan', danUNedelji(dateStr)).eq('slot_index', slot),
   ]);
+  const blokade = (blockRows ?? []).map(mapBlokada);
+  const block = blokade.find((b) => b.instructor_id === null) ?? null;
+  const blockedInstructorIds = [
+    ...new Set([
+      ...blokade.filter((b) => b.instructor_id !== null).map((b) => b.instructor_id as string),
+      ...(nedeljneRows ?? []).map((r) => r.instructor_id as string),
+    ]),
+  ];
   const takenInstructorIds = [...new Set((terms ?? []).map((t) => t.instructor_id).filter(Boolean))] as string[];
   const takenClassroomIds = [
     ...new Set((terms ?? []).map((t) => t.classroom_id).filter((id): id is string => id != null)),
   ];
-  return { takenInstructorIds, takenClassroomIds, blocked: block ? { napomena: block.napomena ?? null } : null };
+  return { takenInstructorIds, takenClassroomIds, blocked: block ? { napomena: block.napomena ?? null } : null, blockedInstructorIds };
 }
 
 /** Pravila za slot (datum + vreme): max N termina (iz podešavanja); svaki termin ima JEDINSTVENOG predavača i JEDINSTVENU učionicu u tom slotu. */
@@ -2543,35 +2561,53 @@ export async function deleteOtkazaniTermin(id: string, clientId?: string): Promi
 
 // ── Blokirani termini ────────────────────────────────────────────────────────
 
-export type BlokiranTermin = { id: string; date: string; slot_index: number; napomena: string | null };
+export type { BlokiranTermin } from '@/lib/blokade';
 
-/** Blokira ceo slot (sve učionice/predavače) za svaki izabrani datum+vreme. Već blokiran slot dobija
- * novu napomenu. Termini koji su već zakazani u tim slotovima ostaju – vide se u Admin → Blokirani termini. */
+/** Blokira izabrane datume+vremena: za SVE (instructorId = null – ceo slot, sve učionice/predavači) ili
+ * samo za jednog instruktora (on tada ne može dobiti čas u tom slotu, ostali mogu). Već blokiran slot
+ * dobija novu napomenu. Termini koji su već zakazani ostaju – vide se u Admin → Blokirani termini. */
 export async function blockSlotsAsAdmin(
   slots: { date: string; slotIndex: number }[],
-  napomena: string | null
+  napomena: string | null,
+  instructorId: string | null = null
 ): Promise<{ error?: string }> {
   const { admin, error: authErr, actor } = await requireAdmin();
   if (authErr || !admin) return { error: authErr ?? 'Niste ovlašćeni.' };
   if (slots.length === 0) return {};
   const note = napomena?.trim() || null;
-  const { error } = await admin.from('blokirani_termini').upsert(
-    slots.map((s) => ({
-      date: s.date.slice(0, 10),
-      slot_index: s.slotIndex,
-      napomena: note,
-      created_by: actor?.id ?? null,
-    })),
-    { onConflict: 'date,slot_index' }
-  );
-  if (error) return { error: error.message };
+  const { error } = await upisiBlokade(slots, note, instructorId, actor?.id ?? null);
+  if (error) return { error };
   revalidatePath('/admin/kalendar');
   revalidatePath('/admin/blokirani');
   revalidatePath('/dashboard');
   if (actor) {
-    logActivity(actor, 'slot.block', `Blokirano ${slots.length} termin(a)${note ? ` – ${note}` : ''}.`, {
+    logActivity(actor, 'slot.block', `Blokirano ${slots.length} termin(a)${instructorId ? ' za jednog instruktora' : ''}${note ? ` – ${note}` : ''}.`, {
       entityType: 'blokiran_termin',
-      metadata: { slots, napomena: note },
+      metadata: { slots, napomena: note, instructorId },
+    });
+  }
+  return {};
+}
+
+/** Admin: stalni nedeljni raspored blokada za izabranog instruktora (zamenjuje prethodni). */
+export async function sacuvajNedeljneBlokadeAsAdmin(
+  instructorId: string,
+  polja: { dan: number; slotIndex: number }[],
+  napomena: string | null
+): Promise<{ error?: string }> {
+  const { admin, error: authErr, actor } = await requireAdmin();
+  if (authErr || !admin) return { error: authErr ?? 'Niste ovlašćeni.' };
+  if (!instructorId) return { error: 'Izaberite instruktora.' };
+  const { error } = await sacuvajNedeljneBlokade(instructorId, polja, napomena, actor?.id ?? null);
+  if (error) return { error };
+  revalidatePath('/admin/kalendar');
+  revalidatePath('/admin/blokirani');
+  revalidatePath('/dashboard');
+  if (actor) {
+    logActivity(actor, 'slot.weekly_block', `Izmenjene stalne nedeljne blokade instruktora (${polja.length} vremena).`, {
+      entityType: 'instruktor',
+      entityId: instructorId,
+      metadata: { polja, napomena },
     });
   }
   return {};

@@ -827,3 +827,73 @@ export function SemaPodesavanja() {
     </Ekran>
   );
 }
+
+export function SemaKadaNeRadi() {
+  const dani = ['Pon', 'Uto', 'Sre', 'Čet', 'Pet', 'Sub', 'Ned'];
+  const blok = new Set(['1|0', '1|1', '3|10', '3|11', '5|0', '5|1', '5|10', '5|11']);
+  const redovi: { t: string; slot: number }[] = [
+    { t: '9:00', slot: 0 },
+    { t: '9:45', slot: 1 },
+    { t: '16:30', slot: 10 },
+    { t: '17:15', slot: 11 },
+  ];
+  return (
+    <Ekran naslov="Instruktor – Kada ne radi" sirina="min-w-[560px]">
+      <Kutija className="space-y-1.5">
+        <span className="flex items-center gap-1 font-semibold">
+          <M n={1} /> Svake nedelje (stalno)
+        </span>
+        <div className="grid grid-cols-[44px_repeat(7,minmax(0,1fr))] gap-0.5">
+          <span />
+          {dani.map((d, i) => (
+            <span key={d} className="flex items-center justify-center gap-0.5 rounded bg-stone-100 py-0.5 font-semibold">
+              {i === 5 && <M n={2} />}
+              {d}
+            </span>
+          ))}
+          {redovi.map((r) => [
+            <span key={`t-${r.t}`} className="pr-1 text-right text-stone-500">
+              {r.t}
+            </span>,
+            ...dani.map((d, i) => {
+              const on = blok.has(`${i}|${r.slot}`);
+              return (
+                <span
+                  key={`${r.t}-${d}`}
+                  className={`h-5 rounded border text-center text-[10px] font-bold ${on ? 'border-stone-700 bg-stone-700 text-white' : 'border-stone-200 bg-white'}`}
+                >
+                  {on ? '✕' : ''}
+                </span>
+              );
+            }),
+          ])}
+        </div>
+        <span className="flex items-center gap-1">
+          <M n={3} />
+          <Polje prazno="Razlog (opciono)" />
+          <Dugme ton="tamno">Sačuvaj nedeljni raspored</Dugme>
+        </span>
+      </Kutija>
+      <Kutija className="space-y-1.5">
+        <span className="flex items-center gap-1 font-semibold">
+          <M n={4} /> Pojedinačni dani
+        </span>
+        <span className="flex flex-wrap items-center gap-1">
+          <Polje vrednost="12.11.2026." />
+          <Dugme ton="okvir">Ceo dan</Dugme>
+          <span className="rounded border border-stone-700 bg-stone-700 px-1.5 py-0.5 text-white">9:00</span>
+          <span className="rounded border border-stone-700 bg-stone-700 px-1.5 py-0.5 text-white">9:45</span>
+          <span className="rounded border border-stone-300 bg-white px-1.5 py-0.5">10:30</span>
+          <Dugme ton="tamno">Blokiraj (2)</Dugme>
+        </span>
+        <span className="flex items-center gap-1">
+          <M n={5} />
+          <strong>čet, 12.11.2026.</strong>
+          <span className="rounded bg-stone-700 px-1.5 text-white">9:00 ✕</span>
+          <span className="rounded bg-stone-700 px-1.5 text-white">9:45 ✕</span>
+          <span className="text-stone-500">– lekar</span>
+        </span>
+      </Kutija>
+    </Ekran>
+  );
+}

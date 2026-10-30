@@ -7,6 +7,23 @@ import { createClient } from '@/lib/supabase/client';
 import { useRouter } from 'next/navigation';
 import type { Instructor } from '@/types/database';
 
+/** Deo predavačkog uputstva (?deo=…) za stranicu na kojoj je predavač – prvi prefiks koji odgovara. */
+const UPUTSTVO_ZA_STRANICU: [string, string][] = [
+  ['/dashboard/zahtevi', 'zahtevi'],
+  ['/dashboard/klijenti', 'klijenti'],
+  ['/dashboard/uplate', 'uplate'],
+  ['/dashboard/blokade', 'kada-ne-radim'],
+  ['/dashboard/podesavanja', 'podesavanja'],
+  ['/dashboard/termin', 'termin'],
+  ['/dashboard/predavanje', 'termin'],
+];
+
+function uputstvoHref(pathname: string): string {
+  if (pathname.startsWith('/dashboard/uputstvo')) return '/dashboard/uputstvo';
+  const deo = UPUTSTVO_ZA_STRANICU.find(([prefiks]) => pathname.startsWith(prefiks))?.[1] ?? 'kalendar';
+  return `/dashboard/uputstvo?deo=${deo}`;
+}
+
 export default function DashboardNav({ instructor, isAdminView }: { instructor: Instructor; isAdminView?: boolean }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -21,8 +38,10 @@ export default function DashboardNav({ instructor, isAdminView }: { instructor: 
 
   const nav = [
     { href: '/dashboard', label: 'Kalendar' },
+    { href: '/dashboard/zahtevi', label: 'Zahtevi' },
     { href: '/dashboard/klijenti', label: 'Klijenti' },
     { href: '/dashboard/uplate', label: 'Uplate' },
+    { href: '/dashboard/blokade', label: 'Kada ne radim' },
     { href: '/dashboard/podesavanja', label: 'Podešavanja' },
   ];
 
@@ -68,7 +87,16 @@ export default function DashboardNav({ instructor, isAdminView }: { instructor: 
           </button>
         </div>
         <div className="flex items-center gap-2 md:gap-3 shrink-0">
-          <span className="text-sm text-stone-500 truncate max-w-[120px] md:max-w-none">
+          <Link
+            href={uputstvoHref(pathname)}
+            title="Uputstvo za ovu stranicu"
+            className={`rounded-lg px-3 py-2 text-sm font-semibold min-h-[44px] flex items-center ui-transition ${
+              pathname.startsWith('/dashboard/uputstvo') ? 'bg-amber-500 text-white' : 'bg-sky-100 text-sky-900 hover:bg-sky-200'
+            }`}
+          >
+            ❓ Uputstvo
+          </Link>
+          <span className="hidden sm:inline text-sm text-stone-500 truncate max-w-[120px] md:max-w-none">
             {instructor.ime} {instructor.prezime}
           </span>
           <Link

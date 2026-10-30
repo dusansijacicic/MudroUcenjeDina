@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getDashboardInstructor } from '@/lib/dashboard';
 import { getOdrzanoPoVrstamaZaPredavaca } from '@/app/admin/actions';
+import { mapBlokada, mapNedeljna, nedeljneUDatume } from '@/lib/blokade';
 import CalendarView from './CalendarView';
 import AddTermButton from './AddTermButton';
 import CalendarFilters from './CalendarFilters';
@@ -111,18 +112,24 @@ export default async function DashboardPage({
     classroomsRaw = (classRes.data ?? []);
   }
 
-  // Blokirani termini (Admin → Blokiraj termin(e)) – čitaju se sa korisnikovim klijentom (RLS dozvoljava
-  // svim ulogovanima). Ako migracija 044 nije pokrenuta, data je null → nema blokiranih.
-  const { data: blockedRaw } = await (await createClient())
-    .from('blokirani_termini')
-    .select('date, slot_index, napomena')
-    .gte('date', dateFrom)
-    .lte('date', dateTo);
-  const blockedSlots = (blockedRaw ?? []).map((b) => ({
-    date: String(b.date).slice(0, 10),
-    slot_index: b.slot_index as number,
-    napomena: (b.napomena as string | null) ?? null,
-  }));
+  // Blokade – čitaju se sa korisnikovim klijentom (RLS dozvoljava svim ulogovanima). Predavač vidi
+  // blokade za SVE i SVOJE (za datum i stalne nedeljne) – tuđe blokade instruktora ga se ne tiču.
+  // select('*') radi i pre migracije 048; bez 044/048 data je null → nema blokada.
+  const userSupabase = await createClient();
+  const [{ data: blockedRaw }, { data: nedeljneRaw }] = await Promise.all([
+    userSupabase.from('blokirani_termini').select('*').gte('date', dateFrom).lte('date', dateTo),
+    userSupabase.from('instruktor_nedeljne_blokade').select('*').eq('instructor_id', instructorId),
+  ]);
+  const blockedSlots = [
+    ...(blockedRaw ?? []).map(mapBlokada),
+    ...nedeljneUDatume((nedeljneRaw ?? []).map(mapNedeljna), dateFrom, dateTo),
+  ]
+    .filter((b) => b.instructor_id === null || b.instructor_id === instructorId)
+    .map((b) => ({
+      date: b.date,
+      slot_index: b.slot_index,
+      napomena: b.instructor_id ? `Vi ne radite${b.nedeljna ? ' (svake nedelje)' : ''}${b.napomena ? ` – ${b.napomena}` : ''}` : b.napomena,
+    }));
 
   const allTerms = (allTermsRaw ?? []) as TermRow[];
   const normOne = (t: TermRow) => ({

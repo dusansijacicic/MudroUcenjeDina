@@ -9,7 +9,7 @@ export default function AdminViewNav({ instructor }: { instructor: Instructor })
   const base = `/admin/view/${instructor.id}`;
 
   const nav = [
-    { href: base, label: 'Kalendar' },
+    { href: base, label: 'Pregled i kada ne radi' },
     { href: `${base}/klijenti`, label: 'Klijenti' },
   ];
 

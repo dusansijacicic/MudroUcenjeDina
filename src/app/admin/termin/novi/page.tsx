@@ -51,7 +51,7 @@ export default async function AdminTerminNoviPage({
   const defaultDate = dateFromUrl ?? tomorrow.toISOString().slice(0, 10);
   const defaultSlot = slotFromUrl ?? 0;
 
-  const [{ takenInstructorIds, takenClassroomIds, blocked }, maxTerminaPoSlotu] = await Promise.all([
+  const [{ takenInstructorIds, takenClassroomIds, blocked, blockedInstructorIds }, maxTerminaPoSlotu] = await Promise.all([
     getTakenForSlot(defaultDate, defaultSlot),
     getMaxTerminaPoSlotu(),
   ]);
@@ -75,6 +75,7 @@ export default async function AdminTerminNoviPage({
         defaultSlotIndex={defaultSlot}
         slotLabels={TIME_SLOTS}
         initialTakenInstructorIds={takenInstructorIds}
+        initialBlockedInstructorIds={blockedInstructorIds}
         initialTakenClassroomIds={takenClassroomIds}
         initialBlocked={blocked}
         maxTerminaPoSlotu={maxTerminaPoSlotu}

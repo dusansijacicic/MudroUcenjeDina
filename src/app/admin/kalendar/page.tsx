@@ -7,6 +7,7 @@ import AdminCalendarFilters from './AdminCalendarFilters';
 import AdminFromDashboardToast from '@/components/AdminFromDashboardToast';
 import { getMaxTerminaPoSlotu } from '@/lib/settings';
 import { getTermTypes, getTermCategories } from '@/app/admin/actions';
+import { mapBlokada, mapNedeljna, nedeljneUDatume, type BlokiranTermin } from '@/lib/blokade';
 
 export default async function AdminKalendarPage({
   searchParams,
@@ -75,6 +76,7 @@ export default async function AdminKalendarPage({
     { data: allPendingZahteviRaw },
     { data: blockedRaw },
     { data: redniRaw },
+    { data: nedeljneRaw },
   ] = await Promise.all([
     adminSupabase
       .from('terms')
@@ -101,17 +103,19 @@ export default async function AdminKalendarPage({
     // (ne odvojen await posle) da ne doda dodatan sekvencijalni round-trip.
     adminSupabase.from('zahtevi_za_cas').select('requested_date').eq('status', 'pending').order('requested_date'),
     // Ako migracija 044 još nije pokrenuta, upit vraća grešku → data je null → nema blokiranih.
-    adminSupabase.from('blokirani_termini').select('id, date, slot_index, napomena').gte('date', dateFrom).lte('date', dateTo),
+    // select('*'): radi i pre migracije 048 (tada nema instructor_id → sve blokade su "za sve").
+    adminSupabase.from('blokirani_termini').select('*').gte('date', dateFrom).lte('date', dateTo),
     // "x / y" uz svako dete (koji je čas po redu od plaćenih) – baza računa; bez migracije 047 nema oznaka.
     adminSupabase.rpc('redni_broj_casova', { p_from: dateFrom, p_to: dateTo }),
+    // Stalne nedeljne blokade instruktora (048) – pre migracije greška → null → nema ih.
+    adminSupabase.from('instruktor_nedeljne_blokade').select('*'),
   ]);
   const redniPoPredavanju = (redniRaw ?? {}) as Record<string, [number, number]>;
-  const blockedSlots = (blockedRaw ?? []).map((b) => ({
-    id: b.id as string,
-    date: String(b.date).slice(0, 10),
-    slot_index: b.slot_index as number,
-    napomena: (b.napomena as string | null) ?? null,
-  }));
+  const imeInstruktora = new Map((instructorsList ?? []).map((i) => [i.id, `${i.ime ?? ''} ${i.prezime ?? ''}`.trim()]));
+  const blockedSlots: BlokiranTermin[] = [
+    ...(blockedRaw ?? []).map(mapBlokada),
+    ...nedeljneUDatume((nedeljneRaw ?? []).map(mapNedeljna), dateFrom, dateTo),
+  ].map((b) => ({ ...b, instructor_naziv: b.instructor_id ? (imeInstruktora.get(b.instructor_id) ?? null) : null }));
   const allPendingZahteviDates = [...new Set((allPendingZahteviRaw ?? []).map((z) => String(z.requested_date).slice(0, 10)))];
 
   let terms: AdminTerm[] = (termsRaw ?? []).map((t) => {

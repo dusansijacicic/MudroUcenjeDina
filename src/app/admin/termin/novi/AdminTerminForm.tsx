@@ -34,6 +34,7 @@ export default function AdminTerminForm({
   defaultSlotIndex = 0,
   slotLabels,
   initialTakenInstructorIds = [],
+  initialBlockedInstructorIds = [],
   initialTakenClassroomIds = [],
   maxTerminaPoSlotu = 4,
   initialCategoryIsTesting = false,
@@ -49,6 +50,8 @@ export default function AdminTerminForm({
   defaultSlotIndex?: number;
   slotLabels: readonly string[];
   initialTakenInstructorIds?: string[];
+  /** Instruktori blokirani samo za sebe u ovom slotu (za datum ili stalna nedeljna blokada). */
+  initialBlockedInstructorIds?: string[];
   initialTakenClassroomIds?: string[];
   maxTerminaPoSlotu?: number;
   /** Ako je true, default kategorija je "Testiranje" (prečica sa prazne ćelije kalendara). */
@@ -62,6 +65,7 @@ export default function AdminTerminForm({
   const [date, setDate] = useState(defaultDate);
   const [slotIndex, setSlotIndex] = useState(defaultSlotIndex);
   const [takenInstructorIds, setTakenInstructorIds] = useState<string[]>(initialTakenInstructorIds);
+  const [blockedInstructorIds, setBlockedInstructorIds] = useState<string[]>(initialBlockedInstructorIds);
   const [takenClassroomIds, setTakenClassroomIds] = useState<string[]>(initialTakenClassroomIds);
   const [blocked, setBlocked] = useState<{ napomena: string | null } | null>(initialBlocked);
   const [loading, setLoading] = useState(false);
@@ -109,11 +113,12 @@ export default function AdminTerminForm({
 
   useEffect(() => {
     let cancelled = false;
-    getTakenForSlot(date, slotIndex).then(({ takenInstructorIds: ti, takenClassroomIds: tc, blocked: b }) => {
+    getTakenForSlot(date, slotIndex).then(({ takenInstructorIds: ti, takenClassroomIds: tc, blocked: b, blockedInstructorIds: bi }) => {
       if (!cancelled) {
         setTakenInstructorIds(ti);
         setTakenClassroomIds(tc);
         setBlocked(b);
+        setBlockedInstructorIds(bi);
       }
     });
     return () => { cancelled = true; };
@@ -148,7 +153,9 @@ export default function AdminTerminForm({
   const nastavakClassroomBusy = isNastavakCat && !!selectedParentTerm && takenClassroomIds.includes(selectedParentTerm.classroom_id ?? '');
 
   const slotFull = takenInstructorIds.length >= maxTerminaPoSlotu;
-  const cannotSubmit = !!blocked || slotFull || nastavakInstructorBusy || nastavakClassroomBusy;
+  // Izabrani (ili iz roditeljskog termina preuzeti) instruktor ne radi u to vreme – blokada za datum ili stalna nedeljna.
+  const instructorBlocked = !!instructorId && blockedInstructorIds.includes(instructorId);
+  const cannotSubmit = !!blocked || slotFull || nastavakInstructorBusy || nastavakClassroomBusy || instructorBlocked;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -301,6 +308,11 @@ export default function AdminTerminForm({
         <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-800">
           <p className="font-medium">Maksimalan broj termina u ovom slotu je dostignut ({maxTerminaPoSlotu}).</p>
           <p className="mt-0.5 text-amber-700">Promenite datum ili vreme, ili povećajte limit u Admin → Podešavanja.</p>
+        </div>
+      )}
+      {instructorBlocked && (
+        <div className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800">
+          Izabrani instruktor je blokiran u ovo vreme (ne radi tada). Izaberite drugog instruktora, drugo vreme, ili „Bez instruktora“.
         </div>
       )}
       {(nastavakInstructorBusy || nastavakClassroomBusy) && (
@@ -501,8 +513,9 @@ export default function AdminTerminForm({
                 >
                   <option value="">Bez instruktora</option>
                   {instructors.map((i) => (
-                    <option key={i.id} value={i.id} disabled={takenInstructorIds.includes(i.id)}>
-                      {i.ime} {i.prezime}{takenInstructorIds.includes(i.id) ? ' (zauzeto)' : ''}
+                    <option key={i.id} value={i.id} disabled={takenInstructorIds.includes(i.id) || blockedInstructorIds.includes(i.id)}>
+                      {i.ime} {i.prezime}
+                      {takenInstructorIds.includes(i.id) ? ' (zauzeto)' : blockedInstructorIds.includes(i.id) ? ' (blokiran – ne radi tada)' : ''}
                     </option>
                   ))}
                 </select>

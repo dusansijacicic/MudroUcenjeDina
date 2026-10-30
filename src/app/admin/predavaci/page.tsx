@@ -33,7 +33,7 @@ export default async function AdminPredavaciPage() {
         <div>
           <h1 className="text-xl font-semibold text-stone-800">Instruktori</h1>
           <p className="text-stone-500 text-sm mt-0.5">
-            Klik na instruktora otvara pregled: kalendar i klijente.
+            „Pregled →“ otvara stranicu instruktora: kada ne radi (stalno svake nedelje i pojedinačni dani), sledeći časovi i klijenti.
           </p>
         </div>
         <Link
