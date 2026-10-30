@@ -38,6 +38,8 @@ export default function BlokadeInstruktora({
   const sacuvano = useMemo(() => new Set(nedeljne.map((n) => kljuc(n.dan, n.slot_index))), [nedeljne]);
   const [izbor, setIzbor] = useState<Set<string>>(() => new Set(sacuvano));
   const [razlogNedelja, setRazlogNedelja] = useState('');
+  // Zasenčen dan (kolona) i vreme (red) ispod miša – da se lako vidi koje polje se klikće.
+  const [hover, setHover] = useState<{ dan: number; slot: number | null } | null>(null);
   const izmenjeno = izbor.size !== sacuvano.size || [...izbor].some((k) => !sacuvano.has(k));
 
   const [danas] = useState(danasBeograd);
@@ -137,7 +139,7 @@ export default function BlokadeInstruktora({
           </p>
         </div>
         <div className="overflow-x-auto rounded-xl border border-stone-200">
-          <table className="w-full min-w-[520px] border-collapse text-xs">
+          <table className="w-full min-w-[520px] border-collapse text-xs" onMouseLeave={() => setHover(null)}>
             <thead>
               <tr className="bg-stone-50">
                 <th className="w-14 p-1.5" />
@@ -146,7 +148,11 @@ export default function BlokadeInstruktora({
                     <button
                       type="button"
                       onClick={() => toggleDan(i + 1)}
-                      className="w-full rounded-md px-1 py-1 font-semibold text-stone-700 hover:bg-stone-200"
+                      onMouseEnter={() => setHover({ dan: i + 1, slot: null })}
+                      onFocus={() => setHover({ dan: i + 1, slot: null })}
+                      className={`w-full rounded-md px-1 py-1 font-semibold transition-colors ${
+                        hover?.dan === i + 1 ? 'bg-violet-100 text-violet-800' : 'text-stone-700'
+                      }`}
                       title="Označi/skini ceo dan"
                     >
                       {d}
@@ -158,20 +164,37 @@ export default function BlokadeInstruktora({
             <tbody>
               {TIME_SLOTS.map((t, slot) => (
                 <tr key={t} className="border-t border-stone-100">
-                  <td className="p-1 text-right font-medium tabular-nums text-stone-500">{t}</td>
+                  <td
+                    className={`p-1 text-right tabular-nums transition-colors ${
+                      hover?.slot === slot ? 'bg-violet-100 font-bold text-violet-800' : 'font-medium text-stone-500'
+                    }`}
+                  >
+                    {t}
+                  </td>
                   {DANI.map((d, i) => {
                     const on = izbor.has(kljuc(i + 1, slot));
+                    const uKoloni = hover?.dan === i + 1;
+                    const uRedu = hover?.slot === slot;
+                    const ovde = uKoloni && uRedu;
                     return (
-                      <td key={d} className="p-0.5">
+                      <td key={d} className={`p-0.5 transition-colors ${uKoloni || uRedu ? 'bg-violet-50' : ''}`}>
                         <button
                           type="button"
                           aria-pressed={on}
                           aria-label={`${d} ${t} – ${on ? 'ne radi' : 'radi'}`}
                           onClick={() => toggle(i + 1, slot)}
+                          onMouseEnter={() => setHover({ dan: i + 1, slot })}
+                          onFocus={() => setHover({ dan: i + 1, slot })}
                           className={`h-7 w-full rounded-md border text-[11px] font-semibold transition-colors ${
                             on
-                              ? 'border-stone-700 bg-stone-700 text-white'
-                              : 'border-stone-200 bg-white text-transparent hover:border-stone-400 hover:bg-stone-100 hover:text-stone-400'
+                              ? ovde
+                                ? 'border-stone-800 bg-stone-600 text-white ring-2 ring-violet-300'
+                                : 'border-stone-700 bg-stone-700 text-white'
+                              : ovde
+                                ? 'border-violet-400 bg-violet-100 text-violet-400'
+                                : uKoloni || uRedu
+                                  ? 'border-violet-200 bg-violet-50 text-transparent'
+                                  : 'border-stone-200 bg-white text-transparent'
                           }`}
                         >
                           ✕
