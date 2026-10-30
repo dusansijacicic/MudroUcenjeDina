@@ -411,9 +411,9 @@ function scrollToCell(d: string, slot: number): boolean {
   const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   cell.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'center', inline: 'center' });
   if (!reduceMotion) {
-    const on = { boxShadow: 'inset 0 0 0 4px #7e22ce', backgroundColor: 'rgb(147 51 234 / 0.28)' };
+    const on = { boxShadow: 'inset 0 0 0 3px rgb(126 34 206 / 0.6)', backgroundColor: 'rgb(147 51 234 / 0.16)' };
     cell.animate(
-      [on, { ...on, offset: 0.6 }, { boxShadow: 'inset 0 0 0 4px rgb(126 34 206 / 0)', backgroundColor: 'rgb(147 51 234 / 0)' }],
+      [on, { ...on, offset: 0.6 }, { boxShadow: 'inset 0 0 0 3px rgb(126 34 206 / 0)', backgroundColor: 'rgb(147 51 234 / 0)' }],
       { duration: 3000, delay: 350, easing: 'ease-out' }
     );
   }
@@ -1920,44 +1920,6 @@ function AdminCellContent({
 
   const rowOffsets = childRowOffsets(termsInSlot);
 
-  if (swap.bulkMode && blocked) {
-    return (
-      <div className="space-y-1.5 min-h-[52px] cursor-not-allowed">
-        {BlockedBadge}
-        {termsInSlot.map((term, ti) => <TermCardVisual key={term.id} term={term} rowOffset={rowOffsets[ti]} />)}
-      </div>
-    );
-  }
-
-  if (swap.bulkMode) {
-    const bulkSelected = swap.isBulkSelected(emptyDate, emptySlot);
-    return (
-      <div
-        role="button"
-        tabIndex={0}
-        onClick={() => swap.onToggleBulkSlot(emptyDate, emptySlot)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            swap.onToggleBulkSlot(emptyDate, emptySlot);
-          }
-        }}
-        className={`w-full min-h-[52px] rounded-lg border-2 p-2 text-left text-xs transition-colors cursor-pointer space-y-1.5 ${
-          bulkSelected
-            ? 'border-emerald-600 bg-emerald-50 ring-2 ring-offset-1 ring-emerald-500'
-            : 'border-dashed border-stone-200 hover:border-emerald-400 hover:bg-emerald-50/50'
-        }`}
-      >
-        {slotCount === 0 ? (
-          <span className="block text-stone-400">prazno</span>
-        ) : (
-          termsInSlot.map((term, ti) => <TermCardVisual key={term.id} term={term} rowOffset={rowOffsets[ti]} />)
-        )}
-        {bulkSelected && <span className="block font-semibold text-emerald-700 mt-0.5">✓ izabrano</span>}
-      </div>
-    );
-  }
-
   const CancelledEntries = otkazaniInSlot.length > 0 ? (
     <div className="mt-1 space-y-1">
       {otkazaniInSlot.map((ot) => {
@@ -2047,6 +2009,52 @@ function AdminCellContent({
       })}
     </div>
   ) : null;
+
+  if (swap.bulkMode && blocked) {
+    return (
+      <div className="space-y-1.5 min-h-[52px] cursor-not-allowed">
+        {BlockedBadge}
+        {termsInSlot.map((term, ti) => <TermCardVisual key={term.id} term={term} rowOffset={rowOffsets[ti]} />)}
+        {PendingZahteviEntries}
+      </div>
+    );
+  }
+
+  if (swap.bulkMode) {
+    const bulkSelected = swap.isBulkSelected(emptyDate, emptySlot);
+    // Postojeći časovi se vide, a ispod njih UVEK ostaje prazan deo za izbor – da se vidi da u tom
+    // vremenu ima mesta i za još jedno dete (paralelan termin ili zahtev bez instruktora).
+    return (
+      <div
+        role="button"
+        tabIndex={0}
+        aria-pressed={bulkSelected}
+        onClick={() => swap.onToggleBulkSlot(emptyDate, emptySlot)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            swap.onToggleBulkSlot(emptyDate, emptySlot);
+          }
+        }}
+        className="group w-full min-h-[52px] cursor-pointer space-y-1.5 text-left text-xs"
+      >
+        {termsInSlot.map((term, ti) => <TermCardVisual key={term.id} term={term} rowOffset={rowOffsets[ti]} />)}
+        {PendingZahteviEntries}
+        <div
+          className={`rounded-lg border-2 p-2 text-center transition-colors ${slotCount === 0 && pendingZahteviInSlot.length === 0 ? 'min-h-[52px]' : ''} ${
+            bulkSelected
+              ? 'border-emerald-600 bg-emerald-50 font-semibold text-emerald-700 ring-2 ring-offset-1 ring-emerald-500'
+              : 'border-dashed border-stone-300 text-stone-400 group-hover:border-emerald-400 group-hover:bg-emerald-50/50 group-hover:text-emerald-700'
+          }`}
+        >
+          {bulkSelected ? '✓ izabrano' : slotCount === 0 ? 'prazno – klikni za izbor' : '+ još jedno dete u ovo vreme'}
+          {!bulkSelected && slotCount >= maxTerminaPoSlotu && (
+            <span className="block text-[10px] text-stone-400">pun slot – samo bez instruktora</span>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   if (swap.blockMode) {
     const blockSelected = swap.isBlockSelected(emptyDate, emptySlot);
@@ -2412,12 +2420,13 @@ function GridHoverHighlight({ containerRef }: { containerRef: React.RefObject<HT
   const g = '[data-hover-grid]';
   const { date, slot } = hover;
   return (
-    // Jaka ljubičasta – nema je među bojama redova dece (žuta, plava, zelena, roze, tirkizna, narandžasta).
+    // Blaga ljubičasta (providna) – nema je među bojama redova dece (žuta, plava, zelena, roze,
+    // tirkizna, narandžasta), a ne prekriva ih jako. Zaglavlje dana i vreme: svetla pozadina, tamna slova.
     <style>{`
-      ${g} td[data-date="${date}"], ${g} tr[data-row="${slot}"] > td { background-color: rgb(147 51 234 / 0.22); }
-      ${g} th[data-date="${date}"], ${g} th[data-date="${date}"] * { background-color: #6b21a8; color: #ffffff; }
-      ${g} td[data-slot-label="${slot}"] { background-color: #6b21a8; color: #ffffff; font-weight: 700; }
-      ${g} td[data-date="${date}"][data-slot="${slot}"] { box-shadow: inset 0 0 0 3px #7e22ce; }
+      ${g} td[data-date="${date}"], ${g} tr[data-row="${slot}"] > td { background-color: rgb(147 51 234 / 0.08); }
+      ${g} th[data-date="${date}"], ${g} th[data-date="${date}"] * { background-color: rgb(237 233 254); color: #5b21b6; }
+      ${g} td[data-slot-label="${slot}"] { background-color: rgb(237 233 254); color: #5b21b6; font-weight: 700; }
+      ${g} td[data-date="${date}"][data-slot="${slot}"] { box-shadow: inset 0 0 0 2px rgb(126 34 206 / 0.35); }
     `}</style>
   );
 }

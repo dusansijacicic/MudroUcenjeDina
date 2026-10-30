@@ -196,7 +196,7 @@ export function SemaKalendar() {
         <div className="grid grid-cols-[52px_repeat(4,minmax(0,1fr))] border-b border-stone-200 bg-stone-50 text-center font-medium text-stone-600">
           <span className="p-1" />
           {dani.map((d, i) => (
-            <span key={d} className={`p-1 ${i === 2 ? 'bg-purple-800 text-white' : ''}`}>{d}</span>
+            <span key={d} className={`p-1 ${i === 2 ? 'bg-violet-100 text-violet-800' : ''}`}>{d}</span>
           ))}
         </div>
         {[
@@ -204,15 +204,15 @@ export function SemaKalendar() {
           { t: '17:15', hover: true },
         ].map((row) => (
           <div key={row.t} className="grid grid-cols-[52px_repeat(4,minmax(0,1fr))] border-b border-stone-100">
-            <span className={`p-1 font-medium ${row.hover ? 'bg-purple-800 text-white' : 'text-stone-500'}`}>{row.t}</span>
+            <span className={`p-1 font-medium ${row.hover ? 'bg-violet-100 font-bold text-violet-800' : 'text-stone-500'}`}>{row.t}</span>
             {dani.map((d, i) => {
               const hoverCell = row.hover || i === 2;
               const fokus = row.hover && i === 2;
               return (
                 <div
                   key={d}
-                  className={`min-h-[44px] p-1 ${hoverCell ? 'bg-purple-600/20' : ''}`}
-                  style={fokus ? { boxShadow: 'inset 0 0 0 2px #7e22ce' } : undefined}
+                  className={`min-h-[44px] p-1 ${hoverCell ? 'bg-purple-600/[0.08]' : ''}`}
+                  style={fokus ? { boxShadow: 'inset 0 0 0 2px rgb(126 34 206 / 0.35)' } : undefined}
                 >
                   {row.t === '16:30' && i === 0 && (
                     <Kartica instruktor="Dina M." boja="#f97316" vrsta="Matematika" ucionica="U1" deca={[{ ime: 'Ana P.', red: 'zuta', xy: '7/10 · još 3' }]} />
