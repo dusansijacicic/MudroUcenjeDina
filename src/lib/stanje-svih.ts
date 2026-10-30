@@ -1,8 +1,8 @@
 import { createAdminClient } from '@/lib/supabase/admin';
-import { buildStanjeFromMaps, type StanjeVrstaRow } from '@/lib/stanje';
+import { buildStanjeFromMaps, buildStanjeIzPlacanja, type StanjePlacanjaTuple, type StanjeVrstaRow } from '@/lib/stanje';
 import { isTermInPast } from '@/lib/constants';
 
-/** [client_id, term_type_id, uplaceno, odrzano] – red iz baze funkcije stanje_svih_klijenata (migracija 046). */
+/** [client_id, term_type_id, uplaceno, odrzano] – red iz baze funkcije stanje_svih_klijenata pre migracije 049. */
 type StanjeTuple = [string, string | null, number, number];
 
 type Admin = ReturnType<typeof createAdminClient>;
@@ -71,6 +71,10 @@ export async function getStanjeSvihKlijenata(): Promise<Map<string, StanjeVrstaR
     admin.rpc('stanje_svih_klijenata'),
     admin.from('term_types').select('id, naziv').order('naziv'),
   ]);
+  // Posle 049 funkcija vraća stanje po paketima (6 polja po redu).
+  if (!stanjeRpc.error && Array.isArray(stanjeRpc.data) && (stanjeRpc.data.length === 0 || (stanjeRpc.data[0] as unknown[]).length >= 6)) {
+    return buildStanjeIzPlacanja(stanjeRpc.data as StanjePlacanjaTuple[], termTypes ?? []);
+  }
   let upl: Map<string, Map<string, number>>;
   let odr: Map<string, Map<string, number>>;
   if (!stanjeRpc.error && Array.isArray(stanjeRpc.data)) {
@@ -92,4 +96,22 @@ export async function getStanjeSvihKlijenata(): Promise<Map<string, StanjeVrstaR
   return new Map(
     [...ids].map((cid) => [cid, buildStanjeFromMaps(upl.get(cid) ?? new Map(), odr.get(cid) ?? new Map(), termTypes ?? [])])
   );
+}
+
+/**
+ * Stanje po paketima (migracija 049) za izabrane klijente. null ako migracija još nije pokrenuta –
+ * pozivalac tada koristi stari obračun.
+ */
+export async function getStanjePlacanja(clientIds: string[]): Promise<Map<string, StanjeVrstaRow[]> | null> {
+  const ids = [...new Set(clientIds)];
+  if (ids.length === 0) return new Map();
+  const admin = createAdminClient();
+  const [rpc, { data: termTypes }] = await Promise.all([
+    admin.rpc('stanje_placanja', { p_klijenti: ids }),
+    admin.from('term_types').select('id, naziv').order('naziv'),
+  ]);
+  if (rpc.error || !Array.isArray(rpc.data)) return null;
+  const out = buildStanjeIzPlacanja(rpc.data as StanjePlacanjaTuple[], termTypes ?? []);
+  for (const id of ids) if (!out.has(id)) out.set(id, []);
+  return out;
 }

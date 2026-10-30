@@ -247,13 +247,13 @@ export function SemaKartica() {
           ucionica="U2"
           oznaka={null}
           deca={[
-            { ime: 'Marko Jović', red: 'zuta', xy: '7/10 · još 3' },
-            { ime: 'Ana Petrović', red: 'plava', xy: '10/10 · poslednji' },
-            { ime: 'Luka Ilić', red: 'neplaceno', xy: '! 11/10' },
+            { ime: 'Marko Jović', red: 'zuta', xy: '3/6 · još 3' },
+            { ime: 'Ana Petrović', red: 'plava', xy: '6/6 · poslednji' },
+            { ime: 'Luka Ilić', red: 'neplaceno', xy: '! nije plaćeno' },
           ]}
         />
         <div className="flex flex-wrap items-center gap-1 text-stone-600">
-          <M n="D" /> svako dete u svom redu (žuta, plava…) <M n="E" /> x/y · još N <M n="F" /> crveni red = nije plaćeno
+          <M n="D" /> svako dete u svom redu (žuta, plava…) <M n="E" /> x/6 · još N (ako je označeno plaćeno) <M n="F" /> crveni red = nije plaćeno
         </div>
         <div className="flex items-center gap-1">
           <M n="G" />
@@ -321,7 +321,7 @@ export function SemaFilter() {
 
 export function SemaModovi() {
   return (
-    <Ekran naslov="Kalendar – mod Swap (isto važi za Copy, Delete, Zakaži više časova, Dodeli)" sirina="min-w-[700px]">
+    <Ekran naslov="Kalendar – mod Swap (isto važi za Copy, Delete, Zakaži više časova, Dodeli, Označi plaćeno)" sirina="min-w-[700px]">
       <Kutija className="flex flex-wrap items-center gap-1.5">
         <M n={1} />
         <Dugme ton="amber">Swap: uključen</Dugme>
@@ -497,20 +497,20 @@ export function SemaKlijenti() {
           <Polje prazno="Pretraga po imenu, prezimenu, školi ili telefonu…" />
         </span>
         <span className="flex items-center gap-1">
-          <M n={5} />
+          <M n={4} />
           <Dugme ton="amber">+ Novi klijent</Dugme>
         </span>
       </div>
       <div className="overflow-hidden rounded-lg border border-stone-200 bg-white">
         <div className="grid grid-cols-[1.2fr_2.4fr_0.8fr] gap-2 border-b border-stone-200 bg-stone-50 p-1.5 font-medium text-stone-600">
           <span>Ime i prezime</span>
-          <span>Održano do danas / kupljeno / preostalo, po vrsti časa</span>
+          <span>Održano do danas, po vrsti časa (plaćeno – od oznake na kalendaru)</span>
           <span>Akcija</span>
         </div>
         <div className="grid grid-cols-[1.2fr_2.4fr_0.8fr] items-start gap-2 p-1.5">
           <span>
             <span className="flex items-center gap-1">
-              <M n={4} />
+              <M n={3} />
               <span className="font-medium underline">Luka Ilić</span>
             </span>
             <span className="block font-medium text-amber-700">Profil, uplate i održani časovi →</span>
@@ -518,13 +518,11 @@ export function SemaKlijenti() {
           <span className="space-y-0.5">
             <span className="flex flex-wrap items-center gap-1">
               <M n={2} />
-              <strong>Matematika:</strong> održano <strong>12</strong> · kupljeno 10 ·
+              <strong>Matematika:</strong> održano <strong>12</strong> · plaćeno 6 ·
               <span className="rounded bg-red-100 px-1 font-semibold text-red-700">nije plaćeno 2</span>
-              <M n={3} />
-              <span className="rounded border border-emerald-300 bg-emerald-50 px-1 font-semibold text-emerald-800">✓ Označi kao plaćeno</span>
             </span>
             <span className="block pl-6">
-              <strong>Srpski:</strong> održano <strong>3</strong> · kupljeno 8 · <span className="font-medium text-amber-700">preostalo 5</span>
+              <strong>Srpski:</strong> održano <strong>3</strong> · plaćeno 6 · <span className="font-medium text-amber-700">preostalo 3</span>
             </span>
           </span>
           <span className="text-amber-600">Izmeni</span>

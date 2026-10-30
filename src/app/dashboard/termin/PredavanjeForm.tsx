@@ -82,7 +82,8 @@ export default function PredavanjeForm({
     return set;
   }, [selectedProgramId, completedProgramIdsByClient]);
   const [odrzano, setOdrzano] = useState(predavanje?.odrzano ?? false);
-  const [placeno, setPlaceno] = useState(predavanje?.placeno ?? false);
+  // Ručno „Plaćeno“ više se ne unosi (plaćeno = oznake na kalendaru, 049) – čuva se postojeća vrednost.
+  const [placeno] = useState(predavanje?.placeno ?? false);
   const [komentar, setKomentar] = useState(predavanje?.komentar ?? '');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -387,15 +388,6 @@ export default function PredavanjeForm({
             className="rounded border-stone-300 text-amber-600"
           />
           <span className="text-sm text-stone-700">Održano</span>
-        </label>
-        <label className="flex items-center gap-2 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={placeno}
-            onChange={(e) => setPlaceno(e.target.checked)}
-            className="rounded border-stone-300 text-amber-600"
-          />
-          <span className="text-sm text-stone-700">Plaćeno</span>
         </label>
       </div>
       <div>

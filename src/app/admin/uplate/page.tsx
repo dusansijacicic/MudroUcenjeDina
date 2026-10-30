@@ -68,7 +68,8 @@ export default async function AdminUplatePage() {
         </Link>
       </div>
       <p className="text-stone-500 text-sm mb-4">
-        Ko je primio novac (instruktor), kada, za kog klijenta, iznos i koliko koje vrste časova.
+        Ko je primio novac (instruktor), kada, za kog klijenta, iznos i koliko koje vrste časova. Ovo je samo evidencija novca – da li
+        je čas plaćen označava se na kalendaru (<strong>Označi plaćeno</strong>: od izabranog časa, 6 časova).
       </p>
       <div className="rounded-xl border border-stone-200 bg-white overflow-hidden">
         <table className="w-full text-sm">

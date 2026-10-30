@@ -3,6 +3,7 @@ import { getAuthedUser } from '@/lib/auth';
 import { redirect } from 'next/navigation';
 import { TIME_SLOTS } from '@/lib/constants';
 import type { Predavanje } from '@/types/database';
+import { getStanjePlacanja } from '@/lib/stanje-svih';
 
 export default async function UcenikPage() {
   const { user } = await getAuthedUser();
@@ -16,6 +17,7 @@ export default async function UcenikPage() {
     { data: uplateRaw },
     { data: predavanjaRaw },
     { data: termTypesRaw },
+    poPaketima,
   ] = await Promise.all([
     admin
       .from('uplate')
@@ -28,6 +30,8 @@ export default async function UcenikPage() {
       .select('*, term:terms(date, slot_index, instructor_id, instructor:instructors(ime, prezime))')
       .eq('client_id', client.id),
     admin.from('term_types').select('id, naziv, cena_po_casu').order('naziv'),
+    // Plaćeno = oznake „plaćeno od ovog časa“ (049); null dok migracija nije pokrenuta.
+    getStanjePlacanja([client.id]),
   ]);
 
   type TermWithInstructor = { date: string; slot_index: number; instructor_id?: string; instructor?: { ime: string; prezime: string } | null };
@@ -96,9 +100,20 @@ export default async function UcenikPage() {
     const tid = u.term_type?.id ?? '__bez_vrste__';
     uplacenoByType.set(tid, (uplacenoByType.get(tid) ?? 0) + (u.broj_casova ?? 0));
   }
+  const paketiPoVrsti = poPaketima ? new Map((poPaketima.get(client.id) ?? []).map((s) => [s.term_type_id ?? '__bez_vrste__', s])) : null;
+  if (paketiPoVrsti) {
+    uplacenoByType.clear();
+    for (const [tid, s] of paketiPoVrsti) {
+      if (s.uplaceno > 0) uplacenoByType.set(tid, s.uplaceno);
+    }
+  }
   const stanjePoTipuSve = termTypes.map((tt) => {
     const uplaceno = uplacenoByType.get(tt.id) ?? 0;
     const odrzano = odrzanoByType.get(tt.id) ?? 0;
+    const izPaketa = paketiPoVrsti?.get(tt.id);
+    if (izPaketa) {
+      return { id: tt.id, naziv: tt.naziv, cena_po_casu: tt.cena_po_casu, uplaceno: izPaketa.uplaceno, odrzano: izPaketa.odrzano, ostalo: izPaketa.ostalo };
+    }
     return {
       id: tt.id,
       naziv: tt.naziv,
@@ -148,7 +163,7 @@ export default async function UcenikPage() {
           Stanje po vrstama časova
         </h2>
         <p className="text-sm text-[var(--kid-text-muted)] mb-4">
-          Koliko ste uplatili, koliko je održano i koliko vam preostaje – samo vrste gde imate kupljene časove.
+          Koliko časova je plaćeno, koliko je održano i koliko vam preostaje – samo vrste gde imate plaćene časove.
         </p>
         {stanjePoTipu.length === 0 ? (
           <p className="text-sm text-[var(--kid-text-muted)]">Nema kupljenih časova po vrstama. Kada uplatite, ovde će se prikazati.</p>
@@ -169,7 +184,7 @@ export default async function UcenikPage() {
                 </div>
                 <div className="grid grid-cols-3 gap-2 text-center">
                   <div className="rounded-xl bg-[var(--kid-butter)]/50 p-2 border border-[var(--kid-butter-dark)]/40">
-                    <p className="text-xs text-[var(--kid-text-muted)]">Uplaćeno</p>
+                    <p className="text-xs text-[var(--kid-text-muted)]">Plaćeno</p>
                     <p className="text-lg font-bold text-[var(--kid-text)]">{s.uplaceno}</p>
                   </div>
                   <div className="rounded-xl bg-[var(--kid-mint)]/50 p-2 border border-[var(--kid-mint-dark)]/40">
@@ -287,11 +302,6 @@ export default async function UcenikPage() {
                       {p.odrzano && (
                         <span className="text-xs bg-[var(--kid-mint)] text-[#1e5631] px-2 py-0.5 rounded-full font-medium">
                           Održano
-                        </span>
-                      )}
-                      {p.placeno && (
-                        <span className="text-xs bg-[var(--kid-sky)] text-[#1a5276] px-2 py-0.5 rounded-full font-medium">
-                          Plaćeno
                         </span>
                       )}
                     </div>

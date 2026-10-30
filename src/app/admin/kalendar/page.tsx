@@ -6,7 +6,7 @@ import AdminCalendarView, { type AdminTerm, type OtkazaniTerminCalendar } from '
 import AdminCalendarFilters from './AdminCalendarFilters';
 import AdminFromDashboardToast from '@/components/AdminFromDashboardToast';
 import { getMaxTerminaPoSlotu } from '@/lib/settings';
-import { getTermTypes, getTermCategories } from '@/app/admin/actions';
+import { getTermTypes, getTermCategories, type PlaceniPaket } from '@/app/admin/actions';
 import { mapBlokada, mapNedeljna, nedeljneUDatume, type BlokiranTermin } from '@/lib/blokade';
 
 export default async function AdminKalendarPage({
@@ -77,6 +77,7 @@ export default async function AdminKalendarPage({
     { data: blockedRaw },
     { data: redniRaw },
     { data: nedeljneRaw },
+    paketiRes,
   ] = await Promise.all([
     adminSupabase
       .from('terms')
@@ -91,7 +92,7 @@ export default async function AdminKalendarPage({
     adminSupabase.from('otkazani_termini').select('id, client_id, client_ime, client_prezime, instructor_id, instructor_ime, instructor_prezime, term_date, slot_index, term_type_naziv, placeno').gte('term_date', dateFrom).lte('term_date', dateTo),
     adminSupabase
       .from('zahtevi_za_cas')
-      .select('id, client_id, requested_date, requested_slot_index, client:clients(ime, prezime), term_type:term_types(naziv), classroom:classrooms(naziv)')
+      .select('id, client_id, term_type_id, requested_date, requested_slot_index, client:clients(ime, prezime), term_type:term_types(naziv), classroom:classrooms(naziv)')
       .eq('status', 'pending')
       .gte('requested_date', dateFrom)
       .lte('requested_date', dateTo),
@@ -109,6 +110,8 @@ export default async function AdminKalendarPage({
     adminSupabase.rpc('redni_broj_casova', { p_from: dateFrom, p_to: dateTo }),
     // Stalne nedeljne blokade instruktora (048) – pre migracije greška → null → nema ih.
     adminSupabase.from('instruktor_nedeljne_blokade').select('*'),
+    // Oznake „plaćeno od ovog časa“ (049) – za mod Označi plaćeno (💰 od ovde / uklanjanje).
+    adminSupabase.from('placeni_paketi').select('id, client_id, term_type_id, od_datum, od_slot, broj_casova').gte('od_datum', dateFrom).lte('od_datum', dateTo),
   ]);
   const redniPoPredavanju = (redniRaw ?? {}) as Record<string, [number, number]>;
   const imeInstruktora = new Map((instructorsList ?? []).map((i) => [i.id, `${i.ime ?? ''} ${i.prezime ?? ''}`.trim()]));
@@ -166,6 +169,8 @@ export default async function AdminKalendarPage({
       client_prezime: (client as { prezime?: string } | null)?.prezime ?? null,
       term_type_naziv: (termType as { naziv?: string } | null)?.naziv ?? null,
       classroom_naziv: (classroom as { naziv?: string } | null)?.naziv ?? null,
+      client_id: z.client_id as string,
+      term_type_id: (z.term_type_id as string | null) ?? null,
       redni: redniPoPredavanju[z.id] ?? null,
     };
   });
@@ -311,6 +316,8 @@ export default async function AdminKalendarPage({
         focusDate={params.fokus?.slice(0, 10)}
         focusSlot={params.slot && /^\d{1,2}$/.test(params.slot) ? Number(params.slot) : undefined}
         blockedSlots={blockedSlots}
+        placeniPaketi={(paketiRes.data ?? []).map((p) => ({ ...p, od_datum: String(p.od_datum).slice(0, 10) })) as PlaceniPaket[]}
+        paketiMigracija={!paketiRes.error}
       />
     </div>
   );

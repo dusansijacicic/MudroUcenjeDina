@@ -103,7 +103,10 @@ export default async function PredavacUputstvoPage({ searchParams }: { searchPar
 
         <Sekcija prikazi={prikazi} id="klijenti" naslov="Klijenti">
           <Koraci>
-            <li>Lista sve dece (ne samo vaše) sa stanjem po vrsti časa: plaćeno / održano / preostalo.</li>
+            <li>
+              Lista sve dece (ne samo vaše) sa stanjem po vrsti časa: održano, a kad admin označi plaćanje i plaćeno / preostalo (crveno „nije
+              plaćeno N“ = paket od 6 časova je potrošen).
+            </li>
             <li>Klik na dete → statistika časova, pregled po vrstama, istorija časova kod vas, izmena podataka.</li>
             <li>Novo dete: <Ui>Novi klijent</Ui> → popunite podatke (kontakt telefon je obavezan) → sačuvajte.</li>
           </Koraci>
@@ -117,6 +120,7 @@ export default async function PredavacUputstvoPage({ searchParams }: { searchPar
             <li>Kucajte ime deteta i kliknite ga.</li>
             <li>Vrsta časa i broj časova – iznos se sam izračuna (cena − popust deteta); po potrebi ga ispravite.</li>
             <li>Kliknite <Ui>Unesi uplatu</Ui>. Izmenu ili brisanje uplate radi admin.</li>
+            <li>Uplata je evidencija novca; da li je čas plaćen (6 časova od izabranog) označava admin na kalendaru.</li>
           </Koraci>
         </Sekcija>
 

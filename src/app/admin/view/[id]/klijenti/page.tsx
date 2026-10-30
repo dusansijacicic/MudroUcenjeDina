@@ -58,7 +58,7 @@ export default async function AdminViewKlijentiPage({
               <th className="text-left p-3 font-medium text-stone-600">Razred</th>
               <th className="text-left p-3 font-medium text-stone-600">Škola</th>
               <th className="text-left p-3 font-medium text-stone-600">Kontakt</th>
-              <th className="text-right p-3 font-medium text-stone-600">Plaćeno časova</th>
+              <th className="text-right p-3 font-medium text-stone-600">Akcija</th>
             </tr>
           </thead>
           <tbody>

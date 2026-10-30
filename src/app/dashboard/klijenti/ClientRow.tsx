@@ -43,18 +43,23 @@ export default function ClientRow({
             {stanjePoVrstama.map((s) => (
               <span key={s.term_type_naziv} className="whitespace-nowrap">
                 <span className="font-medium text-stone-700">{s.term_type_naziv}:</span>{' '}
-                <span>{s.uplaceno} plaćeno</span>
-                <span className="text-stone-400 mx-0.5">/</span>
                 <span>{s.odrzano} održano</span>
-                <span className="text-stone-400 mx-0.5">/</span>
-                <span className="text-amber-700 font-medium">{s.ostalo} preostalo</span>
+                {s.uplaceno > 0 && (
+                  <>
+                    <span className="text-stone-400 mx-0.5">/</span>
+                    <span>{s.uplaceno} plaćeno</span>
+                    <span className="text-stone-400 mx-0.5">/</span>
+                    {s.duguje > 0 ? (
+                      <span className="rounded bg-red-100 px-1 font-semibold text-red-700">nije plaćeno {s.duguje}</span>
+                    ) : (
+                      <span className="text-amber-700 font-medium">{s.ostalo} preostalo</span>
+                    )}
+                  </>
+                )}
               </span>
             ))}
           </div>
         )}
-      </td>
-      <td className="p-3 text-right font-medium text-stone-700">
-        {client.placeno_casova ?? 0}
       </td>
       <td className="p-3">
         <Link

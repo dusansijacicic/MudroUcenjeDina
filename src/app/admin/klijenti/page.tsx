@@ -51,7 +51,7 @@ export default async function AdminSviKlijentiPage() {
       kontaktTelefon: c.kontakt_telefon ?? null,
       datumTestiranja: c.datum_testiranja ?? null,
       instructors: instructorsByClientId.get(c.id) ?? [],
-      problemTypes: stanjeAll.filter((s) => s.uplaceno < s.odrzano).map((s) => s.term_type_naziv),
+      problemTypes: stanjeAll.filter((s) => s.duguje > 0).map((s) => s.term_type_naziv),
       // Svaka vrsta gde ima kupljenih ILI održanih časova – i dete bez unete uplate vidi koliko je održano.
       stanje: stanjeAll,
     };

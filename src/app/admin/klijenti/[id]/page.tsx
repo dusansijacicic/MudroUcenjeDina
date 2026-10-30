@@ -9,6 +9,8 @@ import { TIME_SLOTS, isTermInPast } from '@/lib/constants';
 import type { Client } from '@/types/database';
 import OtkazaniTerminiSection from './OtkazaniTerminiSection';
 import UplateKlijentaSection, { type UplataKlijentaRow } from './UplateKlijentaSection';
+import PlaceniPaketiSection, { type PaketKlijentaRow } from './PlaceniPaketiSection';
+import PlacenoStanje from '@/components/PlacenoStanje';
 
 function getMonday(iso: string): string {
   const d = new Date(iso + 'T12:00:00');
@@ -32,7 +34,7 @@ export default async function AdminKlijentEditPage({
   await markPastPredavanjaAsOdrzano(clientId);
 
   const adminSupabase = createAdminClient();
-  const [{ data: client, error }, stanjePoVrstama, { data: predavanjaRaw }, { data: zahteviRaw }, termTypes, otkazani, programStatuses, programs, programiSelections, { data: uplateRaw }, { data: aktivniInstruktori }] = await Promise.all([
+  const [{ data: client, error }, stanjePoVrstama, { data: predavanjaRaw }, { data: zahteviRaw }, termTypes, otkazani, programStatuses, programs, programiSelections, { data: uplateRaw }, { data: aktivniInstruktori }, { data: paketiRaw }, { data: redniRaw }] = await Promise.all([
     adminSupabase.from('clients').select('*, popust_percent, napomena, accessible_term_type_ids').eq('id', clientId).single(),
     getStanjePoVrstamaZaKlijenta(clientId),
     adminSupabase
@@ -57,13 +59,31 @@ export default async function AdminKlijentEditPage({
       .eq('client_id', clientId)
       .order('created_at', { ascending: false }),
     adminSupabase.from('instructors').select('id, ime, prezime').eq('aktivan', true).order('prezime').order('ime'),
+    // Oznake „plaćeno od ovog časa“ (049) i status plaćanja svakog časa – pre migracije greška → prazno.
+    adminSupabase
+      .from('placeni_paketi')
+      .select('id, od_datum, od_slot, broj_casova, created_at, term_type:term_types(naziv)')
+      .eq('client_id', clientId)
+      .order('od_datum', { ascending: false })
+      .order('od_slot', { ascending: false }),
+    adminSupabase.rpc('redni_broj_casova_klijenta', { p_client: clientId }),
   ]);
 
   if (error || !client) notFound();
 
   const stanjePoVrstamaPrikaz = stanjePoVrstama;
+  const redni = (redniRaw ?? {}) as Record<string, [number, number]>;
 
   const one = <T,>(v: T | T[] | null | undefined): T | null => (Array.isArray(v) ? (v[0] ?? null) : (v ?? null));
+  const paketi: PaketKlijentaRow[] = (paketiRaw ?? []).map((p) => ({
+    id: p.id,
+    vrsta: one(p.term_type as { naziv?: string } | { naziv?: string }[] | null)?.naziv ?? null,
+    odDatum: String(p.od_datum).slice(0, 10),
+    odSlot: p.od_slot,
+    brojCasova: p.broj_casova,
+    createdAt: p.created_at ?? null,
+  }));
+
   const uplate: UplataKlijentaRow[] = (uplateRaw ?? []).map((u) => {
     const instr = one(u.instructor as { ime?: string; prezime?: string } | { ime?: string; prezime?: string }[] | null);
     return {
@@ -153,9 +173,7 @@ export default async function AdminKlijentEditPage({
             <span className="font-semibold text-stone-900">{dateStr}</span>
             <span className="text-stone-600 ml-2">{timeStr}</span>
           </div>
-          {isOdrzan && p.placeno && (
-            <span className="rounded-full bg-emerald-200/80 px-2.5 py-0.5 text-xs font-medium text-emerald-800">Plaćeno</span>
-          )}
+          {redni[p.id] && <PlacenoStanje redni={redni[p.id]} />}
         </div>
         <div className="mt-1 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 text-sm">
           <span className="text-stone-600">
@@ -189,8 +207,11 @@ export default async function AdminKlijentEditPage({
             <span className="font-semibold text-stone-900">{dateStr}</span>
             <span className="text-stone-600 ml-2">{timeStr}</span>
           </div>
-          <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${prosao ? 'bg-red-100 text-red-800' : 'bg-amber-200/80 text-amber-900'}`}>
-            {prosao ? 'Prošlo – niko nije preuzeo' : 'Čeka instruktora'}
+          <span className="flex flex-wrap items-center gap-1.5">
+            {redni[z.id] && <PlacenoStanje redni={redni[z.id]} />}
+            <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${prosao ? 'bg-red-100 text-red-800' : 'bg-amber-200/80 text-amber-900'}`}>
+              {prosao ? 'Prošlo – niko nije preuzeo' : 'Čeka instruktora'}
+            </span>
           </span>
         </div>
         <p className="mt-1 text-sm text-stone-600">
@@ -221,7 +242,9 @@ export default async function AdminKlijentEditPage({
       <section className="rounded-2xl border border-stone-200 bg-white shadow-sm overflow-hidden animate-in-delay-2 ui-hover-lift">
         <div className="border-b border-stone-100 bg-stone-50/80 px-5 py-3">
           <h2 className="text-base font-semibold text-stone-800">Pregled po vrstama časova</h2>
-          <p className="text-xs text-stone-500 mt-0.5">Plaćeno / održano / preostalo – sve vrste gde ima plaćenih ili održanih časova.</p>
+          <p className="text-xs text-stone-500 mt-0.5">
+            Plaćeno = časovi iz oznaka „plaćeno od ovog časa“ na kalendaru (po 6). Nije plaćeno = održani časovi posle potrošenog paketa.
+          </p>
         </div>
         <div className="overflow-x-auto">
           {stanjePoVrstamaPrikaz.length === 0 ? (
@@ -231,18 +254,20 @@ export default async function AdminKlijentEditPage({
               <thead>
                 <tr className="border-b border-stone-200 bg-stone-50/80">
                   <th className="text-left p-3 font-medium text-stone-600">Vrsta časa</th>
-                  <th className="text-right p-3 font-medium text-stone-600">Plaćeno</th>
                   <th className="text-right p-3 font-medium text-stone-600">Održano</th>
+                  <th className="text-right p-3 font-medium text-stone-600">Plaćeno</th>
                   <th className="text-right p-3 font-medium text-amber-700">Preostalo</th>
+                  <th className="text-right p-3 font-medium text-red-700">Nije plaćeno</th>
                 </tr>
               </thead>
               <tbody>
                 {stanjePoVrstamaPrikaz.map((s) => (
                   <tr key={s.term_type_id ?? 'bez'} className="border-b border-stone-100 hover:bg-stone-50/50 ui-transition">
                     <td className="p-3 font-medium text-stone-800">{s.term_type_naziv}</td>
-                    <td className="p-3 text-right text-stone-700">{s.uplaceno}</td>
                     <td className="p-3 text-right text-stone-700">{s.odrzano}</td>
-                    <td className="p-3 text-right font-medium text-amber-800">{s.ostalo}</td>
+                    <td className="p-3 text-right text-stone-700">{s.uplaceno || '—'}</td>
+                    <td className="p-3 text-right font-medium text-amber-800">{s.uplaceno ? s.ostalo : '—'}</td>
+                    <td className="p-3 text-right font-semibold text-red-700">{s.duguje || '—'}</td>
                   </tr>
                 ))}
               </tbody>
@@ -251,11 +276,26 @@ export default async function AdminKlijentEditPage({
         </div>
       </section>
 
+      {/* Oznake „plaćeno od ovog časa“ – jedini izvor plaćeno / nije plaćeno */}
+      <section className="rounded-2xl border border-stone-200 bg-white shadow-sm overflow-hidden animate-in-delay-2">
+        <div className="border-b border-stone-100 bg-stone-50/80 px-5 py-3">
+          <h2 className="text-base font-semibold text-stone-800">Plaćeno od (oznake)</h2>
+          <p className="text-xs text-stone-500 mt-0.5">
+            Svaka oznaka = taj čas i sledećih 5 časova iste vrste su plaćeni. Dodaje se na kalendaru (Označi plaćeno), ovde može da se ukloni.
+          </p>
+        </div>
+        <div className="p-5">
+          <PlaceniPaketiSection paketi={paketi} />
+        </div>
+      </section>
+
       {/* Uplate – istorija + unos nove uplate za ovo dete */}
       <section className="rounded-2xl border border-stone-200 bg-white shadow-sm overflow-hidden animate-in-delay-2">
         <div className="border-b border-stone-100 bg-stone-50/80 px-5 py-3">
           <h2 className="text-base font-semibold text-stone-800">Uplate</h2>
-          <p className="text-xs text-stone-500 mt-0.5">Sve uplate za ovo dete, najnovije prve. Nova uplata odmah menja stanje gore i „x/y“ na kalendaru.</p>
+          <p className="text-xs text-stone-500 mt-0.5">
+            Evidencija novca za ovo dete, najnovije prve. Ne utiče na „plaćeno / nije plaćeno“ – to se označava na kalendaru.
+          </p>
         </div>
         <div className="p-5">
           <UplateKlijentaSection

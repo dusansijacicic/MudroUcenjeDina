@@ -2,10 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import toast from 'react-hot-toast';
 import { searchVariants, variantsMatch } from '@/lib/search';
-import { oznaciKaoPlaceno } from '@/app/admin/actions';
 
 /** Koliko redova se crta odjednom; sledeća grupa se dodaje kad se skroluje do dna (ili odmah, ako stane na ekran). */
 const PAGE_SIZE = 50;
@@ -21,55 +18,8 @@ export type AdminKlijentRow = {
   datumTestiranja: string | null;
   instructors: { id: string; ime: string; prezime: string }[];
   problemTypes: string[];
-  stanje: { term_type_id: string | null; term_type_naziv: string; uplaceno: number; odrzano: number; ostalo: number }[];
+  stanje: { term_type_id: string | null; term_type_naziv: string; uplaceno: number; odrzano: number; ostalo: number; duguje: number }[];
 };
-
-/** Upisuje uplatu za neplaćene održane časove te vrste (primio Časlav Mančić, datum poslednjeg održanog časa). */
-function OznaciPlacenoButton({
-  clientId,
-  imeDeteta,
-  termTypeId,
-  vrsta,
-  brojCasova,
-}: {
-  clientId: string;
-  imeDeteta: string;
-  termTypeId: string | null;
-  vrsta: string;
-  brojCasova: number;
-}) {
-  const router = useRouter();
-  const [loading, setLoading] = useState(false);
-  const handleClick = async () => {
-    const ok = window.confirm(
-      `Označiti kao plaćeno: ${imeDeteta} – ${brojCasova} čas(a) ${vrsta}?
-
-` +
-        'Upisuje se uplata koju je primio Časlav Mančić, sa datumom poslednjeg održanog časa. ' +
-        'Kasnije se može izmeniti ili obrisati u Evidenciji uplata.'
-    );
-    if (!ok) return;
-    setLoading(true);
-    const res = await oznaciKaoPlaceno(clientId, termTypeId);
-    setLoading(false);
-    if (res.error) {
-      toast.error(res.error);
-      return;
-    }
-    toast.success(`Upisana uplata: ${res.brojCasova} čas(a) ${vrsta}.`);
-    router.refresh();
-  };
-  return (
-    <button
-      type="button"
-      onClick={handleClick}
-      disabled={loading}
-      className="ml-1.5 rounded-md border border-emerald-300 bg-emerald-50 px-1.5 py-0.5 text-xs font-semibold text-emerald-800 hover:bg-emerald-100 disabled:opacity-50"
-    >
-      {loading ? 'Upisujem…' : '✓ Označi kao plaćeno'}
-    </button>
-  );
-}
 
 export default function AdminKlijentiTable({ rows }: { rows: AdminKlijentRow[] }) {
   const [search, setSearch] = useState('');
@@ -129,7 +79,7 @@ export default function AdminKlijentiTable({ rows }: { rows: AdminKlijentRow[] }
               <th className="text-left p-3 font-medium text-stone-600">Godište / Razred</th>
               <th className="text-left p-3 font-medium text-stone-600">Škola</th>
               <th className="text-left p-3 font-medium text-stone-600">Kontakt telefon</th>
-              <th className="text-left p-3 font-medium text-stone-600">Održano do danas / kupljeno / preostalo, po vrsti časa</th>
+              <th className="text-left p-3 font-medium text-stone-600">Održano do danas, po vrsti časa (plaćeno – od oznake na kalendaru)</th>
               <th className="text-left p-3 font-medium text-stone-600">Instruktori</th>
               <th className="text-right p-3 font-medium text-stone-600">Akcija</th>
             </tr>
@@ -146,9 +96,9 @@ export default function AdminKlijentiTable({ rows }: { rows: AdminKlijentRow[] }
                     {hasWarning && (
                       <span
                         className="ml-2 inline-flex items-center rounded-md bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800"
-                        title={`Nema dovoljno kupljenih časova za: ${r.problemTypes.join(', ')}`}
+                        title={`Paket je potrošen, a dete ima održane časove posle njega: ${r.problemTypes.join(', ')}`}
                       >
-                        Nema kupljenih časova ({r.problemTypes.join(', ')})
+                        Nije plaćeno ({r.problemTypes.join(', ')})
                       </span>
                     )}
                     <Link
@@ -173,34 +123,27 @@ export default function AdminKlijentiTable({ rows }: { rows: AdminKlijentRow[] }
                       <span className="text-stone-400">—</span>
                     ) : (
                       <div className="flex flex-col gap-0.5">
-                        {r.stanje.map((s) => {
-                          const duguje = s.odrzano - s.uplaceno;
-                          return (
-                            <span key={s.term_type_id ?? 'bez'} className="whitespace-nowrap tabular-nums">
-                              <span className="font-medium text-stone-800">{s.term_type_naziv}:</span>{' '}
-                              <span className="text-stone-800">
-                                održano <strong>{s.odrzano}</strong>
-                              </span>
-                              <span className="text-stone-400 mx-1">·</span>
-                              <span className="text-stone-600">kupljeno {s.uplaceno}</span>
-                              <span className="text-stone-400 mx-1">·</span>
-                              {duguje > 0 ? (
-                                <>
-                                  <span className="rounded bg-red-100 px-1 font-semibold text-red-700">nije plaćeno {duguje}</span>
-                                  <OznaciPlacenoButton
-                                    clientId={r.id}
-                                    imeDeteta={`${r.ime} ${r.prezime}`}
-                                    termTypeId={s.term_type_id}
-                                    vrsta={s.term_type_naziv}
-                                    brojCasova={duguje}
-                                  />
-                                </>
-                              ) : (
-                                <span className="font-medium text-amber-700">preostalo {s.ostalo}</span>
-                              )}
+                        {r.stanje.map((s) => (
+                          <span key={s.term_type_id ?? 'bez'} className="whitespace-nowrap tabular-nums">
+                            <span className="font-medium text-stone-800">{s.term_type_naziv}:</span>{' '}
+                            <span className="text-stone-800">
+                              održano <strong>{s.odrzano}</strong>
                             </span>
-                          );
-                        })}
+                            {/* Plaćeno se prikazuje tek kad je na kalendaru označeno „plaćeno od ovog časa“. */}
+                            {s.uplaceno > 0 && (
+                              <>
+                                <span className="text-stone-400 mx-1">·</span>
+                                <span className="text-stone-600">plaćeno {s.uplaceno}</span>
+                                <span className="text-stone-400 mx-1">·</span>
+                                {s.duguje > 0 ? (
+                                  <span className="rounded bg-red-100 px-1 font-semibold text-red-700">nije plaćeno {s.duguje}</span>
+                                ) : (
+                                  <span className="font-medium text-amber-700">preostalo {s.ostalo}</span>
+                                )}
+                              </>
+                            )}
+                          </span>
+                        ))}
                       </div>
                     )}
                   </td>

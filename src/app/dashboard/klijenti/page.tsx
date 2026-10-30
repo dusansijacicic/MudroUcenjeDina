@@ -6,7 +6,7 @@ import { getStanjeSvihKlijenata } from '@/lib/stanje-svih';
 import ClientRow from './ClientRow';
 import type { Client } from '@/types/database';
 
-export type StanjeVrsta = { term_type_naziv: string; uplaceno: number; odrzano: number; ostalo: number };
+export type StanjeVrsta = { term_type_naziv: string; uplaceno: number; odrzano: number; ostalo: number; duguje: number };
 
 /** Svi klijenti – instruktor vidi sve. Za svaki tip časa gde ima plaćenih ili održanih: plaćeno / održano do danas / preostalo. Sortirano po datumu testiranja (noviji prvi). */
 export default async function KlijentiPage() {
@@ -32,6 +32,7 @@ export default async function KlijentiPage() {
           uplaceno: s.uplaceno,
           odrzano: s.odrzano,
           ostalo: s.ostalo,
+          duguje: s.duguje,
         })),
       ])
     );
@@ -56,7 +57,7 @@ export default async function KlijentiPage() {
         </Link>
       </div>
       <p className="text-stone-500 text-sm mb-4">
-        Svi klijenti. Za svaki tip časa gde ima plaćenih ili održanih: plaćeno / održano do danas / preostalo.
+        Svi klijenti. Po vrsti časa: održano do danas; plaćeno / preostalo kad admin na kalendaru označi „plaćeno od ovog časa“.
       </p>
       <div className="rounded-xl border border-stone-200 bg-white overflow-hidden">
         <table className="w-full text-sm">
@@ -68,8 +69,7 @@ export default async function KlijentiPage() {
               <th className="text-left p-3 font-medium text-stone-600">Razred</th>
               <th className="text-left p-3 font-medium text-stone-600">Škola</th>
               <th className="text-left p-3 font-medium text-stone-600">Roditelj / kontakt</th>
-              <th className="text-left p-3 font-medium text-stone-600">Po vrstama (plaćeno / održano / preostalo)</th>
-              <th className="text-right p-3 font-medium text-stone-600">Plaćeno (kod vas)</th>
+              <th className="text-left p-3 font-medium text-stone-600">Po vrstama (održano / plaćeno / preostalo)</th>
               <th className="w-20 p-3" />
             </tr>
           </thead>

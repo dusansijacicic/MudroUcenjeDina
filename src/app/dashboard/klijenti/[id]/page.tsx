@@ -28,11 +28,6 @@ export default async function KlijentPage({
     .maybeSingle();
   const client = { ...(clientRow as Client), placeno_casova: myLink?.placeno_casova ?? 0 };
 
-  const { data: allLinks } = await admin
-    .from('instructor_clients')
-    .select('instructor_id, placeno_casova')
-    .eq('client_id', id);
-
   await markPastPredavanjaAsOdrzano(id);
 
   const { data: predavanja } = await admin
@@ -62,14 +57,6 @@ export default async function KlijentPage({
 
   const odrzanoUkupno = allLessons.filter((p) => p.odrzano).length;
   const odrzanoKodMene = odrzani.length;
-  const placenoKodMene = predavanjaForThisInstructor.filter((p) => p.placeno).length;
-
-  const placenoUkupno = (allLinks ?? []).reduce(
-    (sum, row) => sum + (row.placeno_casova ?? 0),
-    0
-  );
-  const preostaloUkupno = placenoUkupno - odrzanoUkupno;
-  const duguje = preostaloUkupno < 0 ? Math.abs(preostaloUkupno) : 0;
 
   const [stanjePoVrstamaRaw, termTypes, initialProgramStatuses, programs, initialProgrami] = await Promise.all([
     getStanjePoVrstamaZaKlijenta(id),
@@ -79,6 +66,10 @@ export default async function KlijentPage({
     getClientProgrami(id),
   ]);
   const stanjePoVrstama = stanjePoVrstamaRaw;
+  // Plaćeno / preostalo / nije plaćeno – iz oznaka „plaćeno od ovog časa“ na kalendaru, po svim vrstama.
+  const placenoUkupno = stanjePoVrstama.reduce((sum, s) => sum + s.uplaceno, 0);
+  const preostaloUkupno = stanjePoVrstama.reduce((sum, s) => sum + (s.uplaceno ? s.ostalo : 0), 0);
+  const duguje = stanjePoVrstama.reduce((sum, s) => sum + s.duguje, 0);
 
   return (
     <div className="space-y-8">
@@ -98,13 +89,14 @@ export default async function KlijentPage({
         <div className="border-b border-stone-100 bg-stone-50/80 px-5 py-3">
           <h2 className="text-base font-semibold text-stone-800">Statistika časova za ovog klijenta</h2>
           <p className="text-xs text-stone-500 mt-0.5">
-            Plaćeno (škola) = ukupno plaćeno preko svih instruktora. Održano = kod svih instruktora. Preostalo = plaćeno − održano.
+            Plaćeno = časovi iz oznaka „plaćeno od ovog časa“ (admin na kalendaru, po 6). Održano = kod svih instruktora. Preostalo = plaćeni
+            časovi koji još nisu održani.
           </p>
         </div>
         <div className="p-5">
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
             <div className="rounded-xl border border-stone-200 bg-stone-50/80 px-4 py-3">
-              <p className="text-xs text-stone-500 uppercase tracking-wide">Plaćeno (škola)</p>
+              <p className="text-xs text-stone-500 uppercase tracking-wide">Plaćeno</p>
               <p className="text-xl font-bold text-stone-800 mt-0.5">{placenoUkupno}</p>
             </div>
             <div className="rounded-xl border border-emerald-200 bg-emerald-50/80 px-4 py-3">
@@ -119,14 +111,10 @@ export default async function KlijentPage({
               <p className="text-xs text-amber-700 uppercase tracking-wide">Održano kod vas</p>
               <p className="text-xl font-bold text-amber-800 mt-0.5">{odrzanoKodMene}</p>
             </div>
-            <div className="rounded-xl border border-stone-200 bg-blue-50/80 px-4 py-3">
-              <p className="text-xs text-blue-700 uppercase tracking-wide">Plaćeno kod vas</p>
-              <p className="text-xl font-bold text-blue-800 mt-0.5">{placenoKodMene}</p>
-            </div>
           </div>
           {duguje > 0 && (
             <p className="mt-4 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-4 py-2">
-              Duguje novac za <strong>{duguje}</strong> termina (više održanih nego plaćenih).
+              Nije plaćeno <strong>{duguje}</strong> održanih časova (posle potrošenog paketa).
             </p>
           )}
         </div>
@@ -143,18 +131,20 @@ export default async function KlijentPage({
               <thead>
                 <tr className="border-b border-stone-200 bg-stone-50/80">
                   <th className="text-left p-3 font-medium text-stone-600">Vrsta časa</th>
-                  <th className="text-right p-3 font-medium text-stone-600">Plaćeno</th>
                   <th className="text-right p-3 font-medium text-stone-600">Održano</th>
+                  <th className="text-right p-3 font-medium text-stone-600">Plaćeno</th>
                   <th className="text-right p-3 font-medium text-amber-700">Preostalo</th>
+                  <th className="text-right p-3 font-medium text-red-700">Nije plaćeno</th>
                 </tr>
               </thead>
               <tbody>
                 {stanjePoVrstama.map((s) => (
                   <tr key={s.term_type_id ?? 'bez'} className="border-b border-stone-100 hover:bg-stone-50/50">
                     <td className="p-3 font-medium text-stone-800">{s.term_type_naziv}</td>
-                    <td className="p-3 text-right text-stone-700">{s.uplaceno}</td>
                     <td className="p-3 text-right text-stone-700">{s.odrzano}</td>
-                    <td className="p-3 text-right font-medium text-amber-800">{s.ostalo}</td>
+                    <td className="p-3 text-right text-stone-700">{s.uplaceno || '—'}</td>
+                    <td className="p-3 text-right font-medium text-amber-800">{s.uplaceno ? s.ostalo : '—'}</td>
+                    <td className="p-3 text-right font-semibold text-red-700">{s.duguje || '—'}</td>
                   </tr>
                 ))}
               </tbody>
@@ -246,11 +236,6 @@ function PredavanjeHistoryRow({
           {predavanje.odrzano && (
             <span className="text-xs bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded font-medium">
               Održano
-            </span>
-          )}
-          {predavanje.placeno && (
-            <span className="text-xs bg-sky-100 text-sky-800 px-2 py-0.5 rounded font-medium">
-              Plaćeno
             </span>
           )}
         </div>

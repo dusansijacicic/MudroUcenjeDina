@@ -35,7 +35,7 @@ const SADRZAJ: { id: string; naslov: string }[] = [
   { id: 'kalendar', naslov: 'Kalendar' },
   { id: 'kalendar-citanje', naslov: 'Kalendar – kako čitati termin' },
   { id: 'kalendar-filter', naslov: 'Kalendar – filter po detetu' },
-  { id: 'kalendar-modovi', naslov: 'Kalendar – Swap, Copy, Delete…' },
+  { id: 'kalendar-modovi', naslov: 'Kalendar – Swap, Copy, Delete, Označi plaćeno…' },
   { id: 'kalendar-blokiranje', naslov: 'Kalendar – blokiranje' },
   { id: 'zakazivanje-termina', naslov: 'Zakaži termin' },
   { id: 'termin', naslov: 'Stranica termina' },
@@ -111,10 +111,13 @@ export default async function AdminUputstvoPage({ searchParams }: { searchParams
           <Koraci>
             <li><Ui>Kalendar</Ui> – pregled ove i sledeće nedelje za sve instruktore. Ovde provodite najviše vremena.</li>
             <li>Novo dete ili novi čas: <Ui>+ Zakaži termin</Ui> (ili <Ui>+</Ui> u praznoj ćeliji kalendara – datum i vreme se sami popune).</li>
-            <li>Roditelj je platio: <Ui>+ Unesi uplatu</Ui> (ili <Ui>+ Dodaj uplatu</Ui> na profilu deteta).</li>
             <li>
-              Ko duguje: na kalendaru crveni red sa <Crveno>! 11/10</Crveno>; na stranici <Ui>Klijenti</Ui> crveno „nije plaćeno N“ i
-              dugme <Ui>✓ Označi kao plaćeno</Ui>.
+              Roditelj je platio: na kalendaru <Ui>Označi plaćeno</Ui> → kliknite dete u terminu od kog je plaćeno → <Ui>✓ Potvrdi plaćeno</Ui>.
+              Taj čas i sledećih 5 časova te vrste su plaćeni. Novac se po želji upisuje u <Ui>+ Unesi uplatu</Ui> (samo evidencija).
+            </li>
+            <li>
+              Ko nije platio: posle potrošenih 6 časova kalendar pokazuje crveno <Crveno>! nije plaćeno</Crveno>; na stranici{' '}
+              <Ui>Klijenti</Ui> crveno „nije plaćeno N“.
             </li>
             <li>Kraj dana: <Ui>Podešavanja</Ui> → <Ui>⬇ Preuzmi bekap baze (JSON)</Ui>.</li>
           </Koraci>
@@ -155,10 +158,11 @@ export default async function AdminUputstvoPage({ searchParams }: { searchParams
               koliko je dece u isto vreme.
             </li>
             <li>
-              <M n="E" /> Desno od imena <strong>x/y · još N</strong>: ovo je x-ti čas te vrste, od y plaćenih; posle njega ostaje još N
-              plaćenih. <span className="font-bold text-amber-700">10/10 · poslednji</span> = poslednji plaćeni čas – vreme za naplatu.
+              <M n="E" /> Desno od imena <strong>x/6 · još N</strong> (samo ako je za dete označeno plaćanje): ovo je x-ti od 6 plaćenih
+              časova te vrste; posle njega ostaje još N. <span className="font-bold text-amber-700">6/6 · poslednji</span> = poslednji plaćeni
+              čas – vreme za naplatu. Dete bez oznake nema natpis.
             </li>
-            <li><M n="F" /> Crveni red sa <Crveno>! 11/10</Crveno> i crveni okvir termina = taj čas nije plaćen.</li>
+            <li><M n="F" /> Crveni red sa <Crveno>! nije plaćeno</Crveno> i crveni okvir termina = paket je potrošen, a ovaj čas nije plaćen.</li>
             <li><M n="G" /> Narandžasta kartica sa isprekidanim okvirom = čas zakazan bez instruktora; čeka da ga neki predavač preuzme.</li>
             <li><M n="H" /> Siva = otkazan čas (istorija). Prugasto „⛔ Blokirano“ = u tom vremenu niko ne može da zakaže.</li>
             <li>
@@ -179,7 +183,7 @@ export default async function AdminUputstvoPage({ searchParams }: { searchParams
           </Koraci>
         </Sekcija>
 
-        <Sekcija prikazi={prikazi} id="kalendar-modovi" naslov="Kalendar – Swap, Copy, Delete, Zakaži više časova, Dodeli">
+        <Sekcija prikazi={prikazi} id="kalendar-modovi" naslov="Kalendar – Swap, Copy, Delete, Zakaži više časova, Dodeli, Označi plaćeno">
           <SemaModovi />
           <Napomena>
             Svi modovi rade isto: <strong>uključite dugme</strong> (postane obojeno) → <strong>kliknite termine</strong> na kalendaru →{' '}
@@ -239,6 +243,29 @@ export default async function AdminUputstvoPage({ searchParams }: { searchParams
             <li>Kliknite termine i narandžaste časove bez instruktora kojima to dodeljujete.</li>
             <li>Kliknite <Ui>✓ Potvrdi dodelu (N)</Ui>.</li>
           </Koraci>
+
+          <Podnaslov>Označi plaćeno – od kog časa je plaćeno</Podnaslov>
+          <Koraci>
+            <li>Kliknite <Ui>Označi plaćeno</Ui> (nedeljni ili dnevni prikaz).</li>
+            <li>
+              Kliknite <strong>dete</strong> u terminu od kog je plaćeno (može i narandžasti čas bez instruktora) – red dobije zeleni okvir i
+              „✓ plaćeno od ovde (6 časova)“. Može više dece odjednom.
+            </li>
+            <li>Kliknite <Ui>✓ Potvrdi plaćeno (N)</Ui>.</li>
+            <li>
+              Od tog časa, taj i sledećih 5 časova tog deteta <strong>iste vrste</strong> su plaćeni: na kalendaru piše „1/6 · još 5“,
+              „2/6 · još 4“ … „6/6 · poslednji“. Sledeći časovi su crveni <Crveno>! nije plaćeno</Crveno> dok se opet ne označi.
+            </li>
+            <li>
+              Uklanjanje: u istom modu dete sa „💰 od ovde“ → klik (crveni okvir) → <Ui>✓ Potvrdi plaćeno</Ui>. Ili na profilu deteta →
+              <Ui>Plaćeno od (oznake)</Ui> → <Ui>Ukloni</Ui>.
+            </li>
+          </Koraci>
+          <Napomena>
+            Ovo je jedini pokazatelj da je plaćeno – uplate ne utiču. Časovi pre prve oznake se ne računaju. Ako se označi novi paket dok
+            stari još traje, 6 časova se dodaje na kraj (ništa se ne gubi). Brisanje ili otkazivanje časa pomera brojanje, jer se broje
+            samo časovi koji postoje.
+          </Napomena>
         </Sekcija>
 
         <Sekcija prikazi={prikazi} id="kalendar-blokiranje" naslov="Kalendar – blokiranje vremena">
@@ -290,8 +317,9 @@ export default async function AdminUputstvoPage({ searchParams }: { searchParams
           <Koraci>
             <li><Ui>Kategorija i napomena termina</Ui>: promenite kategoriju ili napomenu i sačuvajte.</li>
             <li>
-              Kod svakog deteta: ime je link na profil, plus <Ui>Profil, uplate i održani časovi →</Ui>. Ispod piše koji je to čas od
-              plaćenih („7. čas od 10 plaćenih · preostalo još 3“, narandžasto „poslednji plaćeni“ ili crveno „Nije plaćeno“).
+              Kod svakog deteta: ime je link na profil, plus <Ui>Profil, uplate i održani časovi →</Ui>. Ako je označeno plaćanje, ispod
+              piše koji je to čas od plaćenih („3. čas od 6 plaćenih · preostalo još 3“, narandžasto „poslednji plaćeni“ ili crveno „Nije
+              plaćeno“).
             </li>
             <li><Ui>+ Dodaj radionicu</Ui> = još jedno dete u ovom terminu (do limita iz Podešavanja).</li>
             <li><Ui>Izmeni</Ui> kod deteta = održano, plaćeno, vrsta časa, komentar; tamo je i <Ui>Obriši</Ui> (dete izlazi iz termina).</li>
@@ -304,12 +332,8 @@ export default async function AdminUputstvoPage({ searchParams }: { searchParams
           <Koraci>
             <li>Pretraga: kucajte ime, prezime, školu ili telefon – lista se filtrira odmah, bez čekanja.</li>
             <li>
-              Kolona „Održano do danas / kupljeno / preostalo“, za svaku vrstu časa. „Održano“ broji sve časove čije je vreme prošlo. Crveno
-              „nije plaćeno N“ = održano više nego plaćeno.
-            </li>
-            <li>
-              <Ui>✓ Označi kao plaćeno</Ui> → potvrdite. Upisuje se uplata za te časove: primio Časlav Mančić, datum poslednjeg održanog
-              časa, iznos po ceni vrste i popustu deteta. Kasnije se može izmeniti ili obrisati u Evidenciji uplata.
+              Kolona „Održano do danas, po vrsti časa“: „održano“ broji sve časove čije je vreme prošlo. Kad je na kalendaru označeno
+              plaćanje, pored piše i „plaćeno / preostalo“, a crveno „nije plaćeno N“ = održani časovi posle potrošenog paketa.
             </li>
             <li>Klik na ime ili <Ui>Profil, uplate i održani časovi →</Ui> otvara profil deteta.</li>
             <li><Ui>+ Novi klijent</Ui> → popunite podatke (kontakt telefon je obavezan) → <Ui>Dodaj klijenta</Ui>.</li>
@@ -319,14 +343,18 @@ export default async function AdminUputstvoPage({ searchParams }: { searchParams
         <Sekcija prikazi={prikazi} id="profil-klijenta" naslov="Profil deteta">
           <SemaProfil />
           <Koraci>
-            <li><Ui>Pregled po vrstama časova</Ui>: plaćeno / održano / preostalo za svaku vrstu časa.</li>
+            <li><Ui>Pregled po vrstama časova</Ui>: održano / plaćeno / preostalo / nije plaćeno za svaku vrstu časa.</li>
             <li>
-              <Ui>Uplate</Ui>: sve uplate deteta, najnovije prve, sa zbirom. <Ui>+ Dodaj uplatu</Ui> otvara formu odmah tu (dete je već
+              <Ui>Plaćeno od (oznake)</Ui>: od kog časa je označeno plaćeno (po 6 časova). Klik na datum otvara kalendar na tom času;{' '}
+              <Ui>Ukloni</Ui> briše oznaku.
+            </li>
+            <li>
+              <Ui>Uplate</Ui> (samo evidencija novca): sve uplate deteta, najnovije prve, sa zbirom. <Ui>+ Dodaj uplatu</Ui> otvara formu odmah tu (dete je već
               izabrano) → popunite → <Ui>Unesi uplatu</Ui>. Kod svake uplate su <Ui>Izmeni</Ui> i <Ui>Obriši</Ui>.
             </li>
             <li>
               <Ui>Pregled termina</Ui>: levo zakazani (isprekidano = još bez instruktora), desno održani – sa vrstom časa, instruktorom i
-              cenom časa. Klik na termin ga otvara.
+              cenom časa, i (ako je označeno plaćanje) koji je to čas od plaćenih. Klik na termin ga otvara.
             </li>
             <li><Ui>Otkazani termini</Ui>: istorija otkazanih časova; može se označiti naplaćeno ili obrisati iz istorije.</li>
             <li><Ui>Izmena podataka klijenta</Ui>: ime, kontakt, škola, popust %, programi… → sačuvajte dugmetom na dnu forme.</li>
@@ -343,13 +371,15 @@ export default async function AdminUputstvoPage({ searchParams }: { searchParams
             <li><Ui>Klijent</Ui> – kucajte ime i kliknite dete.</li>
             <li><Ui>Vrsta časa</Ui> i <Ui>Broj časova</Ui> – iznos se sam izračuna: cena po času × broj časova − popust deteta.</li>
             <li>Po potrebi: drugi popust za ovu uplatu, ručno ispravljen iznos, napomena.</li>
-            <li>Kliknite <Ui>Unesi uplatu</Ui>. Dete odmah dobija plaćene časove (vidi se i u „x/y“ na kalendaru).</li>
+            <li>
+              Kliknite <Ui>Unesi uplatu</Ui>. Ovo je evidencija novca – da li je čas plaćen označava se na kalendaru (<Ui>Označi plaćeno</Ui>).
+            </li>
           </Koraci>
           <Podnaslov>Izmena i brisanje</Podnaslov>
           <SemaUplateLista />
           <Koraci>
             <li><Ui>Izmeni</Ui> → promenite šta treba (i datum) → <Ui>Sačuvaj izmene</Ui>.</li>
-            <li><Ui>Obriši</Ui> → potvrdite. Detetu se smanjuje broj plaćenih časova.</li>
+            <li><Ui>Obriši</Ui> → potvrdite. Plaćeni časovi deteta se ne menjaju (oni su iz oznaka na kalendaru).</li>
           </Koraci>
           <Napomena>
             Svaka izmena i brisanje upisuje se u Dnevnik aktivnosti sa starim vrednostima – obrisana uplata može ručno da se vrati. Isto
@@ -462,8 +492,8 @@ export default async function AdminUputstvoPage({ searchParams }: { searchParams
             badgeClass="bg-amber-600 text-white"
             intro="Pun pristup – sve stranice iz ovog uputstva. Ulaz na /admin."
             items={[
-              'Svi termini svih instruktora, svi modovi na kalendaru (Swap, Copy, Delete, Zakaži više časova, Dodeli, Blokiraj).',
-              'Uplate: unos, izmena i brisanje za sve instruktore; „Označi kao plaćeno“ na listi klijenata.',
+              'Svi termini svih instruktora, svi modovi na kalendaru (Swap, Copy, Delete, Zakaži više časova, Dodeli, Blokiraj, Označi plaćeno).',
+              'Plaćeno: samo admin označava na kalendaru (Označi plaćeno – 6 časova od izabranog). Uplate: unos, izmena i brisanje (evidencija novca).',
               'Klijenti, instruktori, vrste/kategorije/programi/učionice, blokade, dnevnik, podešavanja i bekap.',
               'Pregled „kao instruktor“ (Instruktori → Pregled →).',
               'Nova SQL migracija iz koda se pokreće ručno u Supabase SQL Editoru (koraci u KAKO_POKRENUTI_SQL.md).',

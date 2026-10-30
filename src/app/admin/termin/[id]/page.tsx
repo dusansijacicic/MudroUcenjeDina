@@ -275,9 +275,6 @@ function AdminPredavanjeRow({
           {predavanje.odrzano && (
             <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded">Održano</span>
           )}
-          {predavanje.placeno && (
-            <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded">Plaćeno</span>
-          )}
         </div>
         {predavanje.komentar && (
           <p className="mt-2 text-sm text-stone-600 whitespace-pre-wrap">{predavanje.komentar}</p>

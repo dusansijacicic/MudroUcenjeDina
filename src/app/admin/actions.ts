@@ -1,6 +1,7 @@
 'use server';
 
 import { buildStanjeFromMaps, type StanjeVrstaRow } from '@/lib/stanje';
+import { getStanjePlacanja } from '@/lib/stanje-svih';
 import { createAdminClient } from '@/lib/supabase/admin';
 import type { TermCategoryRow } from '@/lib/term-categories';
 import { SEEDED_TERM_CATEGORY_INDIVIDUAL_ID, SEEDED_TERM_CATEGORY_GRUPNI_ID } from '@/lib/term-categories';
@@ -2025,6 +2026,10 @@ export async function getStanjePoVrstamaZaKlijenteBatch(
   const out = new Map<string, StanjeVrstaRow[]>();
   if (clientIds.length === 0) return out;
 
+  // Posle migracije 049 plaćeno = paketi iz moda „Označi plaćeno“ (po detetu, ne po instruktoru).
+  const poPaketima = await getStanjePlacanja(clientIds);
+  if (poPaketima) return poPaketima;
+
   const admin = createAdminClient();
   const ids = [...new Set(clientIds)];
 
@@ -2082,6 +2087,9 @@ export async function getStanjePoVrstamaZaKlijenta(
   clientId: string,
   instructorId?: string
 ): Promise<StanjeVrstaRow[]> {
+  const poPaketima = await getStanjePlacanja([clientId]);
+  if (poPaketima) return poPaketima.get(clientId) ?? [];
+
   const admin = createAdminClient();
   let uplateRows: { term_type_id: string | null; broj_casova: number }[];
   if (instructorId) {
@@ -2273,14 +2281,6 @@ export async function updateUplata(
   return {};
 }
 
-/** Ko po podrazumevanom "prima" uplatu kad se na listi klijenata klikne „Označi kao plaćeno". */
-const PODRAZUMEVANI_PRIMALAC_UPLATE = { ime: 'Časlav', prezime: 'Mančić' };
-
-/** Vreme časa (datum + početak slota) kao trenutak po beogradskom vremenu, za datum uplate. */
-function vremeCasaBeograd(date: string, slotIndex: number): string {
-  return beogradIso(date, TIME_SLOTS[slotIndex] ?? '12:00');
-}
-
 /**
  * Datum uplate iz forme → vrednost za created_at. Danas (ili prazno) → sada; raniji dan → u podne tog
  * dana (beogradsko vreme). Budući datum nije dozvoljen.
@@ -2291,97 +2291,6 @@ function createdAtZaDatumUplate(datum: string | null): { value?: string; error?:
   const danas = danasBeograd();
   if (datum > danas) return { error: 'Datum uplate ne može biti u budućnosti.' };
   return datum === danas ? { value: new Date().toISOString() } : { value: beogradIso(datum, '12:00') };
-}
-
-/**
- * „Označi kao plaćeno" sa liste klijenata: upisuje uplatu za sve održane, a neplaćene časove deteta te
- * vrste. Primio: PODRAZUMEVANI_PRIMALAC_UPLATE; datum uplate = vreme poslednjeg održanog časa te vrste;
- * iznos = cena po času × broj časova − popust deteta. Broj neplaćenih se računa ponovo ovde (ne veruje
- * se stanju sa ekrana), da dupli klik ne upiše dve uplate. Održano = isto pravilo kao lista (046).
- */
-export async function oznaciKaoPlaceno(
-  clientId: string,
-  termTypeId: string | null
-): Promise<{ error?: string; brojCasova?: number }> {
-  const { admin, error: authErr, actor } = await requireAdmin();
-  if (authErr || !admin) return { error: authErr ?? 'Samo admin.' };
-
-  let uplateQ = admin.from('uplate').select('broj_casova').eq('client_id', clientId);
-  let predQ = admin
-    .from('predavanja')
-    .select('odrzano, term:terms(date, slot_index, category:term_categories(is_nastavak))')
-    .eq('client_id', clientId);
-  if (termTypeId) {
-    uplateQ = uplateQ.eq('term_type_id', termTypeId);
-    predQ = predQ.eq('term_type_id', termTypeId);
-  } else {
-    uplateQ = uplateQ.is('term_type_id', null);
-    predQ = predQ.is('term_type_id', null);
-  }
-  const [{ data: instructors }, { data: uplateRows }, { data: predRows }, { data: termType }, { data: client }] = await Promise.all([
-    admin.from('instructors').select('id, ime, prezime'),
-    uplateQ,
-    predQ,
-    termTypeId ? admin.from('term_types').select('naziv, cena_po_casu').eq('id', termTypeId).maybeSingle() : Promise.resolve({ data: null }),
-    admin.from('clients').select('ime, prezime, popust_percent').eq('id', clientId).maybeSingle(),
-  ]);
-  if (!client) return { error: 'Klijent nije pronađen.' };
-
-  const norm = (v: string | null | undefined) => (v ?? '').trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
-  const primalac = (instructors ?? []).find(
-    (i) => norm(i.ime) === norm(PODRAZUMEVANI_PRIMALAC_UPLATE.ime) && norm(i.prezime) === norm(PODRAZUMEVANI_PRIMALAC_UPLATE.prezime)
-  );
-  if (!primalac) {
-    return { error: `Instruktor ${PODRAZUMEVANI_PRIMALAC_UPLATE.ime} ${PODRAZUMEVANI_PRIMALAC_UPLATE.prezime} nije pronađen – unesite uplatu ručno.` };
-  }
-
-  type T = { date: string; slot_index: number; category: { is_nastavak: boolean } | { is_nastavak: boolean }[] | null };
-  const odrzani = (predRows ?? [])
-    .map((p) => ({ odrzano: p.odrzano as boolean, t: (Array.isArray(p.term) ? p.term[0] : p.term) as T | null }))
-    .filter(({ odrzano, t }) => {
-      if (!t) return false;
-      const cat = Array.isArray(t.category) ? t.category[0] : t.category;
-      if (cat?.is_nastavak) return false;
-      return odrzano || isTermInPast(t.date, t.slot_index);
-    })
-    .map(({ t }) => t!);
-  const placeno = (uplateRows ?? []).reduce((sum, u) => sum + (u.broj_casova ?? 0), 0);
-  const brojCasova = odrzani.length - placeno;
-  if (brojCasova <= 0) return { error: 'Za ovu vrstu časa nema neplaćenih održanih časova (možda je već označeno).' };
-
-  const poslednji = odrzani.reduce((a, b) => (b.date > a.date || (b.date === a.date && b.slot_index > a.slot_index) ? b : a));
-  const cena = termType?.cena_po_casu != null ? Number(termType.cena_po_casu) : null;
-  const popust = Number(client.popust_percent ?? 0);
-  const iznos = cena != null && Number.isFinite(cena) ? Math.round(cena * brojCasova * (1 - (popust >= 0 && popust <= 100 ? popust : 0) / 100)) : null;
-
-  const { data: inserted, error } = await admin
-    .from('uplate')
-    .insert({
-      instructor_id: primalac.id,
-      client_id: clientId,
-      term_type_id: termTypeId,
-      broj_casova: brojCasova,
-      iznos,
-      popust_percent: popust > 0 ? popust : null,
-      napomena: 'Označeno kao plaćeno sa liste klijenata',
-      created_at: vremeCasaBeograd(poslednji.date, poslednji.slot_index),
-    })
-    .select('id')
-    .single();
-  if (error) return { error: error.message };
-
-  revalidatePath('/admin/klijenti');
-  revalidatePath(`/admin/klijenti/${clientId}`);
-  revalidatePath('/admin/uplate');
-  if (actor) {
-    logActivity(
-      actor,
-      'uplata.oznaceno_placeno',
-      `Označeno kao plaćeno: ${client.ime} ${client.prezime} – ${brojCasova} čas(ova)${termType?.naziv ? ` (${termType.naziv})` : ''}.`,
-      { entityType: 'uplata', entityId: inserted?.id ?? null, metadata: { clientId, termTypeId, brojCasova, iznos, primalacId: primalac.id, datum: poslednji.date } }
-    );
-  }
-  return { brojCasova };
 }
 
 /** Brisanje uplate (samo admin). Ceo red se čuva u dnevniku aktivnosti, da se može ručno vratiti. */
@@ -2630,4 +2539,74 @@ export async function unblockSlotAsAdmin(id: string): Promise<{ error?: string }
     });
   }
   return {};
+}
+
+/** Koliko časova pokriva jedna oznaka „plaćeno od ovog časa“ (taj čas + 5 sledećih). */
+const CASOVA_U_PAKETU = 6;
+
+export type PlaceniPaket = {
+  id: string;
+  client_id: string;
+  term_type_id: string | null;
+  od_datum: string;
+  od_slot: number;
+  broj_casova: number;
+  created_at?: string | null;
+};
+
+/**
+ * Mod „Označi plaćeno“ na kalendaru: dodaje pakete (od izabranog časa deteta te vrste plaćeno je 6 časova)
+ * i uklanja izabrane postojeće. Jedini izvor „plaćeno / nije plaćeno“ posle migracije 049.
+ */
+export async function postaviPlacenePakete(
+  dodaj: { clientId: string; termTypeId: string | null; date: string; slotIndex: number }[],
+  ukloniIds: string[]
+): Promise<{ error?: string; dodato?: number; uklonjeno?: number }> {
+  const { admin, error: authErr, actor } = await requireAdmin();
+  if (authErr || !admin) return { error: authErr ?? 'Samo admin.' };
+  if (dodaj.some((d) => !jeIsoDatum(d.date) || !Number.isInteger(d.slotIndex) || d.slotIndex < 0 || d.slotIndex >= TIME_SLOTS.length)) {
+    return { error: 'Neispravan termin.' };
+  }
+
+  const nedostajeTabela = (msg: string) =>
+    /placeni_paketi/.test(msg) && /does not exist|schema cache|not find/i.test(msg)
+      ? 'Prvo pokrenite migraciju 049_placeni_paketi.sql u Supabase SQL Editoru.'
+      : msg;
+
+  let uklonjeno = 0;
+  if (ukloniIds.length > 0) {
+    const { data, error } = await admin.from('placeni_paketi').delete().in('id', ukloniIds).select('id');
+    if (error) return { error: nedostajeTabela(error.message) };
+    uklonjeno = data?.length ?? 0;
+  }
+
+  let dodato = 0;
+  if (dodaj.length > 0) {
+    const redovi = dodaj.map((d) => ({
+      client_id: d.clientId,
+      term_type_id: d.termTypeId,
+      od_datum: d.date,
+      od_slot: d.slotIndex,
+      broj_casova: CASOVA_U_PAKETU,
+      created_by: actor?.id ?? null,
+    }));
+    const { data, error } = await admin
+      .from('placeni_paketi')
+      .upsert(redovi, { onConflict: 'client_id,term_type_id,od_datum,od_slot', ignoreDuplicates: true })
+      .select('id');
+    if (error) return { error: nedostajeTabela(error.message) };
+    dodato = data?.length ?? 0;
+  }
+
+  revalidatePath('/admin/kalendar');
+  revalidatePath('/admin/klijenti', 'layout');
+  revalidatePath('/admin/view', 'layout');
+  revalidatePath('/dashboard', 'layout');
+  if (actor && (dodato > 0 || uklonjeno > 0)) {
+    logActivity(actor, 'placeno.paket', `Označeno plaćeno: ${dodato} novih paketa (po ${CASOVA_U_PAKETU} časova), uklonjeno ${uklonjeno}.`, {
+      entityType: 'placeni_paket',
+      metadata: { dodaj, ukloniIds },
+    });
+  }
+  return { dodato, uklonjeno };
 }
