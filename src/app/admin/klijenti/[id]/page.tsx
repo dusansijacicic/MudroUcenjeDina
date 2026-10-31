@@ -34,7 +34,7 @@ export default async function AdminKlijentEditPage({
   await markPastPredavanjaAsOdrzano(clientId);
 
   const adminSupabase = createAdminClient();
-  const [{ data: client, error }, stanjePoVrstama, { data: predavanjaRaw }, { data: zahteviRaw }, termTypes, otkazani, programStatuses, programs, programiSelections, { data: uplateRaw }, { data: aktivniInstruktori }, { data: paketiRaw }, { data: redniRaw }] = await Promise.all([
+  const [{ data: client, error }, stanjePoVrstama, { data: predavanjaRaw }, { data: zahteviRaw }, termTypes, otkazani, programStatuses, programs, programiSelections, { data: uplateRaw }, { data: aktivniInstruktori }, { data: paketiRaw }, { data: redniRaw }, { data: oznakeRaw }] = await Promise.all([
     adminSupabase.from('clients').select('*, popust_percent, napomena, accessible_term_type_ids').eq('id', clientId).single(),
     getStanjePoVrstamaZaKlijenta(clientId),
     adminSupabase
@@ -67,6 +67,8 @@ export default async function AdminKlijentEditPage({
       .order('od_datum', { ascending: false })
       .order('od_slot', { ascending: false }),
     adminSupabase.rpc('redni_broj_casova_klijenta', { p_client: clientId }),
+    // Vrsta kojoj oznaka stvarno pripada (050) – oznaka na času bez vrste ide uz najbliži čas sa vrstom.
+    adminSupabase.rpc('oznake_placanja', { p_klijenti: [clientId] }),
   ]);
 
   if (error || !client) notFound();
@@ -75,9 +77,12 @@ export default async function AdminKlijentEditPage({
   const redni = (redniRaw ?? {}) as Record<string, [number, number]>;
 
   const one = <T,>(v: T | T[] | null | undefined): T | null => (Array.isArray(v) ? (v[0] ?? null) : (v ?? null));
+  const vrstaOznake = new Map(((oznakeRaw ?? []) as { o_id: string; o_tip: string | null }[]).map((o) => [o.o_id, o.o_tip]));
+  const nazivVrste = new Map(termTypes.map((t) => [t.id, t.naziv ?? '']));
   const paketi: PaketKlijentaRow[] = (paketiRaw ?? []).map((p) => ({
     id: p.id,
     vrsta: one(p.term_type as { naziv?: string } | { naziv?: string }[] | null)?.naziv ?? null,
+    vrstaIzvedena: nazivVrste.get(vrstaOznake.get(p.id) ?? '') ?? null,
     odDatum: String(p.od_datum).slice(0, 10),
     odSlot: p.od_slot,
     brojCasova: p.broj_casova,

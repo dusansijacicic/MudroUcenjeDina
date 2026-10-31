@@ -7,7 +7,8 @@ import toast from 'react-hot-toast';
 import { TIME_SLOTS } from '@/lib/constants';
 import { postaviPlacenePakete } from '@/app/admin/actions';
 
-export type PaketKlijentaRow = { id: string; vrsta: string | null; odDatum: string; odSlot: number; brojCasova: number; createdAt: string | null };
+/** vrstaIzvedena = vrsta kojoj oznaka bez vrste stvarno pripada (najbliži čas sa vrstom, migracija 050). */
+export type PaketKlijentaRow = { id: string; vrsta: string | null; vrstaIzvedena: string | null; odDatum: string; odSlot: number; brojCasova: number; createdAt: string | null };
 
 function getMonday(iso: string): string {
   const d = new Date(iso + 'T12:00:00');
@@ -54,7 +55,9 @@ export default function PlaceniPaketiSection({ paketi }: { paketi: PaketKlijenta
             od {new Date(`${p.odDatum}T12:00:00`).toLocaleDateString('sr-Latn-RS', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' })}{' '}
             {TIME_SLOTS[p.odSlot] ?? ''}
           </Link>
-          <span className="rounded bg-amber-50 px-1.5 text-xs font-medium text-amber-800">{p.vrsta ?? 'Bez vrste'}</span>
+          <span className="rounded bg-amber-50 px-1.5 text-xs font-medium text-amber-800">
+            {p.vrsta ?? (p.vrstaIzvedena ? `${p.vrstaIzvedena} (čas bez vrste)` : 'Bez vrste')}
+          </span>
           <span className="tabular-nums text-stone-600">{p.brojCasova} časova</span>
           {p.createdAt && (
             <span className="text-xs text-stone-400">

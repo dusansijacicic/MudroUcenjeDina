@@ -1464,8 +1464,8 @@ export default function AdminCalendarView({
                   Potvrdi plaćeno ({paidSelection.size})
                 </button>
                 <span className="text-sm text-stone-500">
-                  kliknite dete u terminu od kog je plaćeno – taj čas i sledećih 5 časova tog deteta iste vrste su plaćeni. Dete sa
-                  „💰 od ovde“: klik uklanja tu oznaku.
+                  kliknite dete u terminu od kog je plaćeno – taj čas i sledećih 5 časova tog deteta iste vrste su plaćeni (i oni bez
+                  instruktora/učionice; čas bez vrste ide uz poslednju plaćenu vrstu). Dete sa „💰 od ovde“: klik uklanja tu oznaku.
                   {view === 'mesec' && <strong className="text-stone-700"> Za izbor pređite na nedeljni ili dnevni prikaz.</strong>}
                 </span>
               </div>

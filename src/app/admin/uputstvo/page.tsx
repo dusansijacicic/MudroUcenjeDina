@@ -264,7 +264,8 @@ export default async function AdminUputstvoPage({ searchParams }: { searchParams
           <Napomena>
             Ovo je jedini pokazatelj da je plaćeno – uplate ne utiču. Časovi pre prve oznake se ne računaju. Ako se označi novi paket dok
             stari još traje, 6 časova se dodaje na kraj (ništa se ne gubi). Brisanje ili otkazivanje časa pomera brojanje, jer se broje
-            samo časovi koji postoje.
+            samo časovi koji postoje. Časovi bez instruktora/učionice (narandžasti) se broje isto kao ostali, a čas <strong>bez vrste</strong>{' '}
+            računa se u vrstu poslednje oznake „plaćeno“ tog deteta.
           </Napomena>
         </Sekcija>
 
