@@ -11,11 +11,15 @@ import {
   updateTermClassroomAsAdmin,
   updateTermMetaAsAdmin,
   reassignPredavanjeInstructorAsAdmin,
+  vratiBezInstruktoraAsAdmin,
 } from '@/app/admin/actions';
 import SingleKlijentPicker from '@/components/SingleKlijentPicker';
 import GrupniKlijentiPicker from '@/components/GrupniKlijentiPicker';
 import type { TermCategoryRow } from '@/lib/term-categories';
 import { findDefaultCitanjeTermTypeId } from '@/lib/term-types';
+
+/** Vrednost u izboru instruktora: čas se vraća u zahtev bez instruktora (narandžast na kalendaru). */
+const BEZ_INSTRUKTORA = '__bez__';
 
 function getMonday(d: Date): string {
   const x = new Date(d);
@@ -48,6 +52,8 @@ interface AdminPredavanjeFormProps {
   instructors?: InstructorOption[];
   /** Za izmenu: trenutni instruktor (iz terms.instructor_id) */
   initialInstructorId?: string;
+  /** Instruktori koji u ovom datumu/vremenu već imaju čas: 'pun' = ne može još jedno dete, 'ima_mesta' = grupa sa mestom. */
+  zauzetiInstruktori?: Record<string, 'pun' | 'ima_mesta'>;
   /** Kategorije termina */
   termCategories?: TermCategoryRow[];
   initialTermCategoryId?: string;
@@ -72,6 +78,7 @@ export default function AdminPredavanjeForm({
   clientStanjeList = [],
   instructors = [],
   initialInstructorId = '',
+  zauzetiInstruktori = {},
   termCategories = [],
   initialTermCategoryId = '',
   initialTermNapomena = null,
@@ -139,6 +146,26 @@ export default function AdminPredavanjeForm({
     }
     setLoading(true);
     try {
+      // Bez instruktora: prvo se sačuvaju dete/vrsta/održano (da zahtev dobije izabranu vrstu), pa se čas vraća u zahtev.
+      if (!isNew && instructorId === BEZ_INSTRUKTORA) {
+        const saved = await updatePredavanjeAsAdmin(
+          predavanje!.id,
+          termId,
+          clientId,
+          odrzano,
+          placeno,
+          komentar.trim() || null,
+          termTypeId || null
+        );
+        if (saved.error) throw new Error(saved.error);
+        const res = await vratiBezInstruktoraAsAdmin({ predavanjeIds: [predavanje!.id] });
+        if (res.failed.length > 0) throw new Error(res.failed[0].error);
+        toast.success('Čas je vraćen bez instruktora – čeka na kalendaru (narandžasto).');
+        router.push(kalendarHref);
+        router.refresh();
+        return;
+      }
+
       // Promena instruktora (samo pri izmeni)
       if (!isNew && instructorId && instructorId !== initialInstructorId) {
         const res = await reassignPredavanjeInstructorAsAdmin(
@@ -261,21 +288,34 @@ export default function AdminPredavanjeForm({
             Instruktor
           </label>
           <p className="text-xs text-stone-500">
-            Promena instruktora premešta ovu radionicu u termin izabranog instruktora (isti datum i vreme).
+            Promena instruktora premešta ovu radionicu u termin izabranog instruktora (isti datum i vreme). „Bez instruktora“ vraća čas
+            u zahtev koji čeka da ga neko preuzme.
           </p>
           <select
             value={instructorId}
             onChange={(e) => setInstructorId(e.target.value)}
             className="w-full rounded-lg border border-stone-300 px-3 py-2 text-stone-800 bg-white"
           >
+            <option value={BEZ_INSTRUKTORA}>↩ bez instruktora (vrati u zahtev)</option>
             {instructors.map((i) => (
-              <option key={i.id} value={i.id}>
+              <option key={i.id} value={i.id} disabled={i.id !== initialInstructorId && zauzetiInstruktori[i.id] === 'pun'}>
                 {i.ime} {i.prezime}
-                {i.id === initialInstructorId ? ' (trenutni)' : ''}
+                {i.id === initialInstructorId
+                  ? ' (trenutni)'
+                  : zauzetiInstruktori[i.id] === 'pun'
+                    ? ' (zauzet – već ima čas u to vreme)'
+                    : zauzetiInstruktori[i.id] === 'ima_mesta'
+                      ? ' (ima grupu u to vreme – dete ide u nju)'
+                      : ''}
               </option>
             ))}
           </select>
-          {instructorId !== initialInstructorId && (
+          {instructorId === BEZ_INSTRUKTORA ? (
+            <p className="text-xs text-amber-800 font-medium">
+              Čuvanjem forme čas postaje zahtev bez instruktora (narandžast na kalendaru) – isti datum, vreme, vrsta i učionica. Kasnije ga
+              preuzima predavač ili ga dodelite (Dodeli instruktora).{komentar.trim() ? ' Komentar se ne prenosi.' : ''}
+            </p>
+          ) : instructorId !== initialInstructorId && (
             <p className="text-xs text-amber-800 font-medium">
               Čuvanjem forme radionica će biti prebačena novom instruktoru.
             </p>
@@ -347,7 +387,7 @@ export default function AdminPredavanjeForm({
         <div>
           <label className="block text-sm font-medium text-stone-700 mb-1">Deca (grupa)</label>
           <p className="text-xs text-stone-500 mb-2">
-            Kategorija „{selectedTermCategory?.naziv}" dozvoljava grupu – označite jedno ili više dece, dodaju se odjednom.
+            Kategorija „{selectedTermCategory?.naziv}“ dozvoljava grupu – označite jedno ili više dece, dodaju se odjednom.
           </p>
           <GrupniKlijentiPicker
             clients={clients}

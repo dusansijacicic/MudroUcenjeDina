@@ -6,6 +6,7 @@ import { TIME_SLOTS } from '@/lib/constants';
 import { getTermTypes, getClassrooms, getStanjePoVrstamaZaKlijenteBatch, getTermCategories, getAdminInstructorsList, getAllClientsCompletedProgramIds, type StanjeVrstaRow } from '@/app/admin/actions';
 import AdminPredavanjeForm from '@/app/admin/termin/AdminPredavanjeForm';
 import { SEEDED_TERM_CATEGORY_INDIVIDUAL_ID } from '@/lib/term-categories';
+import { termMozeNovoPredavanje } from '@/lib/settings';
 
 export default async function AdminEditPredavanjePage({
   params,
@@ -67,13 +68,21 @@ export default async function AdminEditPredavanjePage({
 
   const termsInSlot = await admin
     .from('terms')
-    .select('classroom_id')
+    .select('id, instructor_id, classroom_id')
     .eq('date', term.date)
     .eq('slot_index', term.slot_index)
     .neq('id', termId);
   const takenClassroomIds = (termsInSlot.data ?? [])
     .map((t: { classroom_id: string | null }) => t.classroom_id)
     .filter((id: string | null): id is string => id != null);
+  // Instruktori koji u to vreme već imaju čas – u individualni (ili pun) ne može još jedno dete.
+  const zauzetiInstruktori: Record<string, 'pun' | 'ima_mesta'> = Object.fromEntries(
+    await Promise.all(
+      (termsInSlot.data ?? [])
+        .filter((t: { instructor_id: string | null }) => t.instructor_id)
+        .map(async (t: { id: string; instructor_id: string }) => [t.instructor_id, (await termMozeNovoPredavanje(t.id)).ok ? 'ima_mesta' : 'pun'] as const)
+    )
+  );
 
   const slotLabel = TIME_SLOTS[term.slot_index] ?? '—';
   const termWithClassroom = term as { classroom_id?: string | null };
@@ -100,6 +109,7 @@ export default async function AdminEditPredavanjePage({
         completedProgramIdsByClient={completedProgramIdsByClient}
         instructors={instructors}
         initialInstructorId={instructorId}
+        zauzetiInstruktori={zauzetiInstruktori}
         predavanje={{
           id: predavanje.id,
           client_id: predavanje.client_id,

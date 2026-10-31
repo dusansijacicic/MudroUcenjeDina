@@ -239,10 +239,17 @@ export default async function AdminUputstvoPage({ searchParams }: { searchParams
           <Podnaslov>Dodeli instruktora/učionicu/vrstu</Podnaslov>
           <Koraci>
             <li>Kliknite <Ui>Dodeli instruktora/učionicu/vrstu</Ui>.</li>
-            <li>Izaberite instruktora i/ili učionicu i/ili vrstu časa (bilo koja kombinacija; prazno = ne menja se).</li>
+            <li>Izaberite instruktora i/ili učionicu i/ili vrstu časa (bilo koja kombinacija; „ne menjaj“ = ostaje kako je).</li>
             <li>Kliknite termine i narandžaste časove bez instruktora kojima to dodeljujete.</li>
             <li>Kliknite <Ui>✓ Potvrdi dodelu (N)</Ui>.</li>
           </Koraci>
+          <Napomena>
+            <Ui>↩ bez instruktora (vrati u zahtev)</Ui>: izabrani časovi se vraćaju bez instruktora – svako dete postaje narandžasti čas
+            (isti datum, vreme, vrsta i učionica) koji čeka da ga neko preuzme ili da mu se kasnije dodeli instruktor. Isto može za jedno
+            dete: otvorite čas → <Ui>Izmeni</Ui> → Instruktor → <Ui>↩ bez instruktora</Ui> → <Ui>Sačuvaj</Ui>. Održan čas se ne vraća.
+            Instruktor koji u to vreme već ima čas sa drugim detetom ne može se izabrati (piše „zauzet“); u grupu sa slobodnim mestom
+            dete se dodaje.
+          </Napomena>
 
           <Podnaslov>Označi plaćeno – od kog časa je plaćeno</Podnaslov>
           <Koraci>

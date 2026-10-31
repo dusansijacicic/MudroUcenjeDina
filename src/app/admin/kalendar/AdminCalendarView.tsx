@@ -23,6 +23,7 @@ import {
   blockSlotsAsAdmin,
   unblockSlotAsAdmin,
   postaviPlacenePakete,
+  vratiBezInstruktoraAsAdmin,
   type BlokiranTermin,
   type PlaceniPaket,
 } from '@/app/admin/actions';
@@ -183,6 +184,9 @@ const SwapContext = createContext<SwapContextValue>({
   onTogglePaid: () => {},
   getPaketStart: () => undefined,
 });
+
+/** Izbor u modu Dodeli: izabrani časovi se vraćaju u zahteve bez instruktora (a ne "ne menjaj instruktora"). */
+const BEZ_INSTRUKTORA = '__bez__';
 
 /** Čas deteta izabran u modu „Označi plaćeno“ (predavanje „p:id“ ili zahtev „z:id“). paketId = već
  * postoji oznaka baš od ovog časa → izbor znači da se ona uklanja. */
@@ -1044,15 +1048,23 @@ export default function AdminCalendarView({
     });
   };
 
-  // "Bez instruktora"/"bez učionice" (prazno) znači da se to polje NE dira – menja se samo ono drugo
-  // koje jeste izabrano. Zahtevi: učionica se šalje PRE instruktora, tako da – ako se zahtev ovim
-  // potvrđuje u pravi termin (jer je instruktor izabran) – ta učionica stigne pre konverzije.
+  // "Ne menjaj instruktora"/"ne menjaj učionicu" (prazno) znači da se to polje NE dira – menja se samo
+  // ono drugo koje jeste izabrano. Zahtevi: učionica se šalje PRE instruktora, tako da – ako se zahtev
+  // ovim potvrđuje u pravi termin (jer je instruktor izabran) – ta učionica stigne pre konverzije.
+  // BEZ_INSTRUKTORA: učionica/vrsta se prvo dodele terminima, pa se termini vraćaju u zahteve (sa njima).
   const confirmAssign = async () => {
     const total = assignSelection.size + assignZahteviSelection.size;
-    const hasInstructor = !!assignInstructorChoice;
+    const bezInstruktora = assignInstructorChoice === BEZ_INSTRUKTORA;
+    const hasInstructor = !!assignInstructorChoice && !bezInstruktora;
     const hasClassroom = !!assignClassroomChoice;
     const hasTermType = !!assignTermTypeChoice;
-    if (total === 0 || (!hasInstructor && !hasClassroom && !hasTermType)) return;
+    if (total === 0 || (!hasInstructor && !bezInstruktora && !hasClassroom && !hasTermType)) return;
+    if (
+      bezInstruktora &&
+      !confirm(`Vratiti ${total} izabranih bez instruktora? Svako dete postaje zahtev na čekanju, a termini bez dece se brišu.`)
+    ) {
+      return;
+    }
     const termIds = [...assignSelection];
     const zahtevIds = [...assignZahteviSelection];
     const instructorId = assignInstructorChoice;
@@ -1088,12 +1100,20 @@ export default function AdminCalendarView({
       }
     }
     const termResults = await Promise.all(termCalls);
+    let bezInstruktoraFailed = 0;
+    let vraceno = 0;
+    if (bezInstruktora) {
+      const res = await vratiBezInstruktoraAsAdmin({ termIds, zahtevIds });
+      vraceno = res.vraceno;
+      bezInstruktoraFailed = res.failed.length;
+      if (res.failed.length > 0) toast.error([...new Set(res.failed.map((f) => f.error))].join(' '));
+    }
     setAssignLoading(false);
-    const failedCount = termResults.reduce((sum, r) => sum + r.failed.length, 0) + zahtevFailed.length;
+    const failedCount = termResults.reduce((sum, r) => sum + r.failed.length, 0) + zahtevFailed.length + bezInstruktoraFailed;
     if (failedCount > 0) {
       toast.error(`Nije dodeljeno ${failedCount}/${total}.`);
     } else {
-      toast.success(`Dodeljeno ${total}.`);
+      toast.success(bezInstruktora ? `Vraćeno bez instruktora: ${vraceno} čas(ova) – čekaju kao zahtevi.` : `Dodeljeno ${total}.`);
     }
     router.refresh();
   };
@@ -1559,7 +1579,8 @@ export default function AdminCalendarView({
                   onChange={(e) => setAssignInstructorChoice(e.target.value)}
                   className="rounded-lg border border-stone-300 px-3 py-1.5 text-sm text-stone-800 bg-white"
                 >
-                  <option value="">bez instruktora</option>
+                  <option value="">ne menjaj instruktora</option>
+                  <option value={BEZ_INSTRUKTORA}>↩ bez instruktora (vrati u zahtev)</option>
                   {instructorsList.map((i) => (
                     <option key={i.id} value={i.id}>{i.ime} {i.prezime}</option>
                   ))}
@@ -1569,7 +1590,7 @@ export default function AdminCalendarView({
                   onChange={(e) => setAssignClassroomChoice(e.target.value)}
                   className="rounded-lg border border-stone-300 px-3 py-1.5 text-sm text-stone-800 bg-white"
                 >
-                  <option value="">bez učionice</option>
+                  <option value="">ne menjaj učionicu</option>
                   {classroomsList.map((c) => (
                     <option key={c.id} value={c.id}>{c.naziv}</option>
                   ))}
@@ -1593,7 +1614,9 @@ export default function AdminCalendarView({
                   Potvrdi dodelu ({assignCount})
                 </button>
                 <span className="text-sm text-stone-400">
-                  izaberite instruktora i/ili učionicu i/ili vrstu časa (može bilo koja kombinacija), pa kliknite termine na kalendaru da ih označite
+                  {assignInstructorChoice === BEZ_INSTRUKTORA
+                    ? 'kliknite časove koje vraćate bez instruktora – svako dete postaje narandžasti zahtev (isti datum, vreme, vrsta i učionica) koji čeka da ga neko preuzme'
+                    : 'izaberite instruktora i/ili učionicu i/ili vrstu časa (može bilo koja kombinacija), pa kliknite termine na kalendaru da ih označite'}
                 </span>
               </div>
               {(assignSelection.size > 0 || assignZahteviSelection.size > 0) && (

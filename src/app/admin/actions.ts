@@ -1150,6 +1150,12 @@ export async function reassignPredavanjeInstructorAsAdmin(
   let newTermId: string;
   if (existingTerm) {
     newTermId = existingTerm.id as string;
+    // Instruktor u to vreme već ima čas – dete sme samo u njegovu grupu sa slobodnim mestom, nikad u
+    // individualni čas sa drugim detetom (ranije se ovde tiho spajalo u jedan termin).
+    const mesto = await termMozeNovoPredavanje(newTermId);
+    if (!mesto.ok) {
+      return { error: `Ovaj instruktor u to vreme već ima čas (${mesto.count}/${mesto.max} dece) – izaberite drugog instruktora.` };
+    }
   } else {
     // Kreiramo novi termin za novog instruktora – prenosimo kategoriju/napomenu sa izvornog terma
     // (term_category_id je NOT NULL u bazi, ne sme se izostaviti). NE prenosimo učionicu ovde:
@@ -1233,6 +1239,126 @@ export async function reassignPredavanjeInstructorAsAdmin(
     });
   }
   return { newTermId };
+}
+
+/**
+ * "Bez instruktora": čas (predavanje) se vraća u zahtev na čekanju – narandžasti čas koji čeka da ga
+ * neki predavač preuzme, isti datum/vreme/vrsta/učionica. Termin koji ostane bez dece se briše
+ * (oslobađa instruktora i učionicu). termIds = sva deca tih termina; zahtevIds = zahtevi kojima se
+ * samo skida unapred izabrani instruktor. Održan čas se ne vraća.
+ */
+export async function vratiBezInstruktoraAsAdmin(izbor: {
+  predavanjeIds?: string[];
+  termIds?: string[];
+  zahtevIds?: string[];
+}): Promise<{ failed: { id: string; error: string }[]; vraceno: number }> {
+  const { admin, error: authErr, actor } = await requireAdmin();
+  if (authErr || !admin) {
+    const svi = [...(izbor.predavanjeIds ?? []), ...(izbor.termIds ?? []), ...(izbor.zahtevIds ?? [])];
+    return { failed: svi.map((id) => ({ id, error: authErr ?? 'Niste ovlašćeni.' })), vraceno: 0 };
+  }
+
+  const failed: { id: string; error: string }[] = [];
+  const predavanjeIds = new Set(izbor.predavanjeIds ?? []);
+  if (izbor.termIds?.length) {
+    const { data: uTerminima } = await admin.from('predavanja').select('id, term_id').in('term_id', izbor.termIds);
+    for (const p of uTerminima ?? []) predavanjeIds.add(p.id);
+    const saDecom = new Set((uTerminima ?? []).map((p) => p.term_id));
+    for (const termId of izbor.termIds) {
+      if (!saDecom.has(termId)) failed.push({ id: termId, error: 'Termin nema dece (testiranje ostaje kod instruktora).' });
+    }
+  }
+
+  let vraceno = 0;
+  const termIdsZaSredjivanje = new Set<string>();
+  // Redom, ne paralelno: deca istog termina – prazan termin se briše tek na kraju.
+  for (const predavanjeId of predavanjeIds) {
+    const { data: pred } = await admin
+      .from('predavanja')
+      .select('id, client_id, term_id, odrzano, term_type_id, term:terms(date, slot_index, classroom_id)')
+      .eq('id', predavanjeId)
+      .maybeSingle();
+    const term = (pred ? (Array.isArray(pred.term) ? pred.term[0] : pred.term) : null) as
+      | { date: string; slot_index: number; classroom_id: string | null }
+      | null;
+    if (!pred || !term) {
+      failed.push({ id: predavanjeId, error: 'Čas nije pronađen.' });
+      continue;
+    }
+    if (pred.odrzano) {
+      failed.push({ id: predavanjeId, error: 'Čas je već održan – ne vraća se bez instruktora.' });
+      continue;
+    }
+    const datum = String(term.date).slice(0, 10);
+
+    // Ako za to dete u to vreme već postoji zahtev, ne pravi se još jedan.
+    const { data: postojeci } = await admin
+      .from('zahtevi_za_cas')
+      .select('id')
+      .eq('client_id', pred.client_id)
+      .eq('requested_date', datum)
+      .eq('requested_slot_index', term.slot_index)
+      .eq('status', 'pending')
+      .limit(1)
+      .maybeSingle();
+    let noviZahtevId: string | null = null;
+    if (!postojeci) {
+      const { data: z, error: zErr } = await admin
+        .from('zahtevi_za_cas')
+        .insert({
+          client_id: pred.client_id,
+          instructor_id: null,
+          classroom_id: term.classroom_id,
+          requested_date: datum,
+          requested_slot_index: term.slot_index,
+          term_type_id: pred.term_type_id ?? null,
+          status: 'pending',
+        })
+        .select('id')
+        .single();
+      if (zErr || !z) {
+        failed.push({ id: predavanjeId, error: zErr?.message ?? 'Zahtev nije kreiran.' });
+        continue;
+      }
+      noviZahtevId = z.id as string;
+    }
+
+    const { error: delErr } = await admin.from('predavanja').delete().eq('id', predavanjeId);
+    if (delErr) {
+      if (noviZahtevId) await admin.from('zahtevi_za_cas').delete().eq('id', noviZahtevId);
+      failed.push({ id: predavanjeId, error: delErr.message });
+      continue;
+    }
+    termIdsZaSredjivanje.add(pred.term_id as string);
+    vraceno++;
+  }
+
+  for (const termId of termIdsZaSredjivanje) {
+    const { count } = await admin.from('predavanja').select('*', { count: 'exact', head: true }).eq('term_id', termId);
+    if ((count ?? 0) === 0) {
+      await admin.from('terms').delete().eq('nastavak_of_term_id', termId).eq('napomena', AUTO_SPILLOVER_NAPOMENA);
+      await admin.from('terms').delete().eq('id', termId);
+    } else {
+      await syncSpilloverForTerm(admin, termId);
+    }
+    revalidatePath(`/admin/termin/${termId}`);
+  }
+
+  if (izbor.zahtevIds?.length) {
+    const { error } = await admin.from('zahtevi_za_cas').update({ instructor_id: null }).in('id', izbor.zahtevIds).eq('status', 'pending');
+    if (error) failed.push(...izbor.zahtevIds.map((id) => ({ id, error: error.message })));
+    else vraceno += izbor.zahtevIds.length;
+  }
+
+  revalidatePath('/admin/kalendar');
+  revalidatePath('/dashboard/zahtevi');
+  if (actor && vraceno > 0) {
+    logActivity(actor, 'predavanje.bez_instruktora', `Vraćeno bez instruktora (zahtev na čekanju): ${vraceno} čas(ova).`, {
+      entityType: 'predavanje',
+      metadata: { predavanjeIds: [...predavanjeIds], termIds: izbor.termIds ?? [], zahtevIds: izbor.zahtevIds ?? [] },
+    });
+  }
+  return { failed, vraceno };
 }
 
 /** Premeštanje termina: ista pravila – u ciljnom slotu moraju biti jedinstveni predavač i učionica, i ne sme se premašiti max termina po slotu. */
