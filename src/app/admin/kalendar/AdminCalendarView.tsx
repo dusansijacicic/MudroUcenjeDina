@@ -139,8 +139,12 @@ type SwapContextValue = {
   onToggleAssignZahtevSelect: (zahtevId: string) => void;
   /** Sve učionice (za "Zakaži više časova" – da svaki slot pokaže koje su još slobodne u njemu). */
   classroomsList: { id: string; naziv: string }[];
-  /** Mod „Označi plaćeno“: klik na dete = plaćeno od tog časa (taj + 5 sledećih te vrste). */
+  /** Mod „Označi plaćeno“: klik na dete = plaćeno od tog časa (taj + 5 sledećih te vrste, ili samo taj čas). */
   paidMode: boolean;
+  /** Čekirano „samo ovaj čas“ – nove oznake pokrivaju jedan čas umesto paketa od 6. */
+  paidSamoJedan: boolean;
+  /** Koliko časova pokriva postojeća oznaka (id iz getPaketStart). */
+  getPaketBroj: (paketId: string) => number | undefined;
   paidSelectionState: (key: string) => 'dodaj' | 'ukloni' | null;
   onTogglePaid: (pick: PaidPick) => void;
   /** Id oznake plaćanja koja počinje baš na ovom času deteta te vrste. */
@@ -180,6 +184,8 @@ const SwapContext = createContext<SwapContextValue>({
   onToggleAssignZahtevSelect: () => {},
   classroomsList: [],
   paidMode: false,
+  paidSamoJedan: false,
+  getPaketBroj: () => undefined,
   paidSelectionState: () => null,
   onTogglePaid: () => {},
   getPaketStart: () => undefined,
@@ -658,6 +664,8 @@ export default function AdminCalendarView({
   const [paidMode, setPaidMode] = useState(false);
   const [paidSelection, setPaidSelection] = useState<Map<string, PaidPick>>(new Map());
   const [paidLoading, setPaidLoading] = useState(false);
+  const [paidSamoJedan, setPaidSamoJedan] = useState(false);
+  const paketBrojById = useMemo(() => new Map(placeniPaketi.map((p) => [p.id, p.broj_casova])), [placeniPaketi]);
   const paketStartByKey = useMemo(
     () => new Map(placeniPaketi.map((p) => [`${p.client_id}|${p.term_type_id ?? ''}|${p.od_datum}|${p.od_slot}`, p.id])),
     [placeniPaketi]
@@ -981,6 +989,7 @@ export default function AdminCalendarView({
       return next;
     });
     setPaidSelection(new Map());
+    setPaidSamoJedan(false);
   };
 
   const onTogglePaid = (pick: PaidPick) => {
@@ -997,9 +1006,9 @@ export default function AdminCalendarView({
     if (izabrano.length === 0) return;
     const dodaj = izabrano
       .filter((p) => !p.paketId)
-      .map((p) => ({ clientId: p.clientId, termTypeId: p.termTypeId, date: p.date, slotIndex: p.slot }));
+      .map((p) => ({ clientId: p.clientId, termTypeId: p.termTypeId, date: p.date, slotIndex: p.slot, brojCasova: paidSamoJedan ? 1 : 6 }));
     const ukloni = izabrano.filter((p) => p.paketId).map((p) => p.paketId as string);
-    if (ukloni.length > 0 && !confirm(`Ukloniti ${ukloni.length} oznaka „plaćeno“? Ti časovi i sledećih 5 više neće biti plaćeni.`)) return;
+    if (ukloni.length > 0 && !confirm(`Ukloniti ${ukloni.length} oznaka „plaćeno“? Časovi iz tih oznaka više neće biti plaćeni.`)) return;
     setPaidLoading(true);
     const res = await postaviPlacenePakete(dodaj, ukloni);
     setPaidLoading(false);
@@ -1008,12 +1017,13 @@ export default function AdminCalendarView({
       return;
     }
     toast.success(
-      [res.dodato ? `Plaćeno označeno za ${res.dodato} dete/časa (po 6 časova).` : '', res.uklonjeno ? `Uklonjeno oznaka: ${res.uklonjeno}.` : '']
+      [res.dodato ? `Plaćeno označeno za ${res.dodato} dete/časa (${paidSamoJedan ? 'samo taj čas' : 'po 6 časova'}).` : '', res.uklonjeno ? `Uklonjeno oznaka: ${res.uklonjeno}.` : '']
         .filter(Boolean)
         .join(' ') || 'Ništa novo – te oznake već postoje.'
     );
     setPaidSelection(new Map());
     setPaidMode(false);
+    setPaidSamoJedan(false);
     router.refresh();
   };
 
@@ -1333,6 +1343,8 @@ export default function AdminCalendarView({
         onToggleAssignZahtevSelect,
         classroomsList,
         paidMode,
+        paidSamoJedan,
+        getPaketBroj: (paketId: string) => paketBrojById.get(paketId),
         paidSelectionState: (key: string) => {
           const p = paidSelection.get(key);
           return p ? (p.paketId ? 'ukloni' : 'dodaj') : null;
@@ -1483,9 +1495,16 @@ export default function AdminCalendarView({
                 >
                   Potvrdi plaćeno ({paidSelection.size})
                 </button>
+                <label className="flex items-center gap-1.5 font-medium text-stone-700">
+                  <input type="checkbox" checked={paidSamoJedan} onChange={(e) => setPaidSamoJedan(e.target.checked)} />
+                  samo ovaj čas (umesto paketa od 6)
+                </label>
                 <span className="text-sm text-stone-500">
-                  kliknite dete u terminu od kog je plaćeno – taj čas i sledećih 5 časova tog deteta iste vrste su plaćeni (i oni bez
-                  instruktora/učionice; čas bez vrste ide uz poslednju plaćenu vrstu). Dete sa „💰 od ovde“: klik uklanja tu oznaku.
+                  {paidSamoJedan
+                    ? 'kliknite dete u terminu koji je plaćen – plaćen je samo taj jedan čas.'
+                    : 'kliknite dete u terminu od kog je plaćeno – taj čas i sledećih 5 časova tog deteta iste vrste su plaćeni.'}{' '}
+                  Računaju se i časovi bez instruktora/učionice; čas bez vrste ide uz poslednju plaćenu vrstu. Dete sa „💰“: klik uklanja tu
+                  oznaku.
                   {view === 'mesec' && <strong className="text-stone-700"> Za izbor pređite na nedeljni ili dnevni prikaz.</strong>}
                 </span>
               </div>
@@ -1498,7 +1517,7 @@ export default function AdminCalendarView({
                         p.paketId ? 'border-red-300 bg-red-50 text-red-800' : 'border-emerald-300 bg-emerald-50 text-emerald-800'
                       }`}
                     >
-                      {p.paketId ? '✕ ukloni: ' : '✓ '}
+                      {p.paketId ? '✕ ukloni: ' : paidSamoJedan ? '✓ 1 čas: ' : '✓ 6 časova od: '}
                       {formatShortDate(p.date)} {TIME_SLOTS[p.slot] ?? ''} · {p.label}
                     </span>
                   ))}
@@ -2080,7 +2099,7 @@ function TermCardVisual({ term, rowOffset = 0 }: { term: AdminTerm; rowOffset?: 
                 return (
                   <div
                     style={isUnpaid(p.redni) ? UNPAID_ROW_STYLE : rowStyle(i)}
-                    title={klik ? 'Plaćeno od ovog časa (ovaj + 5 sledećih)' : redniTitle(p.redni)}
+                    title={klik ? (swap.paidSamoJedan ? 'Plaćen samo ovaj čas' : 'Plaćeno od ovog časa (ovaj + 5 sledećih)') : redniTitle(p.redni)}
                     role={klik ? 'button' : undefined}
                     onClick={
                       klik
@@ -2106,11 +2125,15 @@ function TermCardVisual({ term, rowOffset = 0 }: { term: AdminTerm; rowOffset?: 
                     <span className="min-w-0 break-words">{ime}</span>
                     {p.redni && <RedniBroj redni={p.redni} />}
                     {paidState === 'dodaj' ? (
-                      <span className="w-full text-[11px] font-bold text-emerald-700">✓ plaćeno od ovde (6 časova)</span>
+                      <span className="w-full text-[11px] font-bold text-emerald-700">
+                        {swap.paidSamoJedan ? '✓ plaćen samo ovaj čas' : '✓ plaćeno od ovde (6 časova)'}
+                      </span>
                     ) : paidState === 'ukloni' ? (
                       <span className="w-full text-[11px] font-bold text-red-700">✕ ukloni oznaku plaćeno</span>
                     ) : paketId ? (
-                      <span className="w-full text-[11px] font-semibold text-emerald-700">💰 od ovde</span>
+                      <span className="w-full text-[11px] font-semibold text-emerald-700">
+                        {swap.getPaketBroj(paketId) === 1 ? '💰 plaćen ovaj čas' : '💰 od ovde'}
+                      </span>
                     ) : null}
                   </div>
                 );
@@ -2318,11 +2341,15 @@ function AdminCellContent({
             {z.classroom_naziv && <span className="block text-[11px]">🏫 {z.classroom_naziv}</span>}
             <span className="text-[10px] uppercase tracking-wide">zahtev · čeka predavača</span>
             {zahtevPaidState === 'dodaj' ? (
-              <span className="block text-[11px] font-bold text-emerald-700">✓ plaćeno od ovde (6 časova)</span>
+              <span className="block text-[11px] font-bold text-emerald-700">
+                {swap.paidSamoJedan ? '✓ plaćen samo ovaj čas' : '✓ plaćeno od ovde (6 časova)'}
+              </span>
             ) : zahtevPaidState === 'ukloni' ? (
               <span className="block text-[11px] font-bold text-red-700">✕ ukloni oznaku plaćeno</span>
             ) : zahtevPaketId ? (
-              <span className="block text-[11px] font-semibold text-emerald-700">💰 od ovde</span>
+              <span className="block text-[11px] font-semibold text-emerald-700">
+                {swap.getPaketBroj(zahtevPaketId) === 1 ? '💰 plaćen ovaj čas' : '💰 od ovde'}
+              </span>
             ) : null}
           </div>
         );

@@ -113,7 +113,8 @@ export default async function AdminUputstvoPage({ searchParams }: { searchParams
             <li>Novo dete ili novi čas: <Ui>+ Zakaži termin</Ui> (ili <Ui>+</Ui> u praznoj ćeliji kalendara – datum i vreme se sami popune).</li>
             <li>
               Roditelj je platio: na kalendaru <Ui>Označi plaćeno</Ui> → kliknite dete u terminu od kog je plaćeno → <Ui>✓ Potvrdi plaćeno</Ui>.
-              Taj čas i sledećih 5 časova te vrste su plaćeni. Novac se po želji upisuje u <Ui>+ Unesi uplatu</Ui> (samo evidencija).
+              Taj čas i sledećih 5 časova te vrste su plaćeni (ili, uz čekiran „samo ovaj čas“, samo taj jedan). Novac se po želji upisuje u{' '}
+              <Ui>+ Unesi uplatu</Ui> (samo evidencija).
             </li>
             <li>
               Ko nije platio: posle potrošenih 6 časova kalendar pokazuje crveno <Crveno>! nije plaćeno</Crveno>; na stranici{' '}
@@ -255,16 +256,21 @@ export default async function AdminUputstvoPage({ searchParams }: { searchParams
           <Koraci>
             <li>Kliknite <Ui>Označi plaćeno</Ui> (nedeljni ili dnevni prikaz).</li>
             <li>
+              Podrazumevano je paket od 6 časova. Ako je plaćen samo jedan čas, čekirajte <Ui>samo ovaj čas (umesto paketa od 6)</Ui> –
+              važi za sve što označite do potvrde.
+            </li>
+            <li>
               Kliknite <strong>dete</strong> u terminu od kog je plaćeno (može i narandžasti čas bez instruktora) – red dobije zeleni okvir i
               „✓ plaćeno od ovde (6 časova)“. Može više dece odjednom.
             </li>
             <li>Kliknite <Ui>✓ Potvrdi plaćeno (N)</Ui>.</li>
             <li>
               Od tog časa, taj i sledećih 5 časova tog deteta <strong>iste vrste</strong> su plaćeni: na kalendaru piše „1/6 · još 5“,
-              „2/6 · još 4“ … „6/6 · poslednji“. Sledeći časovi su crveni <Crveno>! nije plaćeno</Crveno> dok se opet ne označi.
+              „2/6 · još 4“ … „6/6 · poslednji“ (za jedan čas: „1/1 · poslednji“). Sledeći časovi su crveni <Crveno>! nije plaćeno</Crveno>
+              dok se opet ne označi.
             </li>
             <li>
-              Uklanjanje: u istom modu dete sa „💰 od ovde“ → klik (crveni okvir) → <Ui>✓ Potvrdi plaćeno</Ui>. Ili na profilu deteta →
+              Uklanjanje: u istom modu dete sa „💰 od ovde“ (ili „💰 plaćen ovaj čas“) → klik (crveni okvir) → <Ui>✓ Potvrdi plaćeno</Ui>. Ili na profilu deteta →
               <Ui>Plaćeno od (oznake)</Ui> → <Ui>Ukloni</Ui>.
             </li>
           </Koraci>
@@ -353,7 +359,7 @@ export default async function AdminUputstvoPage({ searchParams }: { searchParams
           <Koraci>
             <li><Ui>Pregled po vrstama časova</Ui>: održano / plaćeno / preostalo / nije plaćeno za svaku vrstu časa.</li>
             <li>
-              <Ui>Plaćeno od (oznake)</Ui>: od kog časa je označeno plaćeno (po 6 časova). Klik na datum otvara kalendar na tom času;{' '}
+              <Ui>Plaćeno od (oznake)</Ui>: od kog časa je označeno plaćeno (6 časova ili samo taj čas). Klik na datum otvara kalendar na tom času;{' '}
               <Ui>Ukloni</Ui> briše oznaku.
             </li>
             <li>
@@ -501,7 +507,7 @@ export default async function AdminUputstvoPage({ searchParams }: { searchParams
             intro="Pun pristup – sve stranice iz ovog uputstva. Ulaz na /admin."
             items={[
               'Svi termini svih instruktora, svi modovi na kalendaru (Swap, Copy, Delete, Zakaži više časova, Dodeli, Blokiraj, Označi plaćeno).',
-              'Plaćeno: samo admin označava na kalendaru (Označi plaćeno – 6 časova od izabranog). Uplate: unos, izmena i brisanje (evidencija novca).',
+              'Plaćeno: samo admin označava na kalendaru (Označi plaćeno – 6 časova od izabranog ili samo taj čas). Uplate: unos, izmena i brisanje (evidencija novca).',
               'Klijenti, instruktori, vrste/kategorije/programi/učionice, blokade, dnevnik, podešavanja i bekap.',
               'Pregled „kao instruktor“ (Instruktori → Pregled →).',
               'Nova SQL migracija iz koda se pokreće ručno u Supabase SQL Editoru (koraci u KAKO_POKRENUTI_SQL.md).',

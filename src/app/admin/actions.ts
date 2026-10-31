@@ -2681,17 +2681,21 @@ export type PlaceniPaket = {
 };
 
 /**
- * Mod „Označi plaćeno“ na kalendaru: dodaje pakete (od izabranog časa deteta te vrste plaćeno je 6 časova)
- * i uklanja izabrane postojeće. Jedini izvor „plaćeno / nije plaćeno“ posle migracije 049.
+ * Mod „Označi plaćeno“ na kalendaru: dodaje pakete (od izabranog časa deteta te vrste plaćeno je 6 časova,
+ * ili samo taj jedan čas – brojCasova 1) i uklanja izabrane postojeće. Jedini izvor „plaćeno / nije
+ * plaćeno“ posle migracije 049.
  */
 export async function postaviPlacenePakete(
-  dodaj: { clientId: string; termTypeId: string | null; date: string; slotIndex: number }[],
+  dodaj: { clientId: string; termTypeId: string | null; date: string; slotIndex: number; brojCasova?: number }[],
   ukloniIds: string[]
 ): Promise<{ error?: string; dodato?: number; uklonjeno?: number }> {
   const { admin, error: authErr, actor } = await requireAdmin();
   if (authErr || !admin) return { error: authErr ?? 'Samo admin.' };
   if (dodaj.some((d) => !jeIsoDatum(d.date) || !Number.isInteger(d.slotIndex) || d.slotIndex < 0 || d.slotIndex >= TIME_SLOTS.length)) {
     return { error: 'Neispravan termin.' };
+  }
+  if (dodaj.some((d) => d.brojCasova !== undefined && (!Number.isInteger(d.brojCasova) || d.brojCasova < 1 || d.brojCasova > CASOVA_U_PAKETU))) {
+    return { error: `Broj plaćenih časova mora biti od 1 do ${CASOVA_U_PAKETU}.` };
   }
 
   const nedostajeTabela = (msg: string) =>
@@ -2713,7 +2717,7 @@ export async function postaviPlacenePakete(
       term_type_id: d.termTypeId,
       od_datum: d.date,
       od_slot: d.slotIndex,
-      broj_casova: CASOVA_U_PAKETU,
+      broj_casova: d.brojCasova ?? CASOVA_U_PAKETU,
       created_by: actor?.id ?? null,
     }));
     const { data, error } = await admin
@@ -2729,7 +2733,7 @@ export async function postaviPlacenePakete(
   revalidatePath('/admin/view', 'layout');
   revalidatePath('/dashboard', 'layout');
   if (actor && (dodato > 0 || uklonjeno > 0)) {
-    logActivity(actor, 'placeno.paket', `Označeno plaćeno: ${dodato} novih paketa (po ${CASOVA_U_PAKETU} časova), uklonjeno ${uklonjeno}.`, {
+    logActivity(actor, 'placeno.paket', `Označeno plaćeno: ${dodato} novih oznaka (paket od ${CASOVA_U_PAKETU} ili jedan čas), uklonjeno ${uklonjeno}.`, {
       entityType: 'placeni_paket',
       metadata: { dodaj, ukloniIds },
     });

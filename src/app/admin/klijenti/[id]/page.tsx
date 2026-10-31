@@ -248,7 +248,7 @@ export default async function AdminKlijentEditPage({
         <div className="border-b border-stone-100 bg-stone-50/80 px-5 py-3">
           <h2 className="text-base font-semibold text-stone-800">Pregled po vrstama časova</h2>
           <p className="text-xs text-stone-500 mt-0.5">
-            Plaćeno = časovi iz oznaka „plaćeno od ovog časa“ na kalendaru (po 6). Nije plaćeno = održani časovi posle potrošenog paketa.
+            Plaćeno = časovi iz oznaka „plaćeno“ na kalendaru (paket od 6 ili jedan čas). Nije plaćeno = održani časovi posle potrošenog paketa.
           </p>
         </div>
         <div className="overflow-x-auto">
@@ -286,7 +286,8 @@ export default async function AdminKlijentEditPage({
         <div className="border-b border-stone-100 bg-stone-50/80 px-5 py-3">
           <h2 className="text-base font-semibold text-stone-800">Plaćeno od (oznake)</h2>
           <p className="text-xs text-stone-500 mt-0.5">
-            Svaka oznaka = taj čas i sledećih 5 časova iste vrste su plaćeni. Dodaje se na kalendaru (Označi plaćeno), ovde može da se ukloni.
+            Svaka oznaka = taj čas i sledećih 5 časova iste vrste su plaćeni (ili samo taj čas). Dodaje se na kalendaru (Označi plaćeno), ovde
+            može da se ukloni.
           </p>
         </div>
         <div className="p-5">

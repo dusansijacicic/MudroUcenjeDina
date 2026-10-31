@@ -24,7 +24,7 @@ export default function PlaceniPaketiSection({ paketi }: { paketi: PaketKlijenta
 
   const ukloni = async (p: PaketKlijentaRow) => {
     const kada = `${new Date(`${p.odDatum}T12:00:00`).toLocaleDateString('sr-Latn-RS')} ${TIME_SLOTS[p.odSlot] ?? ''}`;
-    if (!confirm(`Ukloniti oznaku „plaćeno od ${kada}“${p.vrsta ? ` (${p.vrsta})` : ''}? Tih ${p.brojCasova} časova više neće biti plaćeno.`)) return;
+    if (!confirm(`Ukloniti oznaku „plaćeno od ${kada}“${p.vrsta ? ` (${p.vrsta})` : ''}? ${p.brojCasova === 1 ? 'Taj čas više neće biti plaćen.' : `Tih ${p.brojCasova} časova više neće biti plaćeno.`}`)) return;
     setBrisem(p.id);
     const res = await postaviPlacenePakete([], [p.id]);
     setBrisem(null);
@@ -58,7 +58,7 @@ export default function PlaceniPaketiSection({ paketi }: { paketi: PaketKlijenta
           <span className="rounded bg-amber-50 px-1.5 text-xs font-medium text-amber-800">
             {p.vrsta ?? (p.vrstaIzvedena ? `${p.vrstaIzvedena} (čas bez vrste)` : 'Bez vrste')}
           </span>
-          <span className="tabular-nums text-stone-600">{p.brojCasova} časova</span>
+          <span className="tabular-nums text-stone-600">{p.brojCasova === 1 ? 'samo taj čas' : `${p.brojCasova} časova`}</span>
           {p.createdAt && (
             <span className="text-xs text-stone-400">
               označeno {new Date(p.createdAt).toLocaleDateString('sr-Latn-RS', { timeZone: 'Europe/Belgrade' })}
