@@ -37,7 +37,7 @@ export default async function AdminKalendarPage({
     return x.toISOString().slice(0, 10);
   };
 
-  // Nedeljni prikaz: prikazana nedelja + koliko narednih (klizač na kalendaru, pamti se po uređaju).
+  // Nedeljni prikaz: prikazana nedelja + koliko narednih (izbor na kalendaru, pamti se po uređaju).
   const narednihNedelja = parseNarednihNedelja((await cookies()).get(NAREDNIH_NEDELJA_COOKIE)?.value);
   const trenutnaNedelja = getMonday(today);
 

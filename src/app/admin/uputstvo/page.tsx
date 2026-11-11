@@ -128,13 +128,14 @@ export default async function AdminUputstvoPage({ searchParams }: { searchParams
           <SemaKalendar />
           <Koraci>
             <li>
-              Izaberite prikaz: <Ui>Dan</Ui> (jedan dan), <Ui>Nedelja</Ui> (ova nedelja pa naredne, jedna ispod druge) ili <Ui>Mesec</Ui> (ceo mesec,
+              Izaberite prikaz: <Ui>Dan</Ui> (jedan dan), <Ui>Nedelja</Ui> (ova nedelja pa naredne, jedna pored druge) ili <Ui>Mesec</Ui> (ceo mesec,
               po danu do 4 termina i „+N još“ – klik na broj dana otvara taj dan).
             </li>
             <li>
-              <Ui>Narednih nedelja</Ui> (klizač pored datuma, podrazumevano 2): koliko nedelja posle prve se prikazuje – menja se
-              odmah dok pomerate klizač i pamti se za taj uređaj (tablet i računar mogu imati različito). Na tabletu se raspored skroluje
-              prstom gore-dole, a tabela nedelje i levo-desno kad ne stane; prevlačenje termina prstom je isključeno (koristite Swap).
+              <Ui>Narednih nedelja</Ui> (izbor broja pored datuma, podrazumevano 2): koliko nedelja posle prve se prikazuje – menja se
+              odmah i pamti se za taj uređaj (tablet i računar mogu imati različito). Kroz nedelje se klizi
+              levo-desno – na tabletu i telefonu prstom (zaustavlja se na početku dana), na računaru dugmićima <Ui>◀ Nedelju nazad</Ui> /{' '}
+              <Ui>Nedelju napred ▶</Ui>. Prevlačenje termina prstom je isključeno (koristite Swap).
             </li>
             <li>
               <Ui>← Prethodna</Ui> / <Ui>Sledeća →</Ui> pomera period. Ova traka ostaje zalepljena na vrhu dok skrolujete, zajedno sa

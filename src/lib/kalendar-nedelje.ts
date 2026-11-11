@@ -1,6 +1,6 @@
 /**
  * Koliko narednih nedelja (posle prikazane) admin kalendar pokazuje u nedeljnom prikazu. Bira se
- * klizačem na kalendaru i pamti u kolačiću – posebno za svaki uređaj (tablet može manje od računara).
+ * padajućim izborom na kalendaru i pamti u kolačiću – posebno za svaki uređaj (tablet može manje od računara).
  */
 export const NAREDNIH_NEDELJA_COOKIE = 'kalendar_narednih_nedelja';
 export const NAREDNIH_NEDELJA_DEFAULT = 2;
