@@ -19,8 +19,9 @@ export default async function AdminKalendarPage({
   const { user } = await getAuthedUser();
   if (!user) redirect('/login');
 
-  const isAdmin = await getIsAdmin();
-  if (!isAdmin) redirect('/login');
+  // Provera admina ide ZAJEDNO sa upitima ispod (ne pre njih) – jedan krug do baze manje pri otvaranju.
+  // Podaci se ne prikazuju dok provera ne prođe (redirect odmah posle Promise.all).
+  const adminProvera = getIsAdmin();
 
   const params = await searchParams;
   const filterInstructorId = params.instructor?.trim() || null;
@@ -85,10 +86,12 @@ export default async function AdminKalendarPage({
     { data: redniRaw },
     { data: nedeljneRaw },
     paketiRes,
+    isAdmin,
   ] = await Promise.all([
     adminSupabase
       .from('terms')
-      .select('*, instructor:instructors(id, ime, prezime, color), classroom:classrooms(id, naziv, color), term_category:term_categories(id, naziv, is_testing), predavanja(*, client:clients(id, ime, prezime), term_type:term_types(naziv)), potential_clients(id, ime, prezime, ime_roditelja, mobilni_roditelja, status)')
+      // Uz dete samo ono što kalendar prikazuje (bez komentara i ostalih polja časa) – manje podataka za prenos.
+      .select('*, instructor:instructors(id, ime, prezime, color), classroom:classrooms(id, naziv, color), term_category:term_categories(id, naziv, is_testing), predavanja(id, client_id, term_type_id, client:clients(id, ime, prezime), term_type:term_types(naziv)), potential_clients(id, ime, prezime, ime_roditelja, mobilni_roditelja, status)')
       .gte('date', dateFrom)
       .lte('date', dateTo)
       .order('date')
@@ -119,7 +122,9 @@ export default async function AdminKalendarPage({
     adminSupabase.from('instruktor_nedeljne_blokade').select('*'),
     // Oznake „plaćeno od ovog časa“ (049) – za mod Označi plaćeno (💰 od ovde / uklanjanje).
     adminSupabase.from('placeni_paketi').select('id, client_id, term_type_id, od_datum, od_slot, broj_casova').gte('od_datum', dateFrom).lte('od_datum', dateTo),
+    adminProvera,
   ]);
+  if (!isAdmin) redirect('/login');
   const redniPoPredavanju = (redniRaw ?? {}) as Record<string, [number, number]>;
   const imeInstruktora = new Map((instructorsList ?? []).map((i) => [i.id, `${i.ime ?? ''} ${i.prezime ?? ''}`.trim()]));
   const blockedSlots: BlokiranTermin[] = [

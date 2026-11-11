@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, useTransition } from 'react';
+import { createContext, useContext, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { useKalendarRealtime } from '@/lib/use-kalendar-realtime';
 import toast from 'react-hot-toast';
@@ -2193,20 +2193,6 @@ function TermCardVisual({ term, rowOffset = 0 }: { term: AdminTerm; rowOffset?: 
   );
 }
 
-/** Ekran na dodir (tablet, telefon): prevlačenje termina je isključeno, da prevlačenje prstom skroluje raspored. */
-const DODIR_MQ = '(pointer: coarse)';
-function useDodir(): boolean {
-  return useSyncExternalStore(
-    (cb) => {
-      const mq = window.matchMedia(DODIR_MQ);
-      mq.addEventListener('change', cb);
-      return () => mq.removeEventListener('change', cb);
-    },
-    () => window.matchMedia(DODIR_MQ).matches,
-    () => false
-  );
-}
-
 function AdminCellContent({
   termsInSlot,
   otkazaniInSlot,
@@ -2229,7 +2215,6 @@ function AdminCellContent({
   maxTerminaPoSlotu: number;
 }) {
   const swap = useContext(SwapContext);
-  const dodir = useDodir();
   const newTermHref = `/admin/termin/novi?date=${emptyDate}&slot=${emptySlot}`;
   const newTestHref = `${newTermHref}&cat=testing`;
   const slotCount = termsInSlot.length;
@@ -2521,7 +2506,8 @@ function AdminCellContent({
               href={`/admin/termin/${term.id}`}
               title="Otvori termin (izmena) – ili ga prevuci u drugi termin"
               className="block rounded-lg hover:opacity-90"
-              draggable={!dodir}
+              draggable
+              data-kalendar-termin=""
               onClick={(e) => e.stopPropagation()}
               onDragStart={() => setDraggedTermId(term.id)}
               onDragEnd={() => setDraggedTermId(null)}
@@ -2624,7 +2610,8 @@ function AdminCellContent({
             }${deleteSelected ? ' ring-2 ring-offset-1 ring-red-600' : ''}${
               assignSelected ? ' ring-2 ring-offset-1 ring-blue-600' : ''
             }`}
-            draggable={!anyModeActive && !dodir}
+            draggable={!anyModeActive}
+            data-kalendar-termin=""
             onDragStart={() => !anyModeActive && setDraggedTermId(term.id)}
             onDragEnd={() => setDraggedTermId(null)}
             onClick={(e) => {

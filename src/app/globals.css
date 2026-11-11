@@ -99,6 +99,14 @@ html {
   overflow-x: clip;
 }
 
+/* Ekran na dodir (tablet, telefon): termini kalendara se ne prevlače, da prst skroluje raspored
+   (premeštanje na tabletu: Swap). CSS umesto JS provere – bez dodatnog iscrtavanja kalendara. */
+@media (pointer: coarse) {
+  [data-kalendar-termin][draggable="true"] {
+    -webkit-user-drag: none;
+  }
+}
+
 body {
   background: var(--background);
   color: var(--foreground);
