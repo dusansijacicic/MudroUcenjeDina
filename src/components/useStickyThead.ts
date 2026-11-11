@@ -8,12 +8,13 @@ import { useEffect, useRef } from 'react';
  *
  * Kao i StickyBar, NE koristi CSS position:sticky: tabela je u okviru sa horizontalnim skrolom (overflow-x),
  * pa bi se sticky lepio za taj okvir a ne za ekran. Umesto toga thead se pomera preko transform: translateY.
- * Aktivno je SAMO na velikim ekranima (>= 1024px), isto kao StickyBar.
+ * Podrazumevano aktivno SAMO na velikim ekranima (>= 1024px), isto kao StickyBar; minWidth = 0 → svuda
+ * (na manjim ekranima traka alata nije zamrznuta, pa se zaglavlje lepi za sam vrh ekrana).
  *
  * Vraća ref koji se stavlja na <table>. thead treba da ima neprovidnu pozadinu i z-index iznad ćelija tabele
  * (npr. "relative z-20 bg-white").
  */
-export default function useStickyThead(enabled = true) {
+export default function useStickyThead(enabled = true, minWidth = 1024) {
   const tableRef = useRef<HTMLTableElement>(null);
 
   useEffect(() => {
@@ -21,7 +22,7 @@ export default function useStickyThead(enabled = true) {
     const thead = table?.tHead;
     if (!enabled || !table || !thead) return;
 
-    const mq = window.matchMedia('(min-width: 1024px)');
+    const mq = window.matchMedia(`(min-width: ${minWidth}px)`);
     let frame = 0;
 
     const update = () => {
@@ -61,7 +62,7 @@ export default function useStickyThead(enabled = true) {
       ro.disconnect();
       thead.style.transform = '';
     };
-  }, [enabled]);
+  }, [enabled, minWidth]);
 
   return tableRef;
 }

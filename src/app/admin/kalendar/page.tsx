@@ -1,6 +1,7 @@
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getAuthedUser, getIsAdmin } from '@/lib/auth';
 import { redirect } from 'next/navigation';
+import { cookies } from 'next/headers';
 import Link from 'next/link';
 import AdminCalendarView, { type AdminTerm, type OtkazaniTerminCalendar } from './AdminCalendarView';
 import AdminCalendarFilters from './AdminCalendarFilters';
@@ -8,6 +9,7 @@ import AdminFromDashboardToast from '@/components/AdminFromDashboardToast';
 import { getMaxTerminaPoSlotu } from '@/lib/settings';
 import { getTermTypes, getTermCategories, type PlaceniPaket } from '@/app/admin/actions';
 import { mapBlokada, mapNedeljna, nedeljneUDatume, type BlokiranTermin } from '@/lib/blokade';
+import { NAREDNIH_NEDELJA_COOKIE, parseNarednihNedelja } from '@/lib/kalendar-nedelje';
 
 export default async function AdminKalendarPage({
   searchParams,
@@ -25,14 +27,19 @@ export default async function AdminKalendarPage({
   const filterClassroomId = params.classroom?.trim() || null;
   const filterClientId = params.client?.trim() || null;
   const view = (params.view === 'dan' || params.view === 'mesec') ? params.view : 'nedelja';
-  const today = new Date();
-  const todayStr = today.toISOString().slice(0, 10);
+  // Danas po beogradskom vremenu (server radi u UTC – posle ponoći u ponedeljak bi inače pokazao prošlu nedelju).
+  const todayStr = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Belgrade' });
+  const today = new Date(todayStr + 'T12:00:00');
   const getMonday = (d: Date) => {
     const x = new Date(d);
     const dow = x.getDay();
     x.setDate(x.getDate() - (dow === 0 ? 6 : dow - 1));
     return x.toISOString().slice(0, 10);
   };
+
+  // Nedeljni prikaz: prikazana nedelja + koliko narednih (klizač na kalendaru, pamti se po uređaju).
+  const narednihNedelja = parseNarednihNedelja((await cookies()).get(NAREDNIH_NEDELJA_COOKIE)?.value);
+  const trenutnaNedelja = getMonday(today);
 
   let dateFrom: string;
   let dateTo: string;
@@ -54,10 +61,10 @@ export default async function AdminKalendarPage({
     dateTo = last.toISOString().slice(0, 10);
     startOfWeek = monthStart;
   } else {
-    startOfWeek = params.week ? params.week.slice(0, 10) : getMonday(today);
+    startOfWeek = params.week ? params.week.slice(0, 10) : trenutnaNedelja;
     const start = new Date(startOfWeek + 'T12:00:00');
     const end = new Date(start);
-    end.setDate(end.getDate() + 13);
+    end.setDate(end.getDate() + 7 * (narednihNedelja + 1) - 1);
     dateFrom = startOfWeek;
     dateTo = end.toISOString().slice(0, 10);
   }
@@ -188,7 +195,7 @@ export default async function AdminKalendarPage({
   const filterQuery = filterParams.size > 0 ? `&${filterParams.toString()}` : '';
 
   const filterClient = filterClientId ? (clientsList ?? []).find((c) => c.id === filterClientId) : null;
-  const periodLabel = view === 'dan' ? 'ovog dana' : view === 'mesec' ? 'ovog meseca' : 'ove dve nedelje';
+  const periodLabel = view === 'dan' ? 'ovog dana' : view === 'mesec' ? 'ovog meseca' : narednihNedelja === 0 ? 'ove nedelje' : narednihNedelja + 1 <= 4 ? `ove ${narednihNedelja + 1} nedelje` : `ovih ${narednihNedelja + 1} nedelja`;
   const clearClientParams = new URLSearchParams(filterParams);
   clearClientParams.delete('client');
   if (params.view) clearClientParams.set('view', params.view);
@@ -297,6 +304,8 @@ export default async function AdminKalendarPage({
         filterClientId={filterClientId}
         view={view}
         startOfWeek={startOfWeek}
+        narednihNedelja={narednihNedelja}
+        trenutnaNedelja={trenutnaNedelja}
         singleDay={singleDay}
         monthStart={monthStart}
         maxTerminaPoSlotu={maxTerminaPoSlotu}

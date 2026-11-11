@@ -309,7 +309,7 @@ export function SemaFilter() {
           <span className="flex items-center gap-1">
             <M n={3} />
             <span className="rounded-md border border-violet-300 bg-violet-50 px-2 py-1 text-violet-950">
-              Samo termini za: <strong>Ana Petrović</strong> – ove dve nedelje: <strong>4</strong> zakazano ·{' '}
+              Samo termini za: <strong>Ana Petrović</strong> – ove 3 nedelje: <strong>4</strong> zakazano ·{' '}
               <span className="font-medium text-violet-800">Ceo mesec za ovo dete →</span>
             </span>
           </span>

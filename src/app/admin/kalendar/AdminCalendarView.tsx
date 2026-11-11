@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { createContext, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { useKalendarRealtime } from '@/lib/use-kalendar-realtime';
 import toast from 'react-hot-toast';
@@ -31,6 +31,7 @@ import SingleKlijentPicker from '@/components/SingleKlijentPicker';
 import GrupniKlijentiPicker from '@/components/GrupniKlijentiPicker';
 import StickyBar from '@/components/StickyBar';
 import useStickyThead from '@/components/useStickyThead';
+import { NAREDNIH_NEDELJA_COOKIE, NAREDNIH_NEDELJA_DEFAULT, NAREDNIH_NEDELJA_MAX, nazivNedelje } from '@/lib/kalendar-nedelje';
 
 const DAY_NAMES = ['Pon', 'Uto', 'Sre', 'Čet', 'Pet', 'Sub', 'Ned'];
 
@@ -281,7 +282,8 @@ function shiftDays(iso: string, days: number): string {
   return d.toISOString().slice(0, 10);
 }
 
-/** Prikazani period + Prethodna/Sledeća – stoji u zamrznutoj traci alata, da ostane vidljivo dok se skroluje. */
+/** Prikazani period + Prethodna/Sledeća – stoji u zamrznutoj traci alata, da ostane vidljivo dok se skroluje.
+ * U nedeljnom prikazu i klizač: koliko narednih nedelja se prikazuje ispod prikazane. */
 function PeriodNav({
   view,
   startOfWeek,
@@ -289,6 +291,9 @@ function PeriodNav({
   monthStart,
   base,
   linkSuffix,
+  narednih,
+  onNarednih,
+  ucitava,
 }: {
   view: string;
   startOfWeek: string;
@@ -296,6 +301,9 @@ function PeriodNav({
   monthStart?: string;
   base: string;
   linkSuffix: string;
+  narednih: number;
+  onNarednih: (n: number) => void;
+  ucitava: boolean;
 }) {
   let label: string;
   let prevHref: string;
@@ -317,9 +325,9 @@ function PeriodNav({
     prevHref = `${base}?view=mesec&month=${shiftMonth(-1)}${linkSuffix}`;
     nextHref = `${base}?view=mesec&month=${shiftMonth(1)}${linkSuffix}`;
   } else {
-    // Nedeljni prikaz pokazuje dve nedelje (ova + sledeća).
+    // Nedeljni prikaz: prikazana nedelja + `narednih` narednih, jedna ispod druge.
     const d1 = new Date(startOfWeek + 'T12:00:00');
-    const end = new Date(shiftDays(startOfWeek, 13) + 'T12:00:00');
+    const end = new Date(shiftDays(startOfWeek, 7 * (narednih + 1) - 1) + 'T12:00:00');
     label = `${d1.getDate()}.${d1.getMonth() + 1}. – ${end.getDate()}.${end.getMonth() + 1}.${end.getFullYear()}`;
     prevHref = `${base}?view=nedelja&week=${shiftDays(startOfWeek, -7)}${linkSuffix}`;
     nextHref = `${base}?view=nedelja&week=${shiftDays(startOfWeek, 7)}${linkSuffix}`;
@@ -329,10 +337,27 @@ function PeriodNav({
   const btn = 'px-3 py-1.5 min-h-[44px] md:min-h-0 inline-flex items-center rounded-lg bg-stone-200 text-stone-700 text-sm hover:bg-stone-300';
   return (
     // Dan na telefonu ima svoju traku dana ispod, pa se ovde krije da se ne duplira.
-    <div className={`${view === 'dan' ? 'hidden md:flex' : 'flex'} items-center gap-2`}>
+    <div className={`${view === 'dan' ? 'hidden md:flex' : 'flex'} flex-wrap items-center gap-2`}>
       <span className="font-medium text-stone-700 text-sm capitalize tabular-nums mr-1">{label}</span>
       <Link href={prevHref} className={btn}>{prevText}</Link>
       <Link href={nextHref} className={btn}>{nextText}</Link>
+      {view === 'nedelja' && (
+        <label className="flex min-h-[44px] items-center gap-2 text-sm text-stone-600 md:min-h-0">
+          <span className="whitespace-nowrap">Narednih nedelja</span>
+          <input
+            type="range"
+            min={0}
+            max={NAREDNIH_NEDELJA_MAX}
+            step={1}
+            value={narednih}
+            onChange={(e) => onNarednih(Number(e.target.value))}
+            aria-valuetext={`${narednih} narednih nedelja`}
+            className="w-28 accent-amber-600"
+          />
+          <span className="w-4 text-right font-semibold tabular-nums text-stone-800">{narednih}</span>
+          {ucitava && <span className="text-xs text-stone-400">učitavam…</span>}
+        </label>
+      )}
     </div>
   );
 }
@@ -480,6 +505,8 @@ export default function AdminCalendarView({
   filterClientId = null,
   placeniPaketi = NO_PAKETI,
   paketiMigracija = true,
+  narednihNedelja = NAREDNIH_NEDELJA_DEFAULT,
+  trenutnaNedelja,
 }: {
   /** Naslov/filteri/legenda iznad kalendara (server-renderovani deo iz page.tsx). */
   headerContent?: React.ReactNode;
@@ -517,8 +544,27 @@ export default function AdminCalendarView({
   placeniPaketi?: PlaceniPaket[];
   /** false = tabela placeni_paketi još ne postoji (migracija 049 nije pokrenuta). */
   paketiMigracija?: boolean;
+  /** Nedeljni prikaz: koliko narednih nedelja je učitano (kolačić, klizač na kalendaru). */
+  narednihNedelja?: number;
+  /** Ponedeljak trenutne nedelje (po Beogradu) – za nazive "Ova nedelja", "Sledeća nedelja"… */
+  trenutnaNedelja: string;
 }) {
   const router = useRouter();
+
+  // Klizač "Narednih nedelja": ekran se menja odmah (višak nedelja se samo sakrije), kolačić pamti izbor
+  // za ovaj uređaj, a posle kratke pauze server učita i nedelje koje još nisu bile učitane.
+  const [narednih, setNarednih] = useState(narednihNedelja);
+  const [ucitavaNedelje, startNedeljeTransition] = useTransition();
+  const narednihTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => {
+    if (narednihTimerRef.current) clearTimeout(narednihTimerRef.current);
+  }, []);
+  const promeniNarednih = (n: number) => {
+    setNarednih(n);
+    document.cookie = `${NAREDNIH_NEDELJA_COOKIE}=${n}; path=/; max-age=31536000; samesite=lax`;
+    if (narednihTimerRef.current) clearTimeout(narednihTimerRef.current);
+    narednihTimerRef.current = setTimeout(() => startNedeljeTransition(() => router.refresh()), 350);
+  };
   const [draggedTermId, setDraggedTermId] = useState<string | null>(null);
 
   // Lokalna kopija termina – omogućava optimističku primenu swap-a (ekran se menja odmah, pre nego
@@ -553,7 +599,7 @@ export default function AdminCalendarView({
 
   const openZahtevDate = (d: string) => {
     const weekEnd = new Date(startOfWeek + 'T12:00:00');
-    weekEnd.setDate(weekEnd.getDate() + 13);
+    weekEnd.setDate(weekEnd.getDate() + 7 * (narednihNedelja + 1) - 1);
     const inView = view === 'nedelja' && d >= startOfWeek && d <= weekEnd.toISOString().slice(0, 10);
     if (inView && scrollToZahtev(d)) return;
     focusedForRef.current = null;
@@ -1257,6 +1303,9 @@ export default function AdminCalendarView({
     body = (
       <AdminWeekView
         startOfWeek={startOfWeek}
+        brojNedelja={narednih + 1}
+        ucitanoNedelja={narednihNedelja + 1}
+        trenutnaNedelja={trenutnaNedelja}
         terms={terms}
         otkazaniTermini={otkazaniTermini}
         pendingZahtevi={pendingZahtevi}
@@ -1456,6 +1505,9 @@ export default function AdminCalendarView({
               monthStart={monthStart}
               base={base}
               linkSuffix={linkSuffix}
+              narednih={narednih}
+              onNarednih={promeniNarednih}
+              ucitava={ucitavaNedelje}
             />
             {activeConfirm && (
               <button
@@ -2148,6 +2200,20 @@ function TermCardVisual({ term, rowOffset = 0 }: { term: AdminTerm; rowOffset?: 
   );
 }
 
+/** Ekran na dodir (tablet, telefon): prevlačenje termina je isključeno, da prevlačenje prstom skroluje raspored. */
+const DODIR_MQ = '(pointer: coarse)';
+function useDodir(): boolean {
+  return useSyncExternalStore(
+    (cb) => {
+      const mq = window.matchMedia(DODIR_MQ);
+      mq.addEventListener('change', cb);
+      return () => mq.removeEventListener('change', cb);
+    },
+    () => window.matchMedia(DODIR_MQ).matches,
+    () => false
+  );
+}
+
 function AdminCellContent({
   termsInSlot,
   otkazaniInSlot,
@@ -2170,6 +2236,7 @@ function AdminCellContent({
   maxTerminaPoSlotu: number;
 }) {
   const swap = useContext(SwapContext);
+  const dodir = useDodir();
   const newTermHref = `/admin/termin/novi?date=${emptyDate}&slot=${emptySlot}`;
   const newTestHref = `${newTermHref}&cat=testing`;
   const slotCount = termsInSlot.length;
@@ -2461,7 +2528,7 @@ function AdminCellContent({
               href={`/admin/termin/${term.id}`}
               title="Otvori termin (izmena) – ili ga prevuci u drugi termin"
               className="block rounded-lg hover:opacity-90"
-              draggable
+              draggable={!dodir}
               onClick={(e) => e.stopPropagation()}
               onDragStart={() => setDraggedTermId(term.id)}
               onDragEnd={() => setDraggedTermId(null)}
@@ -2564,7 +2631,7 @@ function AdminCellContent({
             }${deleteSelected ? ' ring-2 ring-offset-1 ring-red-600' : ''}${
               assignSelected ? ' ring-2 ring-offset-1 ring-blue-600' : ''
             }`}
-            draggable={!anyModeActive}
+            draggable={!anyModeActive && !dodir}
             onDragStart={() => !anyModeActive && setDraggedTermId(term.id)}
             onDragEnd={() => setDraggedTermId(null)}
             onClick={(e) => {
@@ -2631,17 +2698,7 @@ function AdminCellContent({
   );
 }
 
-function AdminWeekView({
-  startOfWeek,
-  terms,
-  otkazaniTermini,
-  pendingZahtevi,
-  draggedTermId,
-  setDraggedTermId,
-  onDropCell,
-  maxTerminaPoSlotu,
-}: {
-  startOfWeek: string;
+type WeekCellsProps = {
   terms: AdminTerm[];
   otkazaniTermini: OtkazaniTerminCalendar[];
   pendingZahtevi: PendingZahtevCalendar[];
@@ -2649,113 +2706,119 @@ function AdminWeekView({
   setDraggedTermId: (id: string | null) => void;
   onDropCell: (date: string, slot: number) => void | Promise<void>;
   maxTerminaPoSlotu: number;
+};
+
+/**
+ * Nedeljni prikaz: prikazana nedelja pa narednih N, JEDNA ISPOD DRUGE (ne jedna pored druge) – svaka je
+ * tabela od 7 dana koja staje u širinu i na tabletu okrenutom uspravno; ako ne stane, skroluje se prstom
+ * levo-desno. Bez ugnježdenog vertikalnog skrola – stranica se skroluje normalno. Nedelje koje je klizač
+ * upravo dodao, a server ih još nije učitao, prikazuju "učitavam…".
+ */
+function AdminWeekView({
+  startOfWeek,
+  brojNedelja,
+  ucitanoNedelja,
+  trenutnaNedelja,
+  ...cells
+}: WeekCellsProps & {
+  startOfWeek: string;
+  brojNedelja: number;
+  ucitanoNedelja: number;
+  trenutnaNedelja: string;
 }) {
-  // Na računaru (>= 1024px) red sa danima i datumima ostaje zamrznut ispod trake alata dok se skroluje
-  const desktopTabelaRef = useStickyThead();
   const gridRef = useRef<HTMLDivElement>(null);
-  const week1Dates = getWeekDates(startOfWeek);
-  const week2Start = (() => {
-    const d = new Date(startOfWeek + 'T12:00:00');
-    d.setDate(d.getDate() + 7);
-    return d.toISOString().slice(0, 10);
-  })();
-  const week2Dates = getWeekDates(week2Start);
-  const allDates = [...week1Dates, ...week2Dates];
-
-  // Deljeno telo tabele (redovi po vremenu) – zove se i za 14 dana (desktop, obe nedelje) i za 7
-  // (tablet, samo ova nedelja) sa istim AdminCellContent po ćeliji.
-  const renderBody = (dates: string[]) => (
-    <tbody>
-      {TIME_SLOTS.map((time, slotIndex) => (
-        <tr key={slotIndex} data-row={slotIndex} className="border-b border-stone-100">
-          <td data-slot-label={slotIndex} className="sticky left-0 z-10 bg-white p-2 text-stone-500 font-medium w-16">{time}</td>
-          {dates.map((date, idx) => {
-            const termsInSlot = termsByKey(terms, date, slotIndex);
-            const otkazaniInSlot = otkazaniTermini.filter((ot) => ot.term_date === date && ot.slot_index === slotIndex);
-            const pendingZahteviInSlot = pendingZahtevi.filter((z) => z.date === date && z.slot_index === slotIndex);
-            return (
-              <td key={date} data-date={date} data-slot={slotIndex} className={`p-1 align-top${idx === 7 ? ' border-l-2 border-stone-300' : ''}`}>
-                <AdminCellContent
-                  termsInSlot={termsInSlot}
-                  otkazaniInSlot={otkazaniInSlot}
-                  pendingZahteviInSlot={pendingZahteviInSlot}
-                  emptyDate={date}
-                  emptySlot={slotIndex}
-                  draggedTermId={draggedTermId}
-                  setDraggedTermId={setDraggedTermId}
-                  onDropCell={onDropCell}
-                  maxTerminaPoSlotu={maxTerminaPoSlotu}
-                />
-              </td>
-            );
-          })}
-        </tr>
-      ))}
-    </tbody>
-  );
-
+  const nedelje = Array.from({ length: brojNedelja }, (_, i) => shiftDays(startOfWeek, 7 * i));
   return (
-    <div className="space-y-4">
-      <div ref={gridRef} data-hover-grid="" className="space-y-4">
+    <div ref={gridRef} data-hover-grid="" className="space-y-4">
       <GridHoverHighlight containerRef={gridRef} />
-      {/* Desktop (lg+): obe nedelje, netaknuto. */}
-      <div className="hidden lg:block overflow-x-auto rounded-xl border border-stone-200 bg-white">
-        <table ref={desktopTabelaRef} className="w-full min-w-[1400px] text-sm">
-          {/* relative + z-20 + neprovidna pozadina: zamrznuto zaglavlje (useStickyThead) prekriva termine ispod sebe */}
-          <thead className="relative z-20 bg-white shadow-[0_1px_0_0_#e7e5e4]">
-            <tr className="border-b border-stone-100 bg-stone-50">
-              <th className="sticky left-0 z-20 bg-stone-50 w-16 p-2" rowSpan={2} />
-              <th colSpan={7} className="px-2 py-1.5 text-center text-xs font-semibold text-stone-500 uppercase tracking-wide border-r border-stone-200">
-                Ova nedelja — {formatWeekLabel(startOfWeek)}
-              </th>
-              <th colSpan={7} className="px-2 py-1.5 text-center text-xs font-semibold text-amber-700 uppercase tracking-wide">
-                Sledeća nedelja — {formatWeekLabel(week2Start)}
-              </th>
-            </tr>
-            <tr className="border-b border-stone-200">
-              {allDates.map((date, idx) => {
-                const d = new Date(date + 'T12:00:00');
-                return (
-                  <th
-                    key={date}
-                    data-date={date}
-                    className={`p-2 text-center text-stone-600 font-medium min-w-[90px]${idx === 7 ? ' border-l-2 border-stone-300' : ''}`}
-                  >
-                    <div>{DAY_NAMES[d.getDay() === 0 ? 6 : d.getDay() - 1]}</div>
-                    <div className="text-stone-400">{d.getDate()}.{d.getMonth() + 1}.</div>
-                  </th>
-                );
-              })}
-            </tr>
-          </thead>
-          {renderBody(allDates)}
-        </table>
-      </div>
+      {nedelje.map((weekStart, i) =>
+        i < ucitanoNedelja ? (
+          <AdminWeekTable
+            key={weekStart}
+            weekStart={weekStart}
+            naslov={nazivNedelje(weekStart, trenutnaNedelja)}
+            trenutna={weekStart === trenutnaNedelja}
+            {...cells}
+          />
+        ) : (
+          <div key={weekStart} className="rounded-xl border border-dashed border-stone-300 bg-white px-4 py-6 text-sm text-stone-500">
+            <span className="text-xs font-semibold uppercase tracking-wide">
+              {nazivNedelje(weekStart, trenutnaNedelja)} — {formatWeekLabel(weekStart)}
+            </span>{' '}
+            · učitavam…
+          </div>
+        )
+      )}
+    </div>
+  );
+}
 
-      {/* Tablet + telefon (<lg): cela nedelja, 7 kolona, horizontalni skrol po potrebi –
-          da se svi dani vide odjednom i Copy/Delete/itd. mogu preko dana. Sopstveni
-          vertikalni skrol (max-h + overflow-y) da bi "sticky top" lepio zaglavlje za
-          VRH OVOG OKVIRA, nezavisno od sticky admin navigacije iznad. */}
-      <div className="lg:hidden overflow-auto max-h-[70vh] rounded-xl border border-stone-200 bg-white">
-        <table className="w-full min-w-[700px] text-sm">
-          <thead>
-            <tr className="border-b border-stone-200 bg-stone-50/60">
-              <th className="sticky left-0 top-0 z-30 bg-stone-50 w-16 p-2" />
-              {week1Dates.map((date) => {
-                const d = new Date(date + 'T12:00:00');
-                return (
-                  <th key={date} data-date={date} className="sticky top-0 z-20 bg-stone-50 p-2 text-center text-stone-600 font-medium min-w-[90px]">
-                    <div>{DAY_NAMES[d.getDay() === 0 ? 6 : d.getDay() - 1]}</div>
-                    <div className="text-stone-400">{d.getDate()}.{d.getMonth() + 1}.</div>
-                  </th>
-                );
-              })}
+function AdminWeekTable({
+  weekStart,
+  naslov,
+  trenutna,
+  terms,
+  otkazaniTermini,
+  pendingZahtevi,
+  draggedTermId,
+  setDraggedTermId,
+  onDropCell,
+  maxTerminaPoSlotu,
+}: WeekCellsProps & { weekStart: string; naslov: string; trenutna: boolean }) {
+  // Naziv nedelje + dani ostaju na vrhu ekrana dok se skroluje kroz ovu nedelju – na svim ekranima.
+  const tabelaRef = useStickyThead(true, 0);
+  const dates = getWeekDates(weekStart);
+  return (
+    <div className="overflow-x-auto overscroll-x-contain rounded-xl border border-stone-200 bg-white">
+      <table ref={tabelaRef} className="w-full min-w-[700px] text-sm">
+        {/* relative + z-20 + neprovidna pozadina: zamrznuto zaglavlje (useStickyThead) prekriva termine ispod sebe */}
+        <thead className="relative z-20 bg-white shadow-[0_1px_0_0_#e7e5e4]">
+          <tr className={`border-b border-stone-100 ${trenutna ? 'bg-amber-50' : 'bg-stone-50'}`}>
+            <th
+              colSpan={8}
+              className={`px-3 py-1.5 text-left text-xs font-semibold uppercase tracking-wide ${trenutna ? 'text-amber-800' : 'text-stone-500'}`}
+            >
+              <span className="sticky left-3 inline-block">
+                {naslov} — {formatWeekLabel(weekStart)}
+              </span>
+            </th>
+          </tr>
+          <tr className="border-b border-stone-200">
+            <th className="sticky left-0 z-20 w-16 bg-white p-2" />
+            {dates.map((date) => {
+              const d = new Date(date + 'T12:00:00');
+              return (
+                <th key={date} data-date={date} className="min-w-[90px] p-2 text-center font-medium text-stone-600">
+                  <div>{DAY_NAMES[d.getDay() === 0 ? 6 : d.getDay() - 1]}</div>
+                  <div className="text-stone-400">{d.getDate()}.{d.getMonth() + 1}.</div>
+                </th>
+              );
+            })}
+          </tr>
+        </thead>
+        <tbody>
+          {TIME_SLOTS.map((time, slotIndex) => (
+            <tr key={slotIndex} data-row={slotIndex} className="border-b border-stone-100">
+              <td data-slot-label={slotIndex} className="sticky left-0 z-10 bg-white p-2 text-stone-500 font-medium w-16">{time}</td>
+              {dates.map((date) => (
+                <td key={date} data-date={date} data-slot={slotIndex} className="p-1 align-top">
+                  <AdminCellContent
+                    termsInSlot={termsByKey(terms, date, slotIndex)}
+                    otkazaniInSlot={otkazaniTermini.filter((ot) => ot.term_date === date && ot.slot_index === slotIndex)}
+                    pendingZahteviInSlot={pendingZahtevi.filter((z) => z.date === date && z.slot_index === slotIndex)}
+                    emptyDate={date}
+                    emptySlot={slotIndex}
+                    draggedTermId={draggedTermId}
+                    setDraggedTermId={setDraggedTermId}
+                    onDropCell={onDropCell}
+                    maxTerminaPoSlotu={maxTerminaPoSlotu}
+                  />
+                </td>
+              ))}
             </tr>
-          </thead>
-          {renderBody(week1Dates)}
-        </table>
-      </div>
-      </div>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
