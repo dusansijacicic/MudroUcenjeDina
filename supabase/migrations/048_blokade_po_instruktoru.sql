@@ -30,7 +30,7 @@ CREATE TABLE IF NOT EXISTS instruktor_nedeljne_blokade (
 
 ALTER TABLE instruktor_nedeljne_blokade ENABLE ROW LEVEL SECURITY;
 
-DROP POLICY IF EXISTS "Nedeljne blokade readable by authenticated" ON instruktor_nedeljne_blokade;
+DROP POLICY IF EXISTS "Nedeljne blokade reistoadable by authenticated" ON instruktor_nedeljne_blokade;
 CREATE POLICY "Nedeljne blokade readable by authenticated" ON instruktor_nedeljne_blokade
   FOR SELECT TO authenticated USING (true);
 
