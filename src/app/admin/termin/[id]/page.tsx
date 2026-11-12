@@ -18,12 +18,14 @@ const STATUS_LABEL: Record<PotentialClientStatus, string> = {
   pojavio_se: 'Pojavio se',
   nije_se_pojavio: 'Nije se pojavio',
   prebacen_u_klijenta: 'Prebačen u klijenta',
+  otkazan: 'Otkazan',
 };
 const STATUS_COLOR: Record<PotentialClientStatus, string> = {
   zakazan: 'bg-stone-100 text-stone-600',
   pojavio_se: 'bg-blue-100 text-blue-700',
   nije_se_pojavio: 'bg-red-100 text-red-700',
   prebacen_u_klijenta: 'bg-emerald-100 text-emerald-700',
+  otkazan: 'bg-stone-600 text-white',
 };
 
 export default async function AdminTerminDetailPage({
@@ -189,6 +191,7 @@ export default async function AdminTerminDetailPage({
                       ime={pc.ime}
                       status={pc.status as PotentialClientStatus}
                       convertedClientId={pc.converted_client_id}
+                      termId={termId}
                     />
                     <Link
                       href={`/admin/termin/${termId}/testiranje/${pc.id}`}

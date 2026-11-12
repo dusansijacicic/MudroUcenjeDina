@@ -1116,22 +1116,124 @@ export async function deletePredavanjeAsAdmin(predavanjeId: string, termId: stri
   return {};
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AdminDb = any;
+
+/** Supabase ugnježdeni join zna da vrati niz ili objekat – uzima prvi/jedini. */
+function jedan<T>(v: T | T[] | null | undefined): T | null {
+  return Array.isArray(v) ? (v[0] ?? null) : (v ?? null);
+}
+
+function porukaTestiranja(message: string): string {
+  return /potential_clients_status_check|datum_termina|slot_termina/.test(message)
+    ? 'Pokrenite migraciju 052 (otkazivanje testiranja) u Supabase SQL Editoru.'
+    : message;
+}
+
 /**
- * Mod "Otkaži" na kalendaru: izabrani časovi dece (predavanja) i zahtevi bez instruktora se otkazuju –
- * za razliku od Delete ostaje trag: upis u otkazane termine (siv "otkazano" na kalendaru i na profilu
- * deteta). Termin koji ostane bez dece se briše (oslobađa instruktora i učionicu).
+ * Otkazuje jedno dete sa testiranja: na kalendaru ostaje sivi zapis "otkazano" (otkazani_termini), a
+ * dete dobija status 'otkazan', odvaja se od termina i pamti datum/vreme (za Istoriju testiranja).
+ * Vraća termin sa kog je otkazano, da se posle sredi (prazan termin se briše).
+ */
+async function otkaziDeteSaTestiranja(admin: AdminDb, pcId: string): Promise<{ error?: string; termId?: string }> {
+  const { data: pc } = await admin
+    .from('potential_clients')
+    .select(
+      'id, ime, prezime, term_id, term:terms(date, slot_index, instructor:instructors(id, ime, prezime), classroom:classrooms(naziv), term_category:term_categories(naziv))'
+    )
+    .eq('id', pcId)
+    .maybeSingle();
+  if (!pc) return { error: 'Dete sa testiranja nije pronađeno.' };
+  const term = jedan(pc.term) as {
+    date: string;
+    slot_index: number;
+    instructor?: unknown;
+    classroom?: unknown;
+    term_category?: unknown;
+  } | null;
+  if (!pc.term_id || !term) return { error: `${pc.ime} više nije na terminu testiranja (možda je već otkazano).` };
+  const instr = jedan(term.instructor as { id: string; ime: string; prezime: string } | null);
+  // Prvo sivi zapis, pa status – ako status ne prođe (nema migracije 052), zapis se vraća.
+  const { data: zapis, error: insErr } = await admin
+    .from('otkazani_termini')
+    .insert({
+      client_id: null,
+      client_ime: pc.ime ?? '',
+      client_prezime: pc.prezime ?? null,
+      instructor_id: instr?.id ?? null,
+      instructor_ime: instr?.ime ?? null,
+      instructor_prezime: instr?.prezime ?? null,
+      classroom_naziv: jedan(term.classroom as { naziv: string } | null)?.naziv ?? null,
+      term_date: term.date,
+      slot_index: term.slot_index,
+      term_type_naziv: jedan(term.term_category as { naziv: string } | null)?.naziv ?? 'Testiranje',
+      placeno: false,
+      napomena: 'testiranje',
+    })
+    .select('id')
+    .single();
+  if (insErr) return { error: insErr.message };
+  const { error: updErr } = await admin
+    .from('potential_clients')
+    .update({ status: 'otkazan', term_id: null, datum_termina: term.date, slot_termina: term.slot_index })
+    .eq('id', pcId);
+  if (updErr) {
+    await admin.from('otkazani_termini').delete().eq('id', zapis.id);
+    return { error: porukaTestiranja(updErr.message) };
+  }
+  return { termId: pc.term_id as string };
+}
+
+/** Deci koja ostaju u Istoriji testiranja pamti datum/vreme termina pre nego što se termin obriše
+ * (potential_clients.term_id je ON DELETE SET NULL). Bez migracije 052 se tiho preskače. */
+async function zapamtiDatumTestiranja(admin: AdminDb, termId: string) {
+  const { data: t } = await admin.from('terms').select('date, slot_index').eq('id', termId).maybeSingle();
+  if (!t) return;
+  await admin.from('potential_clients').update({ datum_termina: t.date, slot_termina: t.slot_index }).eq('term_id', termId);
+}
+
+/**
+ * Pre brisanja termina testiranja: deca koja su samo zakazana se otkazuju (nacin 'otkazi' – sivi zapis
+ * ostaje) ili brišu (nacin 'obrisi' – Delete bez traga). Deca sa upisanim ishodom (pojavio se / nije se
+ * pojavio / prebačen u klijenta) ostaju u Istoriji testiranja sa zapamćenim datumom.
+ */
+async function srediDecuTestiranjaPreBrisanja(admin: AdminDb, termId: string, nacin: 'otkazi' | 'obrisi') {
+  const { data: deca } = await admin.from('potential_clients').select('id, status').eq('term_id', termId);
+  const lista = (deca ?? []) as { id: string; status: string }[];
+  if (lista.length === 0) return;
+  const zakazani = lista.filter((d) => d.status === 'zakazan').map((d) => d.id);
+  if (nacin === 'otkazi') {
+    for (const id of zakazani) await otkaziDeteSaTestiranja(admin, id);
+  } else if (zakazani.length > 0) {
+    await admin.from('potential_clients').delete().in('id', zakazani);
+  }
+  await zapamtiDatumTestiranja(admin, termId);
+  revalidatePath('/admin/testiranja');
+}
+
+/**
+ * Mod "Otkaži" na kalendaru: izabrani časovi dece (predavanja), zahtevi bez instruktora i deca sa
+ * testiranja se otkazuju – za razliku od Delete ostaje trag: upis u otkazane termine (siv "otkazano" na
+ * kalendaru i na profilu deteta / u Istoriji testiranja). Termin koji ostane bez dece se briše
+ * (oslobađa instruktora i učionicu) – obrisaniTermini su njegovi id-jevi.
  */
 export async function otkaziCasoveAsAdmin(
   predavanjeIds: string[],
-  zahtevIds: string[] = []
-): Promise<{ failed: { id: string; error: string }[]; otkazano: number }> {
+  zahtevIds: string[] = [],
+  testiranjeIds: string[] = []
+): Promise<{ failed: { id: string; error: string }[]; otkazano: number; obrisaniTermini: string[] }> {
   const { admin, error: authErr, actor } = await requireAdmin();
   if (authErr || !admin) {
-    return { failed: [...predavanjeIds, ...zahtevIds].map((id) => ({ id, error: authErr ?? 'Niste ovlašćeni.' })), otkazano: 0 };
+    return {
+      failed: [...predavanjeIds, ...zahtevIds, ...testiranjeIds].map((id) => ({ id, error: authErr ?? 'Niste ovlašćeni.' })),
+      otkazano: 0,
+      obrisaniTermini: [],
+    };
   }
 
   const failed: { id: string; error: string }[] = [];
   let otkazano = 0;
+  const obrisaniTermini: string[] = [];
   const termIdsZaSredjivanje = new Set<string>();
   // Redom, ne paralelno: deca istog termina – prazan termin se briše tek na kraju.
   for (const predavanjeId of predavanjeIds) {
@@ -1154,8 +1256,33 @@ export async function otkaziCasoveAsAdmin(
     if ((count ?? 0) === 0) {
       await admin.from('terms').delete().eq('nastavak_of_term_id', termId).eq('napomena', AUTO_SPILLOVER_NAPOMENA);
       await admin.from('terms').delete().eq('id', termId);
+      obrisaniTermini.push(termId);
     } else {
       await syncSpilloverForTerm(admin, termId);
+    }
+    revalidatePath(`/admin/termin/${termId}`);
+  }
+
+  // Deca sa testiranja – redom; termin testiranja koji ostane prazan se briše na kraju.
+  const terminiTestiranja = new Set<string>();
+  for (const pcId of testiranjeIds) {
+    const res = await otkaziDeteSaTestiranja(admin, pcId);
+    if (res.error) {
+      failed.push({ id: pcId, error: res.error });
+      continue;
+    }
+    if (res.termId) terminiTestiranja.add(res.termId);
+    otkazano++;
+  }
+  for (const termId of terminiTestiranja) {
+    const [{ count: deca }, { count: casovi }] = await Promise.all([
+      admin.from('potential_clients').select('*', { count: 'exact', head: true }).eq('term_id', termId),
+      admin.from('predavanja').select('*', { count: 'exact', head: true }).eq('term_id', termId),
+    ]);
+    if ((deca ?? 0) === 0 && (casovi ?? 0) === 0) {
+      await admin.from('terms').delete().eq('nastavak_of_term_id', termId).eq('napomena', AUTO_SPILLOVER_NAPOMENA);
+      await admin.from('terms').delete().eq('id', termId);
+      obrisaniTermini.push(termId);
     }
     revalidatePath(`/admin/termin/${termId}`);
   }
@@ -1170,7 +1297,7 @@ export async function otkaziCasoveAsAdmin(
       failed.push({ id: zahtevId, error: 'Zahtev nije pronađen.' });
       continue;
     }
-    const one = <T,>(v: T | T[] | null | undefined): T | null => (Array.isArray(v) ? (v[0] ?? null) : (v ?? null));
+    const one = jedan;
     const client = one(z.client as { ime?: string; prezime?: string | null } | { ime?: string; prezime?: string | null }[] | null);
     const { error: insErr } = await admin.from('otkazani_termini').insert({
       client_id: z.client_id,
@@ -1200,13 +1327,14 @@ export async function otkaziCasoveAsAdmin(
   revalidatePath('/admin/kalendar');
   revalidatePath('/admin/klijenti', 'layout');
   if (zahtevIds.length > 0) revalidatePath('/dashboard/zahtevi');
+  if (testiranjeIds.length > 0) revalidatePath('/admin/testiranja');
   if (actor && otkazano > 0) {
-    logActivity(actor, 'predavanje.otkazi', `Otkazano ${otkazano} čas(ova) sa kalendara.`, {
+    logActivity(actor, 'predavanje.otkazi', `Otkazano ${otkazano} čas(ova)/testiranja.`, {
       entityType: 'predavanje',
-      metadata: { predavanjeIds, zahtevIds },
+      metadata: { predavanjeIds, zahtevIds, testiranjeIds },
     });
   }
-  return { failed, otkazano };
+  return { failed, otkazano, obrisaniTermini };
 }
 
 /**
@@ -1512,6 +1640,8 @@ export async function deleteTermAsAdmin(termId: string): Promise<{ error?: strin
   for (const p of preds ?? []) {
     await savePredavanjeToHistory(admin, p.id);
   }
+  // Termin testiranja: zakazana deca se otkazuju (sivi zapis "otkazano"), ostalima se pamti datum.
+  await srediDecuTestiranjaPreBrisanja(admin, termId, 'otkazi');
 
   // Briše i eventualne automatske "blokirajuće" slotove dužeg časa (nastavak_of_term_id nema CASCADE).
   await admin.from('terms').delete().eq('nastavak_of_term_id', termId).eq('napomena', AUTO_SPILLOVER_NAPOMENA);
@@ -1534,6 +1664,8 @@ export async function permanentlyDeleteTermAsAdmin(termId: string): Promise<{ er
   const { admin, error: authErr, actor } = await requireAdmin();
   if (authErr || !admin) return { error: authErr ?? 'Niste ovlašćeni.' };
 
+  // Termin testiranja: deca koja su bila samo zakazana nestaju sa njim; ona sa ishodom ostaju u istoriji.
+  await srediDecuTestiranjaPreBrisanja(admin, termId, 'obrisi');
   await admin.from('terms').delete().eq('nastavak_of_term_id', termId).eq('napomena', AUTO_SPILLOVER_NAPOMENA);
   const { error } = await admin.from('terms').delete().eq('id', termId);
   if (error) return { error: error.message };
@@ -2536,7 +2668,7 @@ export async function deleteUplata(id: string): Promise<{ error?: string }> {
 
 // ─── Potencijalni klijenti (testiranje) ───────────────────────────────────────
 
-export type PotentialClientStatus = 'zakazan' | 'pojavio_se' | 'nije_se_pojavio' | 'prebacen_u_klijenta';
+export type PotentialClientStatus = 'zakazan' | 'pojavio_se' | 'nije_se_pojavio' | 'prebacen_u_klijenta' | 'otkazan';
 
 export type PotentialClientRow = {
   id: string;
@@ -2550,7 +2682,34 @@ export type PotentialClientRow = {
   komentar: string | null;
   converted_client_id: string | null;
   created_at: string;
+  /** Datum/vreme testiranja zapamćeni na detetu (migracija 052) – kad više nije vezano za termin. */
+  datum_termina?: string | null;
+  slot_termina?: number | null;
 };
+
+/** Trajno briše decu sa testiranja (bez traga) – sa stranice termina ili iz Istorije testiranja.
+ * Termin testiranja ostaje i kad ostane prazan (može se dodati drugo dete ili obrisati sam termin). */
+export async function obrisiDecuSaTestiranjaAsAdmin(ids: string[]): Promise<{ error?: string }> {
+  const { admin, error: authErr, actor } = await requireAdmin();
+  if (authErr || !admin) return { error: authErr ?? 'Niste ovlašćeni.' };
+  if (ids.length === 0) return {};
+  const { data: deca } = await admin.from('potential_clients').select('ime, prezime, term_id').in('id', ids);
+  const { error } = await admin.from('potential_clients').delete().in('id', ids);
+  if (error) return { error: error.message };
+  for (const termId of new Set((deca ?? []).map((d: { term_id: string | null }) => d.term_id).filter(Boolean))) {
+    revalidatePath(`/admin/termin/${termId}`);
+  }
+  revalidatePath('/admin/kalendar');
+  revalidatePath('/admin/testiranja');
+  if (actor) {
+    const imena = (deca ?? []).map((d: { ime: string; prezime: string | null }) => `${d.ime}${d.prezime ? ` ${d.prezime}` : ''}`).join(', ');
+    logActivity(actor, 'potential_client.delete', `Obrisano sa testiranja: ${imena || ids.length}.`, {
+      entityType: 'potential_client',
+      metadata: { ids },
+    });
+  }
+  return {};
+}
 
 export async function addPotentialClient(
   termId: string,

@@ -228,10 +228,14 @@ export default async function AdminUputstvoPage({ searchParams }: { searchParams
           <Podnaslov>Otkaži – otkazivanje časa (ostaje trag)</Podnaslov>
           <Koraci>
             <li>Kliknite <Ui>Otkaži</Ui>.</li>
-            <li>Kliknite <strong>dete</strong> u terminu koje otkazuje (ili narandžasti čas bez instruktora) – ime postane precrtano.</li>
+            <li>
+              Kliknite <strong>dete</strong> u terminu koje otkazuje (može i dete na testiranju, ili narandžasti čas bez instruktora) – ime
+              postane precrtano.
+            </li>
             <li>Kliknite <Ui>✓ Potvrdi otkazivanje (N)</Ui>.</li>
             <li>
               Čas ostaje na kalendaru kao sivo „otkazano“, a na profilu deteta u <Ui>Pregled termina</Ui> kao sivo, precrtano „Otkazano“.
+              Dete sa testiranja ostaje sivo „otkazano · testiranje“ na kalendaru i sa statusom <Ui>Otkazan</Ui> u Istoriji testiranja.
               Ako je to bilo jedino dete u terminu, instruktor i učionica se oslobađaju.
             </li>
           </Koraci>
@@ -243,7 +247,9 @@ export default async function AdminUputstvoPage({ searchParams }: { searchParams
             <li>Kliknite <Ui>✓ Potvrdi brisanje (N)</Ui>.</li>
           </Koraci>
           <Upozorenje>
-            Delete briše BEZ TRAGA. Ako dete samo ne dolazi, koristite <Ui>Otkaži</Ui> – tada ostaje sivi zapis „otkazano“.
+            Delete briše BEZ TRAGA. Ako dete samo ne dolazi, koristite <Ui>Otkaži</Ui> – tada ostaje sivi zapis „otkazano“. Brisanjem
+            termina testiranja nestaju i deca koja su na njemu bila samo zakazana; deca sa upisanim ishodom (pojavio se, nije se
+            pojavio, prebačen u klijenta) ostaju u Istoriji testiranja.
           </Upozorenje>
 
           <Podnaslov>Zakaži više časova – jedno dete (ili grupa) u više termina odjednom</Podnaslov>
@@ -447,6 +453,12 @@ export default async function AdminUputstvoPage({ searchParams }: { searchParams
             </li>
             <li><Ui>+ Dodaj</Ui> → upišite dete (ime obavezno; roditelj, telefon, razred opciono) → <Ui>Sačuvaj</Ui>.</li>
             <li>Posle testiranja promenite status: <Ui>Pojavio se</Ui> / <Ui>Nije se pojavio</Ui> i upišite komentar.</li>
+            <li>
+              <Ui>Otkaži</Ui> kod deteta (ili mod <Ui>Otkaži</Ui> na kalendaru, klik na dete) – testiranje se otkazuje: na kalendaru ostaje
+              sivo „otkazano · testiranje“, a dete ostaje u Istoriji testiranja sa statusom <Ui>Otkazan</Ui> i datumom. Ako je bilo jedino
+              dete, termin se briše i instruktor se oslobađa. <Ui>Otkaži termin</Ui> na terminu testiranja otkazuje svu zakazanu decu.
+            </li>
+            <li><Ui>Obriši</Ui> kod deteta – briše ga BEZ TRAGA (i iz Istorije testiranja). Ceo termin testiranja briše se modom Delete.</li>
             <li><Ui>Prebaci u klijenta</Ui> – od potencijalnog deteta pravi pravog klijenta.</li>
             <li>Stranica <Ui>Testiranja</Ui> u meniju: istorija svih testiranja, sa pretragom po detetu ili roditelju.</li>
           </Koraci>

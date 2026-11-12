@@ -10,12 +10,14 @@ const STATUS_LABEL: Record<PotentialClientStatus, string> = {
   pojavio_se: 'Pojavio se',
   nije_se_pojavio: 'Nije se pojavio',
   prebacen_u_klijenta: 'Prebačen u klijenta',
+  otkazan: 'Otkazan',
 };
 const STATUS_COLOR: Record<PotentialClientStatus, string> = {
   zakazan: 'bg-stone-100 text-stone-600',
   pojavio_se: 'bg-blue-100 text-blue-700',
   nije_se_pojavio: 'bg-red-100 text-red-700',
   prebacen_u_klijenta: 'bg-emerald-100 text-emerald-700',
+  otkazan: 'bg-stone-600 text-white',
 };
 
 /** Skida srpsku dijakritiku za labavo poređenje pretrage. */
@@ -76,8 +78,8 @@ export default function TestiranjaList({ list }: { list: TestiranjeRow[] }) {
           </div>
         ) : (
           filtered.map((pc) => (
-            <div key={pc.id} className="p-4 flex items-start justify-between gap-4">
-              <div className="min-w-0">
+            <div key={pc.id} className={`p-4 flex items-start justify-between gap-4${pc.status === 'otkazan' ? ' bg-stone-50' : ''}`}>
+              <div className={`min-w-0${pc.status === 'otkazan' ? ' text-stone-500' : ''}`}>
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="font-medium text-stone-800">{pc.ime}{pc.prezime ? ` ${pc.prezime}` : ''}</span>
                   {pc.razred && <span className="text-xs text-stone-500">{pc.razred}. razred</span>}
@@ -105,22 +107,23 @@ export default function TestiranjaList({ list }: { list: TestiranjeRow[] }) {
                   )}
                 </p>
               </div>
-              {pc.term_id && (
-                <div className="flex items-center gap-3 shrink-0">
-                  <PotentialClientQuickActions
-                    id={pc.id}
-                    ime={pc.ime}
-                    status={pc.status}
-                    convertedClientId={pc.converted_client_id}
-                  />
+              <div className="flex items-center gap-3 shrink-0">
+                <PotentialClientQuickActions
+                  id={pc.id}
+                  ime={pc.ime}
+                  status={pc.status}
+                  convertedClientId={pc.converted_client_id}
+                  termId={pc.term_id}
+                />
+                {pc.term_id && (
                   <Link
                     href={`/admin/termin/${pc.term_id}/testiranje/${pc.id}`}
                     className="text-sm text-amber-600 hover:text-amber-700"
                   >
                     Izmeni
                   </Link>
-                </div>
-              )}
+                )}
+              </div>
             </div>
           ))
         )}

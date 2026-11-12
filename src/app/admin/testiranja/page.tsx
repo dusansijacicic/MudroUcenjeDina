@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getAuthedUser, getIsAdmin } from '@/lib/auth';
+import { TIME_SLOTS } from '@/lib/constants';
 import type { PotentialClientStatus } from '@/app/admin/actions';
 import TestiranjaList, { type TestiranjeRow } from './TestiranjaList';
 
@@ -20,13 +21,18 @@ export default async function TestiranjaPage() {
     id: string; term_id: string | null; ime: string; prezime: string | null; ime_roditelja: string | null;
     mobilni_roditelja: string | null; razred: string | null; status: string;
     komentar: string | null; converted_client_id: string | null; created_at: string;
+    datum_termina?: string | null; slot_termina?: number | null;
     term: { id: string; date: string; slot_index: number } | { id: string; date: string; slot_index: number }[] | null;
   }>;
 
   const list: TestiranjeRow[] = raw.map((pc) => {
     const term = Array.isArray(pc.term) ? pc.term[0] : pc.term;
-    const dateStr = term
-      ? new Date(term.date + 'T12:00:00').toLocaleDateString('sr-Latn-RS', { day: '2-digit', month: 'short', year: 'numeric' })
+    // Otkazano dete ili obrisan termin: datum/vreme zapamćeni na detetu (migracija 052).
+    const datum = term?.date ?? pc.datum_termina ?? null;
+    const slot = term?.slot_index ?? pc.slot_termina ?? null;
+    const dateStr = datum
+      ? new Date(String(datum).slice(0, 10) + 'T12:00:00').toLocaleDateString('sr-Latn-RS', { day: '2-digit', month: 'short', year: 'numeric' }) +
+        (slot != null && TIME_SLOTS[slot] ? ` · ${TIME_SLOTS[slot]}` : '')
       : '—';
     return {
       id: pc.id,

@@ -847,8 +847,9 @@ export default function AdminCalendarView({
     if (!confirm(`Otkazati ${keys.length} čas(ova)? Ostaju na kalendaru i na profilu deteta kao „otkazano“.`)) return;
     const predavanjeIds = keys.filter((k) => k.startsWith('p:')).map((k) => k.slice(2));
     const zahtevIds = keys.filter((k) => k.startsWith('z:')).map((k) => k.slice(2));
+    const testiranjeIds = keys.filter((k) => k.startsWith('t:')).map((k) => k.slice(2));
     setCancelLoading(true);
-    const res = await otkaziCasoveAsAdmin(predavanjeIds, zahtevIds);
+    const res = await otkaziCasoveAsAdmin(predavanjeIds, zahtevIds, testiranjeIds);
     setCancelLoading(false);
     if (res.failed.length > 0) {
       toast.error(`Nije otkazano ${res.failed.length}/${keys.length}: ${[...new Set(res.failed.map((f) => f.error))].join(' ')}`);
@@ -1794,8 +1795,8 @@ export default function AdminCalendarView({
                   Potvrdi otkazivanje ({cancelSelection.size})
                 </button>
                 <span className="text-sm text-stone-500">
-                  kliknite dete u terminu (ili narandžasti čas bez instruktora) koje otkazuje – ostaje sivo „otkazano“ na kalendaru i na
-                  profilu deteta. Za brisanje bez traga koristite Delete.
+                  kliknite dete u terminu, dete na testiranju ili narandžasti čas bez instruktora koje otkazuje – ostaje sivo
+                  „otkazano“ na kalendaru i na profilu deteta (testiranje: u Istoriji testiranja). Za brisanje bez traga koristite Delete.
                 </span>
               </div>
               {cancelSelection.size > 0 && (
@@ -2314,16 +2315,37 @@ function TermCardVisual({ term, rowOffset = 0 }: { term: AdminTerm; rowOffset?: 
           <ul className="pl-0 list-none">
             <TruncatedNameList
               itemClassName=""
-              items={sortByFullName(potentialClients, (pc) => `${pc.ime ?? ''} ${pc.prezime ?? ''}`.trim()).map((pc, i) => ({
-                key: pc.id,
-                content: (
-                  <div style={rowStyle(i)} className="px-2 py-1 text-[12px] leading-snug text-stone-900">
-                    <span className="font-semibold">{pc.ime}{pc.prezime ? ` ${pc.prezime}` : ''}</span>
-                    {pc.ime_roditelja && <span className="block text-stone-600">rod: {pc.ime_roditelja}</span>}
-                    {pc.mobilni_roditelja && <span className="block text-stone-600">{pc.mobilni_roditelja}</span>}
-                  </div>
-                ),
-              }))}
+              items={sortByFullName(potentialClients, (pc) => `${pc.ime ?? ''} ${pc.prezime ?? ''}`.trim()).map((pc, i) => {
+                const ime = `${pc.ime ?? ''}${pc.prezime ? ` ${pc.prezime}` : ''}`;
+                const otkaziKey = `t:${pc.id}`;
+                const otkazuje = swap.cancelMode && swap.isCancelSelected(otkaziKey);
+                return {
+                  key: pc.id,
+                  content: (
+                    <div
+                      style={rowStyle(i)}
+                      role={swap.cancelMode ? 'button' : undefined}
+                      onClick={
+                        swap.cancelMode
+                          ? (e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              swap.onToggleCancel(otkaziKey, `${formatShortDate(term.date)} ${TIME_SLOTS[term.slot_index] ?? ''} · ${ime} (testiranje)`);
+                            }
+                          : undefined
+                      }
+                      className={`px-2 py-1 text-[12px] leading-snug text-stone-900${swap.cancelMode ? ' cursor-pointer hover:brightness-95' : ''}${
+                        otkazuje ? ' ring-2 ring-inset ring-stone-700' : ''
+                      }`}
+                    >
+                      <span className={`font-semibold${otkazuje ? ' line-through' : ''}`}>{ime}</span>
+                      {pc.ime_roditelja && <span className="block text-stone-600">rod: {pc.ime_roditelja}</span>}
+                      {pc.mobilni_roditelja && <span className="block text-stone-600">{pc.mobilni_roditelja}</span>}
+                      {otkazuje && <span className="block text-[11px] font-bold text-stone-700">✕ otkazuje se</span>}
+                    </div>
+                  ),
+                };
+              })}
             />
           </ul>
         )
@@ -2534,7 +2556,10 @@ function AdminCellContent({
             {ot.instructor_ime && (
               <span className="block text-[11px]">{ot.instructor_ime} {ot.instructor_prezime ?? ''}</span>
             )}
-            <span className="text-[10px] uppercase tracking-wide">otkazano{ot.placeno ? ' · naplaćeno' : ''}</span>
+            <span className="text-[10px] uppercase tracking-wide">
+              otkazano{ot.term_type_naziv?.toLowerCase() === 'testiranje' ? ' · testiranje' : ''}
+              {ot.placeno ? ' · naplaćeno' : ''}
+            </span>
           </div>
         );
       })}
