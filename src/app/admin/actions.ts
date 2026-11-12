@@ -1117,6 +1117,99 @@ export async function deletePredavanjeAsAdmin(predavanjeId: string, termId: stri
 }
 
 /**
+ * Mod "Otkaži" na kalendaru: izabrani časovi dece (predavanja) i zahtevi bez instruktora se otkazuju –
+ * za razliku od Delete ostaje trag: upis u otkazane termine (siv "otkazano" na kalendaru i na profilu
+ * deteta). Termin koji ostane bez dece se briše (oslobađa instruktora i učionicu).
+ */
+export async function otkaziCasoveAsAdmin(
+  predavanjeIds: string[],
+  zahtevIds: string[] = []
+): Promise<{ failed: { id: string; error: string }[]; otkazano: number }> {
+  const { admin, error: authErr, actor } = await requireAdmin();
+  if (authErr || !admin) {
+    return { failed: [...predavanjeIds, ...zahtevIds].map((id) => ({ id, error: authErr ?? 'Niste ovlašćeni.' })), otkazano: 0 };
+  }
+
+  const failed: { id: string; error: string }[] = [];
+  let otkazano = 0;
+  const termIdsZaSredjivanje = new Set<string>();
+  // Redom, ne paralelno: deca istog termina – prazan termin se briše tek na kraju.
+  for (const predavanjeId of predavanjeIds) {
+    const { data: pred } = await admin.from('predavanja').select('term_id').eq('id', predavanjeId).maybeSingle();
+    if (!pred) {
+      failed.push({ id: predavanjeId, error: 'Čas nije pronađen.' });
+      continue;
+    }
+    await savePredavanjeToHistory(admin, predavanjeId);
+    const { error } = await admin.from('predavanja').delete().eq('id', predavanjeId);
+    if (error) {
+      failed.push({ id: predavanjeId, error: error.message });
+      continue;
+    }
+    termIdsZaSredjivanje.add(pred.term_id as string);
+    otkazano++;
+  }
+  for (const termId of termIdsZaSredjivanje) {
+    const { count } = await admin.from('predavanja').select('*', { count: 'exact', head: true }).eq('term_id', termId);
+    if ((count ?? 0) === 0) {
+      await admin.from('terms').delete().eq('nastavak_of_term_id', termId).eq('napomena', AUTO_SPILLOVER_NAPOMENA);
+      await admin.from('terms').delete().eq('id', termId);
+    } else {
+      await syncSpilloverForTerm(admin, termId);
+    }
+    revalidatePath(`/admin/termin/${termId}`);
+  }
+
+  for (const zahtevId of zahtevIds) {
+    const { data: z } = await admin
+      .from('zahtevi_za_cas')
+      .select('client_id, requested_date, requested_slot_index, client:clients(ime, prezime), term_type:term_types(naziv), classroom:classrooms(naziv)')
+      .eq('id', zahtevId)
+      .maybeSingle();
+    if (!z) {
+      failed.push({ id: zahtevId, error: 'Zahtev nije pronađen.' });
+      continue;
+    }
+    const one = <T,>(v: T | T[] | null | undefined): T | null => (Array.isArray(v) ? (v[0] ?? null) : (v ?? null));
+    const client = one(z.client as { ime?: string; prezime?: string | null } | { ime?: string; prezime?: string | null }[] | null);
+    const { error: insErr } = await admin.from('otkazani_termini').insert({
+      client_id: z.client_id,
+      client_ime: client?.ime ?? '',
+      client_prezime: client?.prezime ?? null,
+      instructor_id: null,
+      instructor_ime: null,
+      instructor_prezime: null,
+      classroom_naziv: one(z.classroom as { naziv?: string } | { naziv?: string }[] | null)?.naziv ?? null,
+      term_date: String(z.requested_date).slice(0, 10),
+      slot_index: z.requested_slot_index,
+      term_type_naziv: one(z.term_type as { naziv?: string } | { naziv?: string }[] | null)?.naziv ?? null,
+      placeno: false,
+    });
+    if (insErr) {
+      failed.push({ id: zahtevId, error: insErr.message });
+      continue;
+    }
+    const { error: delErr } = await admin.from('zahtevi_za_cas').delete().eq('id', zahtevId);
+    if (delErr) {
+      failed.push({ id: zahtevId, error: delErr.message });
+      continue;
+    }
+    otkazano++;
+  }
+
+  revalidatePath('/admin/kalendar');
+  revalidatePath('/admin/klijenti', 'layout');
+  if (zahtevIds.length > 0) revalidatePath('/dashboard/zahtevi');
+  if (actor && otkazano > 0) {
+    logActivity(actor, 'predavanje.otkazi', `Otkazano ${otkazano} čas(ova) sa kalendara.`, {
+      entityType: 'predavanje',
+      metadata: { predavanjeIds, zahtevIds },
+    });
+  }
+  return { failed, otkazano };
+}
+
+/**
  * Menja instruktora za jedno predavanje (administratorska operacija).
  * Pronalazi ili kreira termin novog instruktora na istom datumu i slotu,
  * zatim premešta predavanje u taj termin.

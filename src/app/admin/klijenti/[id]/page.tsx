@@ -146,14 +146,31 @@ export default async function AdminKlijentEditPage({
     ucionica: one(z.classroom)?.naziv ?? null,
   }));
 
+  // Otkazani časovi (mod Otkaži na kalendaru, ili brisanje časa iz forme) – u pregledu stoje na svom
+  // datumu, sivi i precrtani, da se vidi da je taj čas bio pa otkazan.
+  const otkazaniUPregledu = otkazani.map((o) => ({ o, term: { date: o.term_date, slot_index: o.slot_index } as TermInfo }));
+  const otkazaniBuduci = otkazaniUPregledu.filter((x) => !isTermInPast(x.term.date, x.term.slot_index));
+  const otkazaniProsli = otkazaniUPregledu.filter((x) => isTermInPast(x.term.date, x.term.slot_index));
+
   type ZakazanItem =
     | { kind: 'predavanje'; p: (typeof zakazaniPredavanja)[number]; term: TermInfo }
-    | { kind: 'zahtev'; z: (typeof zahtevi)[number]; term: TermInfo };
+    | { kind: 'zahtev'; z: (typeof zahtevi)[number]; term: TermInfo }
+    | { kind: 'otkazan'; o: (typeof otkazani)[number]; term: TermInfo };
   const zakazani: ZakazanItem[] = [
     ...zakazaniPredavanja.map((p) => ({ kind: 'predavanje' as const, p, term: p.term })),
     ...zahtevi.map((z) => ({ kind: 'zahtev' as const, z, term: z.term })),
+    ...otkazaniBuduci.map(({ o, term }) => ({ kind: 'otkazan' as const, o, term })),
   ].sort(sortByDateSlot);
+  const brojZakazanih = zakazaniPredavanja.length + zahtevi.length;
   const brojBezInstruktora = zahtevi.length;
+
+  type ProsliItem =
+    | { kind: 'predavanje'; p: (typeof odrzani)[number]; term: TermInfo }
+    | { kind: 'otkazan'; o: (typeof otkazani)[number]; term: TermInfo };
+  const prosli: ProsliItem[] = [
+    ...odrzani.map((p) => ({ kind: 'predavanje' as const, p, term: p.term })),
+    ...otkazaniProsli.map(({ o, term }) => ({ kind: 'otkazan' as const, o, term })),
+  ].sort(sortByDateSlotDesc);
 
   const popustDeteta = Math.min(100, Math.max(0, Number(client.popust_percent ?? 0)));
   const renderTermLink = (p: PredavanjeRow & { term: TermInfo }, isOdrzan: boolean) => {
@@ -223,6 +240,33 @@ export default async function AdminKlijentEditPage({
           {instr ? `${instr.ime} ${instr.prezime}` : 'Bez instruktora'}
           {z.vrsta && ` · ${z.vrsta}`}
           {z.ucionica && ` · ${z.ucionica}`}
+        </p>
+      </Link>
+    );
+  };
+
+  const renderOtkazanLink = (o: (typeof otkazani)[number]) => {
+    const dateStr = new Date(o.term_date + 'T12:00:00').toLocaleDateString('sr-Latn-RS', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' });
+    const timeStr = TIME_SLOTS[o.slot_index] ?? '—';
+    const instr = [o.instructor_ime, o.instructor_prezime].filter(Boolean).join(' ');
+    return (
+      <Link
+        href={`/admin/kalendar?view=nedelja&week=${getMonday(o.term_date)}&fokus=${o.term_date}&slot=${o.slot_index}`}
+        className="block rounded-xl border border-stone-300 bg-stone-100 px-4 py-3 text-stone-500 ui-transition hover:bg-stone-200/70 focus:outline-none focus:ring-2 focus:ring-amber-400 focus:ring-offset-2"
+      >
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="line-through decoration-stone-400">
+            <span className="font-semibold text-stone-600">{dateStr}</span>
+            <span className="ml-2">{timeStr}</span>
+          </div>
+          <span className="rounded-full bg-stone-600 px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wide text-white">
+            Otkazano{o.placeno ? ' · naplaćeno' : ''}
+          </span>
+        </div>
+        <p className="mt-1 text-sm">
+          {o.term_type_naziv ?? 'Bez vrste'}
+          {instr ? ` · ${instr}` : ' · bez instruktora'}
+          {o.classroom_naziv && ` · ${o.classroom_naziv}`}
         </p>
       </Link>
     );
@@ -317,15 +361,18 @@ export default async function AdminKlijentEditPage({
       <section className="rounded-2xl border border-stone-200 bg-white shadow-sm overflow-hidden animate-in-delay-3">
         <div className="border-b border-stone-100 bg-stone-50/80 px-5 py-3">
           <h2 className="text-base font-semibold text-stone-800">Pregled termina</h2>
-          <p className="text-xs text-stone-500 mt-0.5">Sortirano po datumu. Termini čije je vreme prošlo automatski se označavaju kao održani.</p>
+          <p className="text-xs text-stone-500 mt-0.5">
+            Sortirano po datumu. Termini čije je vreme prošlo automatski se označavaju kao održani. Otkazani su sivi i precrtani.
+          </p>
         </div>
         <div className="grid md:grid-cols-2 gap-0">
           <div className="p-5 border-b md:border-b-0 md:border-r border-stone-100">
             <div className="flex items-center gap-2 mb-4">
               <span className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-amber-100 text-amber-800 font-semibold text-sm">
-                {zakazani.length}
+                {brojZakazanih}
               </span>
               <h3 className="font-semibold text-stone-800">Zakazani za budućnost</h3>
+              {otkazaniBuduci.length > 0 && <span className="text-xs text-stone-500">+ {otkazaniBuduci.length} otkazano</span>}
             </div>
             {brojBezInstruktora > 0 && (
               <p className="text-xs text-amber-800 mb-3">
@@ -339,8 +386,10 @@ export default async function AdminKlijentEditPage({
                 {zakazani.map((item) =>
                   item.kind === 'predavanje' ? (
                     <li key={item.p.id}>{renderTermLink(item.p, false)}</li>
-                  ) : (
+                  ) : item.kind === 'zahtev' ? (
                     <li key={`z-${item.z.id}`}>{renderZahtevLink(item.z)}</li>
+                  ) : (
+                    <li key={`o-${item.o.id}`}>{renderOtkazanLink(item.o)}</li>
                   )
                 )}
               </ul>
@@ -352,14 +401,19 @@ export default async function AdminKlijentEditPage({
                 {odrzani.length}
               </span>
               <h3 className="font-semibold text-stone-800">Održani</h3>
+              {otkazaniProsli.length > 0 && <span className="text-xs text-stone-500">+ {otkazaniProsli.length} otkazano</span>}
             </div>
-            {odrzani.length === 0 ? (
+            {prosli.length === 0 ? (
               <p className="text-sm text-stone-500">Nema održanih termina.</p>
             ) : (
               <ul className="space-y-2 max-h-[420px] overflow-y-auto pr-1">
-                {odrzani.map((p) => (
-                  <li key={p.id}>{renderTermLink(p, true)}</li>
-                ))}
+                {prosli.map((item) =>
+                  item.kind === 'predavanje' ? (
+                    <li key={item.p.id}>{renderTermLink(item.p, true)}</li>
+                  ) : (
+                    <li key={`o-${item.o.id}`}>{renderOtkazanLink(item.o)}</li>
+                  )
+                )}
               </ul>
             )}
           </div>

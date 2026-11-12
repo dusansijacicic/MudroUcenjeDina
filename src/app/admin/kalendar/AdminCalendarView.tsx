@@ -24,6 +24,7 @@ import {
   unblockSlotAsAdmin,
   postaviPlacenePakete,
   vratiBezInstruktoraAsAdmin,
+  otkaziCasoveAsAdmin,
   type BlokiranTermin,
   type PlaceniPaket,
 } from '@/app/admin/actions';
@@ -150,6 +151,16 @@ type SwapContextValue = {
   onTogglePaid: (pick: PaidPick) => void;
   /** Id oznake plaćanja koja počinje baš na ovom času deteta te vrste. */
   getPaketStart: (clientId: string | null | undefined, termTypeId: string | null | undefined, date: string, slot: number) => string | undefined;
+  /** Mod „Otkaži“: klik na dete (ili zahtev) ga označi za otkazivanje; ključ "p:id" ili "z:id". */
+  cancelMode: boolean;
+  isCancelSelected: (key: string) => boolean;
+  onToggleCancel: (key: string, label: string) => void;
+  /** Mod „Premesti“ (tablet, umesto prevlačenja): izabere se termin, pa novo mesto. */
+  moveMode: boolean;
+  moveSourceId: string | null;
+  onSelectMoveSource: (term: AdminTerm) => void;
+  isMoveTarget: (date: string, slot: number) => boolean;
+  onSelectMoveTarget: (date: string, slot: number) => void;
 };
 const SwapContext = createContext<SwapContextValue>({
   swapMode: false,
@@ -190,6 +201,14 @@ const SwapContext = createContext<SwapContextValue>({
   paidSelectionState: () => null,
   onTogglePaid: () => {},
   getPaketStart: () => undefined,
+  cancelMode: false,
+  isCancelSelected: () => false,
+  onToggleCancel: () => {},
+  moveMode: false,
+  moveSourceId: null,
+  onSelectMoveSource: () => {},
+  isMoveTarget: () => false,
+  onSelectMoveTarget: () => {},
 });
 
 /** Izbor u modu Dodeli: izabrani časovi se vraćaju u zahteve bez instruktora (a ne "ne menjaj instruktora"). */
@@ -629,6 +648,15 @@ export default function AdminCalendarView({
 
   const [deleteMode, setDeleteMode] = useState(false);
   const [deleteSelection, setDeleteSelection] = useState<Set<string>>(new Set());
+  // Otkaži: izabrana deca/zahtevi ("p:id" / "z:id" → natpis za čip).
+  const [cancelMode, setCancelMode] = useState(false);
+  const [cancelSelection, setCancelSelection] = useState<Map<string, string>>(new Map());
+  const [cancelLoading, setCancelLoading] = useState(false);
+  // Premesti: termin koji se premešta i novo mesto.
+  const [moveMode, setMoveMode] = useState(false);
+  const [moveSource, setMoveSource] = useState<{ termId: string; label: string } | null>(null);
+  const [moveTarget, setMoveTarget] = useState<{ date: string; slot: number } | null>(null);
+  const [moveLoading, setMoveLoading] = useState(false);
   const [deleteOtkazaniSelection, setDeleteOtkazaniSelection] = useState<Set<string>>(new Set());
   const [deleteZahteviSelection, setDeleteZahteviSelection] = useState<Set<string>>(new Set());
   const [deleteLoading, setDeleteLoading] = useState(false);
@@ -712,11 +740,22 @@ export default function AdminCalendarView({
   const getPaketStart = (clientId: string | null | undefined, termTypeId: string | null | undefined, date: string, slot: number) =>
     clientId ? paketStartByKey.get(`${clientId}|${termTypeId ?? ''}|${date}|${slot}`) : undefined;
 
-  useKalendarRealtime(swapMode || copyMode || deleteMode || bulkMode || assignMode || blockMode || paidMode || draggedTermId !== null);
+  useKalendarRealtime(
+    swapMode || copyMode || deleteMode || bulkMode || assignMode || blockMode || paidMode || cancelMode || moveMode || draggedTermId !== null
+  );
 
   // Swap/Copy/Delete/Bulk/Assign/Block su međusobno isključivi – uključivanje jednog gasi ostale da
   // klikovi na kalendaru ne budu dvosmisleni.
-  const resetOtherModes = (keep: 'swap' | 'copy' | 'delete' | 'bulk' | 'assign' | 'block' | 'paid') => {
+  const resetOtherModes = (keep: 'swap' | 'copy' | 'delete' | 'bulk' | 'assign' | 'block' | 'paid' | 'cancel' | 'move') => {
+    if (keep !== 'cancel') {
+      setCancelMode(false);
+      setCancelSelection(new Map());
+    }
+    if (keep !== 'move') {
+      setMoveMode(false);
+      setMoveSource(null);
+      setMoveTarget(null);
+    }
     if (keep !== 'paid') {
       setPaidMode(false);
       setPaidSelection(new Map());
@@ -782,6 +821,78 @@ export default function AdminCalendarView({
     setDeleteSelection(new Set());
     setDeleteOtkazaniSelection(new Set());
     setDeleteZahteviSelection(new Set());
+  };
+
+  const toggleCancelMode = () => {
+    setCancelMode((v) => {
+      const next = !v;
+      if (next) resetOtherModes('cancel');
+      return next;
+    });
+    setCancelSelection(new Map());
+  };
+
+  const onToggleCancel = (key: string, label: string) => {
+    setCancelSelection((prev) => {
+      const next = new Map(prev);
+      if (next.has(key)) next.delete(key);
+      else next.set(key, label);
+      return next;
+    });
+  };
+
+  const confirmCancel = async () => {
+    const keys = [...cancelSelection.keys()];
+    if (keys.length === 0) return;
+    if (!confirm(`Otkazati ${keys.length} čas(ova)? Ostaju na kalendaru i na profilu deteta kao „otkazano“.`)) return;
+    const predavanjeIds = keys.filter((k) => k.startsWith('p:')).map((k) => k.slice(2));
+    const zahtevIds = keys.filter((k) => k.startsWith('z:')).map((k) => k.slice(2));
+    setCancelLoading(true);
+    const res = await otkaziCasoveAsAdmin(predavanjeIds, zahtevIds);
+    setCancelLoading(false);
+    if (res.failed.length > 0) {
+      toast.error(`Nije otkazano ${res.failed.length}/${keys.length}: ${[...new Set(res.failed.map((f) => f.error))].join(' ')}`);
+    } else {
+      toast.success(`Otkazano ${res.otkazano}.`);
+    }
+    setCancelSelection(new Map());
+    setCancelMode(false);
+    router.refresh();
+  };
+
+  const toggleMoveMode = () => {
+    setMoveMode((v) => {
+      const next = !v;
+      if (next) resetOtherModes('move');
+      return next;
+    });
+    setMoveSource(null);
+    setMoveTarget(null);
+  };
+
+  const onSelectMoveSource = (term: AdminTerm) => {
+    setMoveTarget(null);
+    setMoveSource((prev) => (prev?.termId === term.id ? null : { termId: term.id, label: swapTermLabel(term) }));
+  };
+
+  const onSelectMoveTarget = (date: string, slot: number) => {
+    setMoveTarget((prev) => (prev && prev.date === date && prev.slot === slot ? null : { date, slot }));
+  };
+
+  // Mod ostaje uključen posle premeštanja – na tabletu se obično premešta više termina zaredom.
+  const confirmMove = async () => {
+    if (!moveSource || !moveTarget) return;
+    setMoveLoading(true);
+    const res = await moveTermAsAdmin(moveSource.termId, moveTarget.date, moveTarget.slot);
+    setMoveLoading(false);
+    if (res.error) {
+      toast.error(res.error);
+      return;
+    }
+    toast.success(`Premešteno: ${formatShortDate(moveTarget.date)} ${TIME_SLOTS[moveTarget.slot] ?? ''}.`);
+    setMoveSource(null);
+    setMoveTarget(null);
+    router.refresh();
   };
 
   const toggleBulkMode = () => {
@@ -1324,8 +1435,14 @@ export default function AdminCalendarView({
       : !bulkClientId || bulkSlots.size === 0) || bulkLoading;
   const blockDisabled = blockSlots.size === 0 || blockLoading;
   const paidDisabled = paidSelection.size === 0 || paidLoading;
+  const cancelDisabled = cancelSelection.size === 0 || cancelLoading;
+  const moveDisabled = !moveSource || !moveTarget || moveLoading;
   const activeConfirm = paidMode
     ? { label: `Potvrdi plaćeno (${paidSelection.size})`, disabled: paidDisabled, color: 'bg-emerald-600 hover:bg-emerald-700' }
+    : cancelMode
+    ? { label: `Potvrdi otkazivanje (${cancelSelection.size})`, disabled: cancelDisabled, color: 'bg-stone-700 hover:bg-stone-800' }
+    : moveMode
+    ? { label: 'Potvrdi premeštanje', disabled: moveDisabled, color: 'bg-emerald-600 hover:bg-emerald-700' }
     : blockMode
     ? { label: `Blokiraj (${blockSlots.size})`, disabled: blockDisabled, color: 'bg-stone-800 hover:bg-stone-900' }
     : deleteMode
@@ -1341,6 +1458,8 @@ export default function AdminCalendarView({
               : null;
   const runActiveConfirm = () => {
     if (paidMode) confirmPaid();
+    else if (cancelMode) confirmCancel();
+    else if (moveMode) confirmMove();
     else if (blockMode) confirmBlock();
     else if (deleteMode) confirmDelete();
     else if (assignMode) confirmAssign();
@@ -1393,6 +1512,14 @@ export default function AdminCalendarView({
         },
         onTogglePaid,
         getPaketStart,
+        cancelMode,
+        isCancelSelected: (key: string) => cancelSelection.has(key),
+        onToggleCancel,
+        moveMode,
+        moveSourceId: moveSource?.termId ?? null,
+        onSelectMoveSource,
+        isMoveTarget: (date: string, slot: number) => !!moveTarget && moveTarget.date === date && moveTarget.slot === slot,
+        onSelectMoveTarget,
       }}
     >
       {headerContent}
@@ -1417,8 +1544,8 @@ export default function AdminCalendarView({
       )}
       {/* Zamrznuta (sticky) je ISKLJUČIVO ova traka: dugmići modova, period sa Prethodna/Sledeća,
           potvrda aktivnog moda i Print. Polja i čipovi modova nisu ovde, da ne bi zauzeli ekran dok se skroluje. */}
-      <StickyBar enabled topOffset={0} className="mb-4 rounded-xl border border-stone-200 bg-white p-3">
-        <div className="flex items-center gap-3 flex-wrap">
+      <StickyBar enabled minWidth={600} topOffset={0} className="mb-4 rounded-xl border border-stone-200 bg-white p-3">
+        <div className="flex items-center gap-3 flex-nowrap overflow-x-auto overscroll-x-contain whitespace-nowrap [&>*]:shrink-0 lg:flex-wrap lg:overflow-visible lg:whitespace-normal">
           <button
             type="button"
             onClick={toggleSwapMode}
@@ -1440,6 +1567,16 @@ export default function AdminCalendarView({
           {copyLoading && <span className="text-sm text-stone-500">Kopiram…</span>}
           <button
             type="button"
+            onClick={toggleMoveMode}
+            className={`px-3 py-1.5 min-h-[44px] md:min-h-0 rounded-lg text-sm font-medium ${
+              moveMode ? 'bg-amber-600 text-white hover:bg-amber-700' : 'bg-stone-200 text-stone-700 hover:bg-stone-300'
+            }`}
+          >
+            {moveMode ? 'Premesti: uključeno' : 'Premesti'}
+          </button>
+          {moveLoading && <span className="text-sm text-stone-500">Premeštam…</span>}
+          <button
+            type="button"
             onClick={toggleDeleteMode}
             className={`px-3 py-1.5 min-h-[44px] md:min-h-0 rounded-lg text-sm font-medium ${
               deleteMode ? 'bg-red-600 text-white hover:bg-red-700' : 'bg-stone-200 text-stone-700 hover:bg-stone-300'
@@ -1448,6 +1585,16 @@ export default function AdminCalendarView({
             {deleteMode ? 'Delete: uključen' : 'Delete'}
           </button>
           {deleteLoading && <span className="text-sm text-stone-500">Brišem…</span>}
+          <button
+            type="button"
+            onClick={toggleCancelMode}
+            className={`px-3 py-1.5 min-h-[44px] md:min-h-0 rounded-lg text-sm font-medium ${
+              cancelMode ? 'bg-stone-700 text-white hover:bg-stone-800' : 'bg-stone-200 text-stone-700 hover:bg-stone-300'
+            }`}
+          >
+            {cancelMode ? 'Otkaži: uključeno' : 'Otkaži'}
+          </button>
+          {cancelLoading && <span className="text-sm text-stone-500">Otkazujem…</span>}
           <button
             type="button"
             onClick={toggleBulkMode}
@@ -1490,7 +1637,7 @@ export default function AdminCalendarView({
             {paidMode ? 'Označi plaćeno: uključeno' : 'Označi plaćeno'}
           </button>
           {paidLoading && <span className="text-sm text-stone-500">Upisujem…</span>}
-          <div className="ml-auto flex flex-wrap items-center gap-2">
+          <div className="ml-auto flex flex-nowrap items-center gap-2 lg:flex-wrap">
             <PeriodNav
               view={view}
               startOfWeek={startOfWeek}
@@ -1522,7 +1669,7 @@ export default function AdminCalendarView({
         </div>
       </StickyBar>
       {/* Polja/potvrde/čipovi aktivnog moda – NIJE zamrznuto, ide normalno u toku stranice, iznad kalendara. */}
-      {(swapMode || copyMode || deleteMode || bulkMode || assignMode || blockMode || paidMode) && (
+      {(swapMode || copyMode || deleteMode || bulkMode || assignMode || blockMode || paidMode || cancelMode || moveMode) && (
         <div className="mb-4 rounded-xl border border-stone-200 bg-white p-3 space-y-3">
           {paidMode && (
             <div className="flex flex-col gap-2 text-sm">
@@ -1633,6 +1780,59 @@ export default function AdminCalendarView({
               <span className="text-sm text-stone-400">
                 kliknite termine (i sive otkazane/zahteve) da ih označite, klik ponovo za deselekciju – ovo je trajno brisanje BEZ TRAGA, ne otkazivanje
               </span>
+            </div>
+          )}
+          {cancelMode && (
+            <div className="flex flex-col gap-2 text-sm">
+              <div className="flex items-center gap-3 flex-wrap">
+                <button
+                  type="button"
+                  onClick={confirmCancel}
+                  disabled={cancelDisabled}
+                  className="px-3 py-1.5 rounded-lg text-sm font-medium bg-stone-700 text-white hover:bg-stone-800 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  Potvrdi otkazivanje ({cancelSelection.size})
+                </button>
+                <span className="text-sm text-stone-500">
+                  kliknite dete u terminu (ili narandžasti čas bez instruktora) koje otkazuje – ostaje sivo „otkazano“ na kalendaru i na
+                  profilu deteta. Za brisanje bez traga koristite Delete.
+                </span>
+              </div>
+              {cancelSelection.size > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {[...cancelSelection.entries()].map(([key, label]) => (
+                    <span key={key} className="rounded-full border border-stone-400 bg-stone-100 px-2 py-0.5 text-xs text-stone-800">
+                      ✕ {label}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+          {moveMode && (
+            <div className="flex items-center gap-3 flex-wrap text-sm">
+              <button
+                type="button"
+                onClick={confirmMove}
+                disabled={moveDisabled}
+                className="px-3 py-1.5 rounded-lg text-sm font-medium bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Potvrdi premeštanje
+              </button>
+              {moveSource ? (
+                <span className="rounded-full border border-amber-400 bg-amber-50 px-2 py-0.5 text-xs text-amber-900">{moveSource.label}</span>
+              ) : (
+                <span className="text-stone-500">1) kliknite termin koji premeštate</span>
+              )}
+              <span className="text-stone-400">→</span>
+              {moveTarget ? (
+                <span className="rounded-full border border-emerald-400 bg-emerald-50 px-2 py-0.5 text-xs text-emerald-900">
+                  {formatShortDate(moveTarget.date)} {TIME_SLOTS[moveTarget.slot] ?? ''}
+                </span>
+              ) : (
+                <span className="text-stone-500">2) kliknite novo mesto („Premesti ovde“)</span>
+              )}
+              <span className="w-full text-xs text-stone-400">Premešta se ceo termin sa svom decom – isto kao prevlačenje mišem na računaru.</span>
             </div>
           )}
           {assignMode && (
@@ -2141,13 +2341,21 @@ function TermCardVisual({ term, rowOffset = 0 }: { term: AdminTerm; rowOffset?: 
                 const paidState = swap.paidMode ? swap.paidSelectionState(paidKey) : null;
                 const paketId = swap.paidMode ? swap.getPaketStart(clientId, termTypeId, term.date, term.slot_index) : undefined;
                 const klik = swap.paidMode && !!clientId;
+                const otkaziKey = `p:${p.id}`;
+                const otkazuje = swap.cancelMode && swap.isCancelSelected(otkaziKey);
                 return (
                   <div
                     style={isUnpaid(p.redni) ? UNPAID_ROW_STYLE : rowStyle(i)}
                     title={klik ? (swap.paidSamoJedan ? 'Plaćen samo ovaj čas' : 'Plaćeno od ovog časa (ovaj + 5 sledećih)') : redniTitle(p.redni)}
-                    role={klik ? 'button' : undefined}
+                    role={klik || swap.cancelMode ? 'button' : undefined}
                     onClick={
-                      klik
+                      swap.cancelMode
+                        ? (e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            swap.onToggleCancel(otkaziKey, `${formatShortDate(term.date)} ${TIME_SLOTS[term.slot_index] ?? ''} · ${ime}`);
+                          }
+                        : klik
                         ? (e) => {
                             e.preventDefault();
                             e.stopPropagation();
@@ -2164,11 +2372,14 @@ function TermCardVisual({ term, rowOffset = 0 }: { term: AdminTerm; rowOffset?: 
                         : undefined
                     }
                     className={`flex flex-wrap items-baseline gap-x-1 px-2 py-1 text-[13px] sm:text-sm leading-snug font-semibold text-stone-900 antialiased${
-                      klik ? ' cursor-pointer hover:brightness-95' : ''
-                    }${paidState === 'dodaj' ? ' ring-2 ring-inset ring-emerald-600' : paidState === 'ukloni' ? ' ring-2 ring-inset ring-red-600' : ''}`}
+                      klik || swap.cancelMode ? ' cursor-pointer hover:brightness-95' : ''
+                    }${paidState === 'dodaj' ? ' ring-2 ring-inset ring-emerald-600' : paidState === 'ukloni' ? ' ring-2 ring-inset ring-red-600' : ''}${
+                      otkazuje ? ' ring-2 ring-inset ring-stone-700' : ''
+                    }`}
                   >
-                    <span className="min-w-0 break-words">{ime}</span>
+                    <span className={`min-w-0 break-words${otkazuje ? ' line-through' : ''}`}>{ime}</span>
                     {p.redni && <RedniBroj redni={p.redni} />}
+                    {otkazuje && <span className="w-full text-[11px] font-bold text-stone-700">✕ otkazuje se</span>}
                     {paidState === 'dodaj' ? (
                       <span className="w-full text-[11px] font-bold text-emerald-700">
                         {swap.paidSamoJedan ? '✓ plaćen samo ovaj čas' : '✓ plaćeno od ovde (6 časova)'}
@@ -2220,6 +2431,7 @@ function AdminCellContent({
   const slotCount = termsInSlot.length;
   const blocked = swap.getBlocked(emptyDate, emptySlot);
   const canAddParallelTerm = slotCount < maxTerminaPoSlotu && !blocked;
+  const moveCilj = swap.moveMode && !!swap.moveSourceId && !termsInSlot.some((t) => t.id === swap.moveSourceId);
 
   const BlockedBadge = blocked ? (
     <div className="rounded-lg border-2 border-stone-400 bg-[repeating-linear-gradient(45deg,#e7e5e4,#e7e5e4_6px,#f5f5f4_6px,#f5f5f4_12px)] p-2 text-xs text-stone-700">
@@ -2330,7 +2542,7 @@ function AdminCellContent({
   ) : null;
 
   const zahtevAssignClickable = swap.assignMode;
-  const zahtevClickable = zahtevAssignClickable || swap.deleteMode || swap.paidMode;
+  const zahtevClickable = zahtevAssignClickable || swap.deleteMode || swap.paidMode || swap.cancelMode;
   const PendingZahteviEntries = pendingZahteviInSlot.length > 0 ? (
     <div className="mt-1 space-y-1">
       {pendingZahteviInSlot.map((z) => {
@@ -2340,13 +2552,19 @@ function AdminCellContent({
         const zahtevPaidKey = `z:${z.id}`;
         const zahtevPaidState = swap.paidMode ? swap.paidSelectionState(zahtevPaidKey) : null;
         const zahtevPaketId = swap.paidMode ? swap.getPaketStart(z.client_id, z.term_type_id, z.date, z.slot_index) : undefined;
+        const zahtevOtkazuje = swap.cancelMode && swap.isCancelSelected(`z:${z.id}`);
         return (
           <div
             key={z.id}
             role={zahtevClickable ? 'button' : undefined}
             onClick={() => {
               if (swap.deleteMode) swap.onToggleZahtevDeleteSelect(z.id);
-              else if (swap.paidMode) {
+              else if (swap.cancelMode) {
+                swap.onToggleCancel(
+                  `z:${z.id}`,
+                  `${formatShortDate(z.date)} ${TIME_SLOTS[z.slot_index] ?? ''} · ${z.client_ime}${z.client_prezime ? ` ${z.client_prezime}` : ''} (zahtev)`
+                );
+              } else if (swap.paidMode) {
                 if (z.client_id) {
                   swap.onTogglePaid({
                     key: zahtevPaidKey,
@@ -2365,7 +2583,9 @@ function AdminCellContent({
             className={`rounded-lg border border-dashed p-1.5 text-xs text-amber-900${
               zahtevClickable ? ' cursor-pointer' : ''
             }${
-              zahtevDeleteSelected || zahtevPaidState === 'ukloni'
+              zahtevOtkazuje
+                ? ' border-stone-700 ring-2 ring-offset-1 ring-stone-600 bg-stone-100 line-through'
+                : zahtevDeleteSelected || zahtevPaidState === 'ukloni'
                 ? ' border-red-600 ring-2 ring-offset-1 ring-red-500 bg-red-50'
                 : zahtevPaidState === 'dodaj'
                 ? ' border-emerald-600 ring-2 ring-offset-1 ring-emerald-500 bg-emerald-50'
@@ -2541,9 +2761,9 @@ function AdminCellContent({
         <Link
           href={newTermHref}
           className={`block rounded-lg border border-dashed border-stone-200 p-2 text-stone-400 hover:border-amber-400 hover:bg-amber-50/50 min-h-[52px]${
-            swap.copyMode && swap.isCopyTargetSelected(emptyDate, emptySlot)
+            (swap.copyMode && swap.isCopyTargetSelected(emptyDate, emptySlot)) || (moveCilj && swap.isMoveTarget(emptyDate, emptySlot))
               ? ' ring-2 ring-offset-1 ring-emerald-500 border-emerald-500'
-              : swap.copyMode
+              : swap.copyMode || moveCilj
               ? ' ring-2 ring-offset-1 ring-amber-300'
               : ''
           }`}
@@ -2551,6 +2771,9 @@ function AdminCellContent({
             if (swap.copyMode) {
               e.preventDefault();
               swap.onToggleCopyTarget(emptyDate, emptySlot);
+            } else if (swap.moveMode) {
+              e.preventDefault();
+              if (moveCilj) swap.onSelectMoveTarget(emptyDate, emptySlot);
             }
           }}
           onDragOver={(e) => {
@@ -2561,7 +2784,15 @@ function AdminCellContent({
             if (draggedTermId) onDropCell(emptyDate, emptySlot);
           }}
         >
-          {swap.copyMode ? (swap.isCopyTargetSelected(emptyDate, emptySlot) ? '✓ izabrano' : 'Kopiraj ovde') : '+'}
+          {swap.copyMode
+            ? swap.isCopyTargetSelected(emptyDate, emptySlot)
+              ? '✓ izabrano'
+              : 'Kopiraj ovde'
+            : moveCilj
+            ? swap.isMoveTarget(emptyDate, emptySlot)
+              ? '✓ ovde'
+              : 'Premesti ovde'
+            : '+'}
         </Link>
         <Link
           href={newTestHref}
@@ -2599,14 +2830,16 @@ function AdminCellContent({
         const copySelected = swap.copySourceId === term.id;
         const deleteSelected = swap.isMarkedForDelete(term.id);
         const assignSelected = swap.isMarkedForAssign(term.id);
-        const anyModeActive = swap.swapMode || swap.copyMode || swap.deleteMode || swap.assignMode || swap.paidMode;
+        const moveSelected = swap.moveSourceId === term.id;
+        const anyModeActive =
+          swap.swapMode || swap.copyMode || swap.deleteMode || swap.assignMode || swap.paidMode || swap.cancelMode || swap.moveMode;
 
         return (
           <Link
             key={term.id}
             href={`/admin/termin/${term.id}`}
             className={`block rounded-lg transition-opacity hover:opacity-90${
-              swapSelected || copySelected ? ' ring-2 ring-offset-1 ring-amber-500' : ''
+              swapSelected || copySelected || moveSelected ? ' ring-2 ring-offset-1 ring-amber-500' : ''
             }${deleteSelected ? ' ring-2 ring-offset-1 ring-red-600' : ''}${
               assignSelected ? ' ring-2 ring-offset-1 ring-blue-600' : ''
             }`}
@@ -2627,7 +2860,10 @@ function AdminCellContent({
               } else if (swap.assignMode) {
                 e.preventDefault();
                 swap.onToggleAssignSelect(term.id);
-              } else if (swap.paidMode) {
+              } else if (swap.moveMode) {
+                e.preventDefault();
+                swap.onSelectMoveSource(term);
+              } else if (swap.paidMode || swap.cancelMode) {
                 e.preventDefault();
               }
             }}
@@ -2641,9 +2877,9 @@ function AdminCellContent({
           <Link
             href={newTermHref}
             className={`block rounded-lg border border-dashed border-stone-200 p-1.5 text-stone-500 hover:border-amber-400 hover:bg-amber-50/50 hover:text-amber-800 text-xs text-center${
-              swap.copyMode && swap.isCopyTargetSelected(emptyDate, emptySlot)
+              (swap.copyMode && swap.isCopyTargetSelected(emptyDate, emptySlot)) || (moveCilj && swap.isMoveTarget(emptyDate, emptySlot))
                 ? ' ring-2 ring-offset-1 ring-emerald-500 border-emerald-500'
-                : swap.copyMode
+                : swap.copyMode || moveCilj
                 ? ' ring-2 ring-offset-1 ring-amber-300'
                 : ''
             }`}
@@ -2651,6 +2887,9 @@ function AdminCellContent({
               if (swap.copyMode) {
                 e.preventDefault();
                 swap.onToggleCopyTarget(emptyDate, emptySlot);
+              } else if (swap.moveMode) {
+                e.preventDefault();
+                if (moveCilj) swap.onSelectMoveTarget(emptyDate, emptySlot);
               }
             }}
           >
@@ -2658,6 +2897,10 @@ function AdminCellContent({
               ? swap.isCopyTargetSelected(emptyDate, emptySlot)
                 ? '✓ izabrano'
                 : 'Kopiraj ovde'
+              : moveCilj
+              ? swap.isMoveTarget(emptyDate, emptySlot)
+                ? '✓ ovde'
+                : 'Premesti ovde'
               : `+ Dodaj još termin u ovom slotu (${slotCount}/${maxTerminaPoSlotu})`}
           </Link>
           <Link

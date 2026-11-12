@@ -7,12 +7,13 @@ import { useEffect, useRef, useState } from 'react';
  * sentinel), NE preko CSS position:sticky. Razlog: position:sticky zavisi od suptilnih pravila o
  * ancestor elementima (overflow, transform, filter...) koja su se u ovom projektu pokazala
  * nepouzdana (traka alata se nije lepila pri skrolu uprkos ispravnim sticky klasama) – ovaj pristup
- * radi identično ali nezavisno od tih pravila. Aktivno je SAMO na velikim ekranima (>= 1024px);
- * kad je `enabled` false ili ekran manji, renderuje se kao običan div bez ikakvog efekta.
+ * radi identično ali nezavisno od tih pravila. Aktivno je samo na ekranima od `minWidth` (podrazumevano
+ * 1024px) naviše; kad je `enabled` false ili ekran manji, renderuje se kao običan div bez ikakvog efekta.
  */
 export default function StickyBar({
   enabled,
   topOffset,
+  minWidth = 1024,
   className = '',
   children,
 }: {
@@ -20,6 +21,8 @@ export default function StickyBar({
   enabled: boolean;
   /** Razmak od vrha ekrana (px) kada je fiksirano – npr. visina navigacije iznad. */
   topOffset: number;
+  /** Od koje širine ekrana (px) se traka lepi – npr. 600 da bude zalepljena i na tabletu. */
+  minWidth?: number;
   className?: string;
   children: React.ReactNode;
 }) {
@@ -51,13 +54,11 @@ export default function StickyBar({
   }, [enabled, pinned]);
 
   useEffect(() => {
-    if (!enabled) {
-      setPinned(false);
-      return;
-    }
+    // Isključena traka se prikazuje kao običan div (vidi dole), pa joj stanje "pinned" ne treba.
+    if (!enabled) return;
     const sentinel = sentinelRef.current;
     if (!sentinel) return;
-    const mq = window.matchMedia('(min-width: 1024px)');
+    const mq = window.matchMedia(`(min-width: ${minWidth}px)`);
     let large = mq.matches;
     const observer = new IntersectionObserver(
       ([entry]) => {
@@ -79,7 +80,7 @@ export default function StickyBar({
       observer.disconnect();
       mq.removeEventListener('change', onMqChange);
     };
-  }, [enabled, topOffset]);
+  }, [enabled, topOffset, minWidth]);
 
   // Javlja zamrznutim zaglavljima (useStickyThead) da se traka zamrzla ili otpustila, da se namesti ispod nje
   useEffect(() => {

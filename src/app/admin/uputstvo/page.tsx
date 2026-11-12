@@ -35,7 +35,7 @@ const SADRZAJ: { id: string; naslov: string }[] = [
   { id: 'kalendar', naslov: 'Kalendar' },
   { id: 'kalendar-citanje', naslov: 'Kalendar – kako čitati termin' },
   { id: 'kalendar-filter', naslov: 'Kalendar – filter po detetu' },
-  { id: 'kalendar-modovi', naslov: 'Kalendar – Swap, Copy, Delete, Označi plaćeno…' },
+  { id: 'kalendar-modovi', naslov: 'Kalendar – Swap, Copy, Premesti, Otkaži, Delete, Označi plaćeno…' },
   { id: 'kalendar-blokiranje', naslov: 'Kalendar – blokiranje' },
   { id: 'zakazivanje-termina', naslov: 'Zakaži termin' },
   { id: 'termin', naslov: 'Stranica termina' },
@@ -139,7 +139,7 @@ export default async function AdminUputstvoPage({ searchParams }: { searchParams
             </li>
             <li>
               <Ui>← Prethodna</Ui> / <Ui>Sledeća →</Ui> pomera period. Ova traka ostaje zalepljena na vrhu dok skrolujete, zajedno sa
-              dugmićima Swap, Copy…
+              dugmićima Swap, Copy… – i na tabletu, gde je jedan red koji se pomera prstom levo-desno.
             </li>
             <li>Pređite mišem preko bilo koje ćelije – ljubičasto se oboje taj dan (kolona) i to vreme (red), da se lako prati.</li>
           </Koraci>
@@ -190,7 +190,7 @@ export default async function AdminUputstvoPage({ searchParams }: { searchParams
           </Koraci>
         </Sekcija>
 
-        <Sekcija prikazi={prikazi} id="kalendar-modovi" naslov="Kalendar – Swap, Copy, Delete, Zakaži više časova, Dodeli, Označi plaćeno">
+        <Sekcija prikazi={prikazi} id="kalendar-modovi" naslov="Kalendar – Swap, Copy, Premesti, Otkaži, Delete, Zakaži više časova, Dodeli, Označi plaćeno">
           <SemaModovi />
           <Napomena>
             Svi modovi rade isto: <strong>uključite dugme</strong> (postane obojeno) → <strong>kliknite termine</strong> na kalendaru →{' '}
@@ -214,6 +214,28 @@ export default async function AdminUputstvoPage({ searchParams }: { searchParams
             <li>Kliknite <Ui>✓ Potvrdi kopiranje (N)</Ui>. Održano i plaćeno se ne prenose.</li>
           </Koraci>
 
+          <Podnaslov>Premesti – premeštanje termina (tablet, umesto prevlačenja)</Podnaslov>
+          <Koraci>
+            <li>Kliknite <Ui>Premesti</Ui>.</li>
+            <li>Kliknite termin koji premeštate (dobije narandžasti okvir).</li>
+            <li>Kliknite novo mesto – polje „Premesti ovde“ (prazno vreme ili „+ Dodaj još termin“ u zauzetom).</li>
+            <li>
+              Kliknite <Ui>✓ Potvrdi premeštanje</Ui>. Premešta se ceo termin sa svom decom, isto kao prevlačenje mišem na računaru. Mod
+              ostaje uključen, pa odmah može sledeći termin.
+            </li>
+          </Koraci>
+
+          <Podnaslov>Otkaži – otkazivanje časa (ostaje trag)</Podnaslov>
+          <Koraci>
+            <li>Kliknite <Ui>Otkaži</Ui>.</li>
+            <li>Kliknite <strong>dete</strong> u terminu koje otkazuje (ili narandžasti čas bez instruktora) – ime postane precrtano.</li>
+            <li>Kliknite <Ui>✓ Potvrdi otkazivanje (N)</Ui>.</li>
+            <li>
+              Čas ostaje na kalendaru kao sivo „otkazano“, a na profilu deteta u <Ui>Pregled termina</Ui> kao sivo, precrtano „Otkazano“.
+              Ako je to bilo jedino dete u terminu, instruktor i učionica se oslobađaju.
+            </li>
+          </Koraci>
+
           <Podnaslov>Delete – trajno brisanje</Podnaslov>
           <Koraci>
             <li>Kliknite <Ui>Delete</Ui>.</li>
@@ -221,8 +243,7 @@ export default async function AdminUputstvoPage({ searchParams }: { searchParams
             <li>Kliknite <Ui>✓ Potvrdi brisanje (N)</Ui>.</li>
           </Koraci>
           <Upozorenje>
-            Delete briše BEZ TRAGA. Ako dete samo ne dolazi, koristite <Ui>Otkaži termin</Ui> na stranici termina – tada ostaje sivi zapis u
-            istoriji.
+            Delete briše BEZ TRAGA. Ako dete samo ne dolazi, koristite <Ui>Otkaži</Ui> – tada ostaje sivi zapis „otkazano“.
           </Upozorenje>
 
           <Podnaslov>Zakaži više časova – jedno dete (ili grupa) u više termina odjednom</Podnaslov>
@@ -512,7 +533,7 @@ export default async function AdminUputstvoPage({ searchParams }: { searchParams
             badgeClass="bg-amber-600 text-white"
             intro="Pun pristup – sve stranice iz ovog uputstva. Ulaz na /admin."
             items={[
-              'Svi termini svih instruktora, svi modovi na kalendaru (Swap, Copy, Delete, Zakaži više časova, Dodeli, Blokiraj, Označi plaćeno).',
+              'Svi termini svih instruktora, svi modovi na kalendaru (Swap, Copy, Premesti, Otkaži, Delete, Zakaži više časova, Dodeli, Blokiraj, Označi plaćeno).',
               'Plaćeno: samo admin označava na kalendaru (Označi plaćeno – 6 časova od izabranog ili samo taj čas). Uplate: unos, izmena i brisanje (evidencija novca).',
               'Klijenti, instruktori, vrste/kategorije/programi/učionice, blokade, dnevnik, podešavanja i bekap.',
               'Pregled „kao instruktor“ (Instruktori → Pregled →).',
