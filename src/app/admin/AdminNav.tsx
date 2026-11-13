@@ -25,6 +25,7 @@ const entityLinks = [
 
 /** Ostalo – retko se koristi. */
 const otherLinks = [
+  { href: '/admin/uvoz', label: 'Uvoz rasporeda' },
   { href: '/admin/dnevnik', label: 'Dnevnik aktivnosti' },
   { href: '/admin/podesavanja', label: 'Podešavanja' },
 ];
@@ -46,6 +47,7 @@ const UPUTSTVO_ZA_STRANICU: [string, string][] = [
   ['/admin/kategorije-termina', 'sifarnici'],
   ['/admin/programi', 'sifarnici'],
   ['/admin/ucionice', 'sifarnici'],
+  ['/admin/uvoz', 'uvoz'],
   ['/admin/dnevnik', 'dnevnik'],
   ['/admin/podesavanja', 'podesavanja'],
 ];

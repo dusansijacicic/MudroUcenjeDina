@@ -47,6 +47,7 @@ const SADRZAJ: { id: string; naslov: string }[] = [
   { id: 'instruktori', naslov: 'Instruktori' },
   { id: 'kada-ne-radi', naslov: 'Instruktor – kada ne radi' },
   { id: 'sifarnici', naslov: 'Vrste časova, kategorije, programi, učionice' },
+  { id: 'uvoz', naslov: 'Uvoz rasporeda (sa papira)' },
   { id: 'dnevnik', naslov: 'Dnevnik aktivnosti' },
   { id: 'podesavanja', naslov: 'Podešavanja i bekap' },
   { id: 'uloge', naslov: 'Ko šta sme (uloge)' },
@@ -64,6 +65,7 @@ const DELOVI: Record<string, { naslov: string; sekcije: string[] }> = {
   testiranja: { naslov: 'Testiranja', sekcije: ['testiranja'] },
   instruktori: { naslov: 'Instruktori', sekcije: ['instruktori', 'kada-ne-radi'] },
   sifarnici: { naslov: 'Vrste časova, kategorije, programi, učionice', sekcije: ['sifarnici'] },
+  uvoz: { naslov: 'Uvoz rasporeda', sekcije: ['uvoz'] },
   dnevnik: { naslov: 'Dnevnik aktivnosti', sekcije: ['dnevnik'] },
   podesavanja: { naslov: 'Podešavanja', sekcije: ['podesavanja'] },
 };
@@ -514,6 +516,31 @@ export default async function AdminUputstvoPage({ searchParams }: { searchParams
             <li><Ui>Programi</Ui>: grupe vrsta časova; „Redosled“ određuje mesto u listi (manji broj = ranije).</li>
             <li><Ui>Učionice</Ui>: naziv učionice; prikazuje se na terminu u kalendaru.</li>
           </Lista>
+        </Sekcija>
+
+        <Sekcija prikazi={prikazi} id="uvoz" naslov="Uvoz rasporeda (sa papira)">
+          <Koraci>
+            <li>
+              Meni <Ui>Uvoz rasporeda</Ui> → nalepite spisak termina (npr. prepis rasporeda sa papira) ili <Ui>Učitaj CSV fajl…</Ui>.
+              Primer formata je odmah ispod polja.
+            </li>
+            <li>
+              <strong>Ko je ko:</strong> za svako ime sa papira izaberite tačno dete. Aplikacija predlaže po imenu i po tome kada dete
+              obično dolazi: kod svakog deteta piše „obično: pon 12:45…“ i koliko se termina sa papira poklapa sa tim. Zeleno = sigurno,
+              žuto = predlog koji treba potvrditi (<Ui>✓ Tačno, to je to dete</Ui>), crveno = morate izabrati. Ako dete ne postoji:
+              <Ui>+ Novi klijent</Ui>, pa <Ui>↻ Osveži spisak dece</Ui>. Ime koje ne treba uvoziti: <Ui>✕ preskoči</Ui>.
+            </li>
+            <li>Vrste časa (Reed, Mat, Pisanje, 1,5h…) povežite sa vrstama u aplikaciji, a pozicije 1 i 2 sa instruktorom i učionicom.</li>
+            <li>
+              U pregledu proverite termine (štiklirani se uvoze) i kliknite <Ui>Uvezi N termina</Ui>. Bez instruktora ulaze kao narandžasti
+              zahtevi – instruktora dodelite na kalendaru modom <Ui>Dodeli</Ui>.
+            </li>
+            <li>Sledeći put aplikacija sama ponudi isto dete za isto ime sa papira.</li>
+          </Koraci>
+          <Upozorenje>
+            Termin koji dete već ima (čas ili zahtev u isto vreme) se preskače, pa ponovljen uvoz ne pravi duplikate. Termini sa „?“ i oni
+            ispod reda „ZA PROVERU“ se podrazumevano ne uvoze – štiklirajte ih tek kad ih proverite.
+          </Upozorenje>
         </Sekcija>
 
         <Sekcija prikazi={prikazi} id="dnevnik" naslov="Dnevnik aktivnosti">
