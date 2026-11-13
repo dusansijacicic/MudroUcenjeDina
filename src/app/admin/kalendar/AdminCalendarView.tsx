@@ -4,7 +4,7 @@ import { createContext, useContext, useEffect, useMemo, useRef, useState, useTra
 import { useRouter } from 'next/navigation';
 import { useKalendarRealtime } from '@/lib/use-kalendar-realtime';
 import toast from 'react-hot-toast';
-import { TIME_SLOTS, AUTO_SPILLOVER_NAPOMENA } from '@/lib/constants';
+import { TIME_SLOTS, AUTO_SPILLOVER_NAPOMENA, slotsNeeded } from '@/lib/constants';
 import Link from 'next/link';
 import {
   moveTermAsAdmin,
@@ -28,6 +28,7 @@ import {
   type BlokiranTermin,
   type PlaceniPaket,
 } from '@/app/admin/actions';
+import { moveZahtevAsAdmin, copyZahtevToSlotsAsAdmin, swapSaZahtevomAsAdmin } from './zahtevi-actions';
 import SingleKlijentPicker from '@/components/SingleKlijentPicker';
 import GrupniKlijentiPicker from '@/components/GrupniKlijentiPicker';
 import StickyBar from '@/components/StickyBar';
@@ -63,6 +64,17 @@ export type PendingZahtevCalendar = {
   /** [x, y] – i čas zakazan bez instruktora ima svoj redni broj od plaćenih (migracija 047). */
   redni?: [number, number] | null;
 };
+
+/** Duži čas bez instruktora (npr. 55 min) zauzima i sledeće vreme – prikazuje se kao nastavak, isto
+ * kao kod pravog termina (tamo ga pravi baza tek kad čas dobije instruktora). */
+type ZahtevNastavak = { key: string; zahtevId: string; ime: string; trajanje: number };
+
+/** Stavka izabrana u modovima Swap/Copy/Premesti – pravi termin ili čas bez instruktora (zahtev). */
+type IzabranaStavka = { vrsta: 'termin' | 'zahtev'; id: string; label: string };
+
+function zahtevLabel(z: PendingZahtevCalendar): string {
+  return `${formatShortDate(z.date)} ${TIME_SLOTS[z.slot_index] ?? ''} · ${z.client_ime}${z.client_prezime ? ` ${z.client_prezime}` : ''} · čeka predavača`;
+}
 
 export type PotentialClientCalendar = {
   id: string;
@@ -161,7 +173,17 @@ type SwapContextValue = {
   onSelectMoveSource: (term: AdminTerm) => void;
   isMoveTarget: (date: string, slot: number) => boolean;
   onSelectMoveTarget: (date: string, slot: number) => void;
+  /** Časovi bez instruktora (zahtevi) u Swap/Copy/Premesti – isto kao pravi termini. */
+  isZahtevSwapSelected: (zahtevId: string) => boolean;
+  onSelectZahtevSwap: (z: PendingZahtevCalendar) => void;
+  copySourceZahtevId: string | null;
+  onSelectCopySourceZahtev: (z: PendingZahtevCalendar) => void;
+  moveSourceZahtevId: string | null;
+  onSelectMoveSourceZahtev: (z: PendingZahtevCalendar) => void;
+  /** Nastavci dužih časova bez instruktora koji padaju u ovo vreme. */
+  getZahtevNastavci: (date: string, slot: number) => ZahtevNastavak[];
 };
+const BEZ_NASTAVAKA: ZahtevNastavak[] = [];
 const SwapContext = createContext<SwapContextValue>({
   swapMode: false,
   isSelected: () => null,
@@ -209,6 +231,13 @@ const SwapContext = createContext<SwapContextValue>({
   onSelectMoveSource: () => {},
   isMoveTarget: () => false,
   onSelectMoveTarget: () => {},
+  isZahtevSwapSelected: () => false,
+  onSelectZahtevSwap: () => {},
+  copySourceZahtevId: null,
+  onSelectCopySourceZahtev: () => {},
+  moveSourceZahtevId: null,
+  onSelectMoveSourceZahtev: () => {},
+  getZahtevNastavci: () => BEZ_NASTAVAKA,
 });
 
 /** Izbor u modu Dodeli: izabrani časovi se vraćaju u zahteve bez instruktora (a ne "ne menjaj instruktora"). */
@@ -537,7 +566,7 @@ export default function AdminCalendarView({
   maxTerminaPoSlotu?: number;
   /** Za "Više termina" mod (masovno zakazivanje bez instruktora/učionice, preko zahteva). */
   clients?: { id: string; ime: string; prezime: string; godiste?: number | null; datumTestiranja?: string | null }[];
-  termTypes?: { id: string; naziv: string; opis: string | null }[];
+  termTypes?: { id: string; naziv: string; opis: string | null; trajanje_minuta?: number | null }[];
   /** Za "Zakaži više časova" u grupnom modu – da se izabere odgovarajuća (grupna) kategorija termina. */
   termCategories?: { id: string; naziv: string; jedan_klijent_po_terminu: boolean; is_testing?: boolean; is_nastavak?: boolean }[];
   /** Za "Dodeli instruktora"/"Dodeli učionicu" module. */
@@ -598,6 +627,27 @@ export default function AdminCalendarView({
     setPendingZahtevi(pendingZahteviProp);
   }, [pendingZahteviProp]);
 
+  // Duži čas bez instruktora (vrsta duža od 45 min) – nastavak u sledećem vremenu, da se ne zakaže preko njega.
+  const zahtevNastavciByKey = useMemo(() => {
+    const trajanjeVrste = new Map(termTypes.map((tt) => [tt.id, tt.trajanje_minuta ?? null]));
+    const m = new Map<string, ZahtevNastavak[]>();
+    for (const z of pendingZahtevi) {
+      const trajanje = z.term_type_id ? trajanjeVrste.get(z.term_type_id) : null;
+      const n = slotsNeeded(trajanje);
+      for (let i = 1; i < n && z.slot_index + i < TIME_SLOTS.length; i++) {
+        const k = `${z.date}|${z.slot_index + i}`;
+        const stavka: ZahtevNastavak = {
+          key: `${z.id}-${i}`,
+          zahtevId: z.id,
+          ime: `${z.client_ime}${z.client_prezime ? ` ${z.client_prezime}` : ''}`,
+          trajanje: trajanje ?? 0,
+        };
+        m.set(k, [...(m.get(k) ?? []), stavka]);
+      }
+    }
+    return m;
+  }, [pendingZahtevi, termTypes]);
+
   // Posle navigacije na drugu nedelju (?fokus=datum) lokalni pendingZahtevi/termini se osveže tek u
   // narednom renderu – zato se pokušava i kad se oni promene, ali samo jednom po cilju.
   const focusedForRef = useRef<string | null>(null);
@@ -631,8 +681,9 @@ export default function AdminCalendarView({
 
   const [swapMode, setSwapMode] = useState(false);
   const [swapFields, setSwapFields] = useState({ termin: false, instruktor: false, ucionica: false, klijent: false });
-  const [swapFirst, setSwapFirst] = useState<{ termId: string; label: string } | null>(null);
-  const [swapSecond, setSwapSecond] = useState<{ termId: string; label: string } | null>(null);
+  const [swapFirst, setSwapFirst] = useState<IzabranaStavka | null>(null);
+  const [swapSecond, setSwapSecond] = useState<IzabranaStavka | null>(null);
+  const [swapLoading, setSwapLoading] = useState(false);
 
   const resetSwapSelection = () => {
     setSwapFirst(null);
@@ -640,7 +691,7 @@ export default function AdminCalendarView({
   };
 
   const [copyMode, setCopyMode] = useState(false);
-  const [copySource, setCopySource] = useState<{ termId: string; label: string } | null>(null);
+  const [copySource, setCopySource] = useState<IzabranaStavka | null>(null);
   const [copyFields, setCopyFields] = useState({ instruktor: true, ucionica: true, klijent: true });
   const [copyTermTypeId, setCopyTermTypeId] = useState('');
   const [copyTargets, setCopyTargets] = useState<Set<string>>(new Set());
@@ -654,7 +705,7 @@ export default function AdminCalendarView({
   const [cancelLoading, setCancelLoading] = useState(false);
   // Premesti: termin koji se premešta i novo mesto.
   const [moveMode, setMoveMode] = useState(false);
-  const [moveSource, setMoveSource] = useState<{ termId: string; label: string } | null>(null);
+  const [moveSource, setMoveSource] = useState<IzabranaStavka | null>(null);
   const [moveTarget, setMoveTarget] = useState<{ date: string; slot: number } | null>(null);
   const [moveLoading, setMoveLoading] = useState(false);
   const [deleteOtkazaniSelection, setDeleteOtkazaniSelection] = useState<Set<string>>(new Set());
@@ -871,10 +922,12 @@ export default function AdminCalendarView({
     setMoveTarget(null);
   };
 
-  const onSelectMoveSource = (term: AdminTerm) => {
+  const izaberiZaPremestanje = (stavka: IzabranaStavka) => {
     setMoveTarget(null);
-    setMoveSource((prev) => (prev?.termId === term.id ? null : { termId: term.id, label: swapTermLabel(term) }));
+    setMoveSource((prev) => (prev?.vrsta === stavka.vrsta && prev.id === stavka.id ? null : stavka));
   };
+  const onSelectMoveSource = (term: AdminTerm) => izaberiZaPremestanje({ vrsta: 'termin', id: term.id, label: swapTermLabel(term) });
+  const onSelectMoveSourceZahtev = (z: PendingZahtevCalendar) => izaberiZaPremestanje({ vrsta: 'zahtev', id: z.id, label: zahtevLabel(z) });
 
   const onSelectMoveTarget = (date: string, slot: number) => {
     setMoveTarget((prev) => (prev && prev.date === date && prev.slot === slot ? null : { date, slot }));
@@ -884,7 +937,10 @@ export default function AdminCalendarView({
   const confirmMove = async () => {
     if (!moveSource || !moveTarget) return;
     setMoveLoading(true);
-    const res = await moveTermAsAdmin(moveSource.termId, moveTarget.date, moveTarget.slot);
+    const res =
+      moveSource.vrsta === 'zahtev'
+        ? await moveZahtevAsAdmin(moveSource.id, moveTarget.date, moveTarget.slot)
+        : await moveTermAsAdmin(moveSource.id, moveTarget.date, moveTarget.slot);
     setMoveLoading(false);
     if (res.error) {
       toast.error(res.error);
@@ -1279,11 +1335,13 @@ export default function AdminCalendarView({
     router.refresh();
   };
 
-  const onSelectCopySource = (term: AdminTerm) => {
-    setCopySource({ termId: term.id, label: swapTermLabel(term) });
+  const izaberiZaKopiranje = (stavka: IzabranaStavka) => {
+    setCopySource(stavka);
     setCopyTargets(new Set());
     setCopyTermTypeId('');
   };
+  const onSelectCopySource = (term: AdminTerm) => izaberiZaKopiranje({ vrsta: 'termin', id: term.id, label: swapTermLabel(term) });
+  const onSelectCopySourceZahtev = (z: PendingZahtevCalendar) => izaberiZaKopiranje({ vrsta: 'zahtev', id: z.id, label: zahtevLabel(z) });
 
   const onToggleCopyTarget = (date: string, slot: number) => {
     if (!copySource) return;
@@ -1296,11 +1354,13 @@ export default function AdminCalendarView({
     });
   };
 
-  const copyFieldsAnyChecked = copyFields.instruktor || copyFields.ucionica || copyFields.klijent;
+  // Čas bez instruktora se uvek kopira sa detetom (i vrstom) – ostaje samo izbor učionice.
+  const copyIzZahteva = copySource?.vrsta === 'zahtev';
+  const copyFieldsAnyChecked = copyIzZahteva || copyFields.instruktor || copyFields.ucionica || copyFields.klijent;
 
   const confirmCopy = async () => {
     if (!copySource || copyTargets.size === 0 || !copyFieldsAnyChecked) return;
-    const sourceId = copySource.termId;
+    const izvor = copySource;
     const targets = [...copyTargets].map((key) => {
       const [date, slotStr] = key.split('|');
       return { date, slotIndex: Number(slotStr) };
@@ -1309,7 +1369,10 @@ export default function AdminCalendarView({
     setCopyTargets(new Set());
     setCopyMode(false);
     setCopyLoading(true);
-    const { failed } = await copyTermToSlotsAsAdmin(sourceId, targets, copyFields, copyTermTypeId || undefined);
+    const { failed } =
+      izvor.vrsta === 'zahtev'
+        ? await copyZahtevToSlotsAsAdmin(izvor.id, targets, { ucionica: copyFields.ucionica }, copyTermTypeId || undefined)
+        : await copyTermToSlotsAsAdmin(izvor.id, targets, copyFields, copyTermTypeId || undefined);
     setCopyLoading(false);
     if (failed.length > 0) {
       toast.error(`Nije kopirano ${failed.length}/${targets.length} – ${failed.map((f) => `${f.date} (${f.error})`).join('; ')}`);
@@ -1319,30 +1382,52 @@ export default function AdminCalendarView({
     router.refresh();
   };
 
-  const onSelectTerm = (term: AdminTerm) => {
-    const label = swapTermLabel(term);
+  const izaberiZaZamenu = (stavka: IzabranaStavka) => {
     if (!swapFirst) {
-      setSwapFirst({ termId: term.id, label });
+      setSwapFirst(stavka);
       return;
     }
-    if (term.id === swapFirst.termId) return;
-    if (!swapSecond) {
-      setSwapSecond({ termId: term.id, label });
-    }
+    if (stavka.vrsta === swapFirst.vrsta && stavka.id === swapFirst.id) return;
+    if (!swapSecond) setSwapSecond(stavka);
   };
+  const onSelectTerm = (term: AdminTerm) => izaberiZaZamenu({ vrsta: 'termin', id: term.id, label: swapTermLabel(term) });
+  const onSelectZahtevSwap = (z: PendingZahtevCalendar) => izaberiZaZamenu({ vrsta: 'zahtev', id: z.id, label: zahtevLabel(z) });
 
   const isSelected = (termId: string): 'first' | 'second' | null => {
-    if (swapFirst?.termId === termId) return 'first';
-    if (swapSecond?.termId === termId) return 'second';
+    if (swapFirst?.vrsta === 'termin' && swapFirst.id === termId) return 'first';
+    if (swapSecond?.vrsta === 'termin' && swapSecond.id === termId) return 'second';
     return null;
   };
+  const isZahtevSwapSelected = (zahtevId: string) =>
+    (swapFirst?.vrsta === 'zahtev' && swapFirst.id === zahtevId) || (swapSecond?.vrsta === 'zahtev' && swapSecond.id === zahtevId);
 
   const anyFieldChecked = swapFields.termin || swapFields.instruktor || swapFields.ucionica || swapFields.klijent;
 
   const confirmSwap = async () => {
     if (!swapFirst || !swapSecond || !anyFieldChecked) return;
-    const aId = swapFirst.termId;
-    const bId = swapSecond.termId;
+
+    // Bar jedna strana je čas bez instruktora – bez optimističkog prikaza, server proverava sve.
+    if (swapFirst.vrsta === 'zahtev' || swapSecond.vrsta === 'zahtev') {
+      setSwapLoading(true);
+      const res = await swapSaZahtevomAsAdmin(
+        { vrsta: swapFirst.vrsta, id: swapFirst.id },
+        { vrsta: swapSecond.vrsta, id: swapSecond.id },
+        swapFields
+      );
+      setSwapLoading(false);
+      if (res.error) {
+        toast.error(res.error);
+        return;
+      }
+      toast.success('Zamenjeno.');
+      resetSwapSelection();
+      setSwapMode(false);
+      router.refresh();
+      return;
+    }
+
+    const aId = swapFirst.id;
+    const bId = swapSecond.id;
     const prevTerms = terms;
 
     // Optimistički: ekran se menja odmah, mod se gasi kao da je gotovo – server potvrđuje u
@@ -1367,7 +1452,10 @@ export default function AdminCalendarView({
       setDraggedTermId(null);
       return;
     }
-    const res = await moveTermAsAdmin(draggedTermId, date, slot);
+    // "z:id" = prevučen čas bez instruktora (zahtev).
+    const res = draggedTermId.startsWith('z:')
+      ? await moveZahtevAsAdmin(draggedTermId.slice(2), date, slot)
+      : await moveTermAsAdmin(draggedTermId, date, slot);
     setDraggedTermId(null);
     if (res.error) {
       toast.error(res.error);
@@ -1428,7 +1516,7 @@ export default function AdminCalendarView({
   const deleteDisabled = deleteCount === 0 || deleteLoading;
   const assignCount = assignSelection.size + assignZahteviSelection.size;
   const assignDisabled = (!assignInstructorChoice && !assignClassroomChoice && !assignTermTypeChoice) || assignCount === 0 || assignLoading;
-  const swapDisabled = !swapFirst || !swapSecond || !anyFieldChecked;
+  const swapDisabled = !swapFirst || !swapSecond || !anyFieldChecked || swapLoading;
   const copyDisabled = copyTargets.size === 0 || !copyFieldsAnyChecked || copyLoading;
   const bulkDisabled =
     (bulkGroupMode
@@ -1477,7 +1565,7 @@ export default function AdminCalendarView({
         onSelectTerm,
         onDeleteOtkazani: handleDeleteOtkazani,
         copyMode,
-        copySourceId: copySource?.termId ?? null,
+        copySourceId: copySource?.vrsta === 'termin' ? copySource.id : null,
         onSelectCopySource,
         isCopyTargetSelected: (date: string, slot: number) => copyTargets.has(`${date}|${slot}`),
         onToggleCopyTarget,
@@ -1517,10 +1605,17 @@ export default function AdminCalendarView({
         isCancelSelected: (key: string) => cancelSelection.has(key),
         onToggleCancel,
         moveMode,
-        moveSourceId: moveSource?.termId ?? null,
+        moveSourceId: moveSource?.vrsta === 'termin' ? moveSource.id : null,
         onSelectMoveSource,
         isMoveTarget: (date: string, slot: number) => !!moveTarget && moveTarget.date === date && moveTarget.slot === slot,
         onSelectMoveTarget,
+        isZahtevSwapSelected,
+        onSelectZahtevSwap,
+        copySourceZahtevId: copySource?.vrsta === 'zahtev' ? copySource.id : null,
+        onSelectCopySourceZahtev,
+        moveSourceZahtevId: moveSource?.vrsta === 'zahtev' ? moveSource.id : null,
+        onSelectMoveSourceZahtev,
+        getZahtevNastavci: (date: string, slot: number) => zahtevNastavciByKey.get(`${date}|${slot}`) ?? BEZ_NASTAVAKA,
       }}
     >
       {headerContent}
@@ -1556,6 +1651,7 @@ export default function AdminCalendarView({
           >
             {swapMode ? 'Swap: uključen' : 'Swap'}
           </button>
+          {swapLoading && <span className="text-sm text-stone-500">Menjam…</span>}
           <button
             type="button"
             onClick={toggleCopyMode}
@@ -1833,7 +1929,9 @@ export default function AdminCalendarView({
               ) : (
                 <span className="text-stone-500">2) kliknite novo mesto („Premesti ovde“)</span>
               )}
-              <span className="w-full text-xs text-stone-400">Premešta se ceo termin sa svom decom – isto kao prevlačenje mišem na računaru.</span>
+              <span className="w-full text-xs text-stone-400">
+                Premešta se ceo termin sa svom decom ili narandžasti čas bez instruktora – isto kao prevlačenje mišem na računaru.
+              </span>
             </div>
           )}
           {assignMode && (
@@ -1989,6 +2087,10 @@ export default function AdminCalendarView({
                   )}
                 </div>
               </div>
+              <p className="text-xs text-stone-400">
+                Može i narandžasti čas bez instruktora: kod njega se menjaju Termin (vreme), Učionica i Klijent (dete sa vrstom časa) –
+                Instruktor ne, jer ga taj čas nema.
+              </p>
             </div>
           )}
           {copyMode && (
@@ -2018,14 +2120,16 @@ export default function AdminCalendarView({
               {copySource && (
                 <div className="flex flex-wrap items-end gap-3">
                   <div className="flex items-center gap-3 flex-wrap text-stone-700">
-                    <label className="flex items-center gap-1.5">
-                      <input
-                        type="checkbox"
-                        checked={copyFields.instruktor}
-                        onChange={(e) => setCopyFields((f) => ({ ...f, instruktor: e.target.checked }))}
-                      />
-                      Instruktor
-                    </label>
+                    {!copyIzZahteva && (
+                      <label className="flex items-center gap-1.5">
+                        <input
+                          type="checkbox"
+                          checked={copyFields.instruktor}
+                          onChange={(e) => setCopyFields((f) => ({ ...f, instruktor: e.target.checked }))}
+                        />
+                        Instruktor
+                      </label>
+                    )}
                     <label className="flex items-center gap-1.5">
                       <input
                         type="checkbox"
@@ -2034,16 +2138,19 @@ export default function AdminCalendarView({
                       />
                       Učionica
                     </label>
-                    <label className="flex items-center gap-1.5">
-                      <input
-                        type="checkbox"
-                        checked={copyFields.klijent}
-                        onChange={(e) => setCopyFields((f) => ({ ...f, klijent: e.target.checked }))}
-                      />
-                      Klijent
-                    </label>
+                    {!copyIzZahteva && (
+                      <label className="flex items-center gap-1.5">
+                        <input
+                          type="checkbox"
+                          checked={copyFields.klijent}
+                          onChange={(e) => setCopyFields((f) => ({ ...f, klijent: e.target.checked }))}
+                        />
+                        Klijent
+                      </label>
+                    )}
+                    {copyIzZahteva && <span className="text-xs text-stone-500">kopija je opet čas bez instruktora za isto dete</span>}
                   </div>
-                  {copyFields.klijent && (
+                  {(copyFields.klijent || copyIzZahteva) && (
                     <div className="min-w-[200px]">
                       <label className="block text-xs font-medium text-stone-700 mb-1">Vrsta časa</label>
                       <select
@@ -2453,7 +2560,16 @@ function AdminCellContent({
   const slotCount = termsInSlot.length;
   const blocked = swap.getBlocked(emptyDate, emptySlot);
   const canAddParallelTerm = slotCount < maxTerminaPoSlotu && !blocked;
-  const moveCilj = swap.moveMode && !!swap.moveSourceId && !termsInSlot.some((t) => t.id === swap.moveSourceId);
+  // Gde sme da se premesti izabrano: termin u svaku drugu ćeliju, čas bez instruktora takođe.
+  const moveCilj =
+    swap.moveMode &&
+    (swap.moveSourceId
+      ? !termsInSlot.some((t) => t.id === swap.moveSourceId)
+      : !!swap.moveSourceZahtevId && !pendingZahteviInSlot.some((z) => z.id === swap.moveSourceZahtevId));
+  // Prevlačenje: čas bez instruktora ne zauzima mesto termina, pa sme u svako neblokirano vreme.
+  const vuceZahtev = !!draggedTermId && draggedTermId.startsWith('z:');
+  const mozeDaPrimi = !!draggedTermId && (vuceZahtev ? !blocked : canAddParallelTerm);
+  const zahtevNastavci = swap.getZahtevNastavci(emptyDate, emptySlot);
 
   const BlockedBadge = blocked ? (
     <div className="rounded-lg border-2 border-stone-400 bg-[repeating-linear-gradient(45deg,#e7e5e4,#e7e5e4_6px,#f5f5f4_6px,#f5f5f4_12px)] p-2 text-xs text-stone-700">
@@ -2567,8 +2683,20 @@ function AdminCellContent({
   ) : null;
 
   const zahtevAssignClickable = swap.assignMode;
-  const zahtevClickable = zahtevAssignClickable || swap.deleteMode || swap.paidMode || swap.cancelMode;
-  const PendingZahteviEntries = pendingZahteviInSlot.length > 0 ? (
+  const zahtevClickable =
+    zahtevAssignClickable || swap.deleteMode || swap.paidMode || swap.cancelMode || swap.swapMode || swap.copyMode || swap.moveMode;
+  // Prevlači se mišem kao termin (kad nije uključen mod u kome klik nešto bira; u Blokiraj može).
+  const zahtevDraggable = !(
+    swap.swapMode ||
+    swap.copyMode ||
+    swap.deleteMode ||
+    swap.assignMode ||
+    swap.paidMode ||
+    swap.cancelMode ||
+    swap.moveMode ||
+    swap.bulkMode
+  );
+  const PendingZahteviEntries = pendingZahteviInSlot.length > 0 || zahtevNastavci.length > 0 ? (
     <div className="mt-1 space-y-1">
       {pendingZahteviInSlot.map((z) => {
         const zahtevAssignSelected = zahtevAssignClickable && swap.isZahtevMarkedForAssign(z.id);
@@ -2578,12 +2706,24 @@ function AdminCellContent({
         const zahtevPaidState = swap.paidMode ? swap.paidSelectionState(zahtevPaidKey) : null;
         const zahtevPaketId = swap.paidMode ? swap.getPaketStart(z.client_id, z.term_type_id, z.date, z.slot_index) : undefined;
         const zahtevOtkazuje = swap.cancelMode && swap.isCancelSelected(`z:${z.id}`);
+        const zahtevIzabran =
+          (swap.swapMode && swap.isZahtevSwapSelected(z.id)) ||
+          (swap.copyMode && swap.copySourceZahtevId === z.id) ||
+          (swap.moveMode && swap.moveSourceZahtevId === z.id);
         return (
           <div
             key={z.id}
             role={zahtevClickable ? 'button' : undefined}
-            onClick={() => {
-              if (swap.deleteMode) swap.onToggleZahtevDeleteSelect(z.id);
+            draggable={zahtevDraggable}
+            onDragStart={zahtevDraggable ? () => setDraggedTermId(`z:${z.id}`) : undefined}
+            onDragEnd={zahtevDraggable ? () => setDraggedTermId(null) : undefined}
+            onClick={(e) => {
+              if (swap.swapMode || swap.copyMode || swap.moveMode) {
+                e.stopPropagation();
+                if (swap.swapMode) swap.onSelectZahtevSwap(z);
+                else if (swap.copyMode) swap.onSelectCopySourceZahtev(z);
+                else swap.onSelectMoveSourceZahtev(z);
+              } else if (swap.deleteMode) swap.onToggleZahtevDeleteSelect(z.id);
               else if (swap.cancelMode) {
                 swap.onToggleCancel(
                   `z:${z.id}`,
@@ -2604,11 +2744,13 @@ function AdminCellContent({
               } else if (zahtevAssignClickable) swap.onToggleAssignZahtevSelect(z.id);
             }}
             data-zahtev-date={z.date}
-            title={redniTitle(z.redni)}
+            title={redniTitle(z.redni) ?? (zahtevDraggable ? 'Prevucite mišem u drugo vreme da ga premestite' : undefined)}
             className={`rounded-lg border border-dashed p-1.5 text-xs text-amber-900${
-              zahtevClickable ? ' cursor-pointer' : ''
+              zahtevClickable ? ' cursor-pointer' : zahtevDraggable ? ' cursor-grab' : ''
             }${
-              zahtevOtkazuje
+              zahtevIzabran
+                ? ' border-amber-600 ring-2 ring-offset-1 ring-amber-500 bg-amber-200'
+                : zahtevOtkazuje
                 ? ' border-stone-700 ring-2 ring-offset-1 ring-stone-600 bg-stone-100 line-through'
                 : zahtevDeleteSelected || zahtevPaidState === 'ukloni'
                 ? ' border-red-600 ring-2 ring-offset-1 ring-red-500 bg-red-50'
@@ -2644,6 +2786,17 @@ function AdminCellContent({
           </div>
         );
       })}
+      {zahtevNastavci.map((n) => (
+        <div
+          key={n.key}
+          title={`Čas bez instruktora traje ${n.trajanje} min – zauzima i ovo vreme. Kad dobije instruktora, ovde ostaje „Nastavak dužeg časa“.`}
+          className="rounded-lg border-2 border-dashed border-amber-400 bg-amber-50 p-1.5 text-xs text-amber-900"
+        >
+          <span className="font-medium">↳ Nastavak dužeg časa</span>
+          <span className="block text-[11px]">{n.ime}</span>
+          <span className="text-[10px] uppercase tracking-wide">zahtev · čeka predavača</span>
+        </div>
+      ))}
     </div>
   ) : null;
 
@@ -2713,8 +2866,8 @@ function AdminCellContent({
     const blockSelected = swap.isBlockSelected(emptyDate, emptySlot);
     // Termini iz slota se mogu i u ovom modu otvoriti (klik) ili prevući u drugi, neblokirani slot –
     // da se ono što smeta blokiranju odmah premesti bez izlaska iz moda.
-    const canDropHere = !blocked && slotCount < maxTerminaPoSlotu;
-    const isEmpty = slotCount === 0 && pendingZahteviInSlot.length === 0;
+    const canDropHere = vuceZahtev ? !blocked : !blocked && slotCount < maxTerminaPoSlotu;
+    const isEmpty = slotCount === 0 && pendingZahteviInSlot.length === 0 && zahtevNastavci.length === 0;
     return (
       <div
         role="button"
@@ -2834,11 +2987,11 @@ function AdminCellContent({
     <div
       className="space-y-1.5 min-h-[52px]"
       onDragOver={(e) => {
-        if (draggedTermId && canAddParallelTerm) e.preventDefault();
+        if (mozeDaPrimi) e.preventDefault();
       }}
       onDrop={(e) => {
         e.preventDefault();
-        if (draggedTermId && canAddParallelTerm) onDropCell(emptyDate, emptySlot);
+        if (mozeDaPrimi) onDropCell(emptyDate, emptySlot);
       }}
     >
       {BlockedBadge}

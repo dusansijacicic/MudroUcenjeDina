@@ -172,7 +172,11 @@ export default async function AdminUputstvoPage({ searchParams }: { searchParams
               čas – vreme za naplatu. Dete bez oznake nema natpis.
             </li>
             <li><M n="F" /> Crveni red sa <Crveno>! nije plaćeno</Crveno> i crveni okvir termina = paket je potrošen, a ovaj čas nije plaćen.</li>
-            <li><M n="G" /> Narandžasta kartica sa isprekidanim okvirom = čas zakazan bez instruktora; čeka da ga neki predavač preuzme.</li>
+            <li>
+              <M n="G" /> Narandžasta kartica sa isprekidanim okvirom = čas zakazan bez instruktora; čeka da ga neki predavač preuzme. Ako je
+              vrsta duža od 45 min (npr. 55 min), u sledećem vremenu stoji narandžasti <strong>↳ Nastavak dužeg časa</strong> – to vreme je
+              zauzeto i pre nego što čas dobije instruktora.
+            </li>
             <li><M n="H" /> Siva = otkazan čas (istorija). Prugasto „⛔ Blokirano“ = u tom vremenu niko ne može da zakaže.</li>
             <li>
               U jednom vremenu (npr. 9:00) može biti više paralelnih termina – svaki ima svog instruktora i svoju učionicu. Koliko najviše,
@@ -207,6 +211,12 @@ export default async function AdminUputstvoPage({ searchParams }: { searchParams
             <li>Kliknite prvi, pa drugi termin.</li>
             <li>Kliknite <Ui>✓ Potvrdi zamenu</Ui>.</li>
           </Koraci>
+          <Napomena>
+            Swap, Copy i Premesti rade i sa <strong>narandžastim časom bez instruktora</strong> – klikne se isto kao termin. Kod njega se
+            menjaju Termin (vreme), Učionica i Klijent (dete sa vrstom časa); Instruktor ne, jer ga taj čas nema (za to je{' '}
+            <Ui>Dodeli instruktora</Ui>). Klijent se menja samo sa terminom u kome je jedno dete. Na računaru se i narandžasti čas
+            prevlači mišem u drugo vreme.
+          </Napomena>
 
           <Podnaslov>Copy – kopiranje termina</Podnaslov>
           <Koraci>
@@ -214,6 +224,7 @@ export default async function AdminUputstvoPage({ searchParams }: { searchParams
             <li>Čekirajte šta se kopira (instruktor, učionica, dete); po želji izaberite drugu vrstu časa.</li>
             <li>Kliknite jednu ili više praznih ćelija gde ide kopija.</li>
             <li>Kliknite <Ui>✓ Potvrdi kopiranje (N)</Ui>. Održano i plaćeno se ne prenose.</li>
+            <li>Kopija narandžastog časa bez instruktora je opet čas bez instruktora za isto dete (bira se samo učionica i vrsta).</li>
           </Koraci>
 
           <Podnaslov>Premesti – premeštanje termina (tablet, umesto prevlačenja)</Podnaslov>
@@ -222,8 +233,9 @@ export default async function AdminUputstvoPage({ searchParams }: { searchParams
             <li>Kliknite termin koji premeštate (dobije narandžasti okvir).</li>
             <li>Kliknite novo mesto – polje „Premesti ovde“ (prazno vreme ili „+ Dodaj još termin“ u zauzetom).</li>
             <li>
-              Kliknite <Ui>✓ Potvrdi premeštanje</Ui>. Premešta se ceo termin sa svom decom, isto kao prevlačenje mišem na računaru. Mod
-              ostaje uključen, pa odmah može sledeći termin.
+              Kliknite <Ui>✓ Potvrdi premeštanje</Ui>. Premešta se ceo termin sa svom decom (ili narandžasti čas bez instruktora), isto
+              kao prevlačenje mišem na računaru. Duži čas nosi i svoj „Nastavak dužeg časa“. Mod ostaje uključen, pa odmah može sledeći
+              termin.
             </li>
           </Koraci>
 

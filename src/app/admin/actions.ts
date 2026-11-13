@@ -852,13 +852,19 @@ export async function syncSpilloverSlots(
       .single(),
     admin
       .from('terms')
-      .select('id, slot_index')
+      .select('id, slot_index, date, instructor_id, classroom_id')
       .eq('nastavak_of_term_id', originTermId)
       .eq('napomena', AUTO_SPILLOVER_NAPOMENA),
   ]);
   if (!origin) return;
 
-  const existingBySlot = new Map((existing ?? []).map((t) => [t.slot_index, t.id as string]));
+  // Nastavak koji više ne prati čas (čas premešten na drugi dan, promenjen instruktor ili učionica) se
+  // briše i pravi ponovo uz čas – inače bi ostao da zauzima staro mesto.
+  const originDatum = String(origin.date).slice(0, 10);
+  const prati = (t: { date: string; instructor_id: string | null; classroom_id: string | null }) =>
+    String(t.date).slice(0, 10) === originDatum && t.instructor_id === origin.instructor_id && t.classroom_id === origin.classroom_id;
+  const zastareli = (existing ?? []).filter((t) => !prati(t)).map((t) => t.id as string);
+  const existingBySlot = new Map((existing ?? []).filter(prati).map((t) => [t.slot_index, t.id as string]));
 
   const desiredSlots: number[] = [];
   for (let i = 1; i < totalSlotsNeeded; i++) {
@@ -867,11 +873,15 @@ export async function syncSpilloverSlots(
     desiredSlots.push(s);
   }
 
-  const toDelete = [...existingBySlot.entries()].filter(([slotIdx]) => !desiredSlots.includes(slotIdx));
+  const toDelete = [
+    ...zastareli,
+    ...[...existingBySlot.entries()].filter(([slotIdx]) => !desiredSlots.includes(slotIdx)).map(([, id]) => id),
+  ];
   const toInsert = desiredSlots.filter((slotIdx) => !existingBySlot.has(slotIdx));
 
+  // Prvo brisanje, pa upis – stari nastavak ne sme da smeta novom (isti instruktor/učionica).
+  if (toDelete.length > 0) await admin.from('terms').delete().in('id', toDelete);
   await Promise.all([
-    ...toDelete.map(([, id]) => admin.from('terms').delete().eq('id', id)),
     ...toInsert.map(async (slotIdx) => {
       const { error: spilloverErr } = await admin.from('terms').insert({
         instructor_id: origin.instructor_id,
@@ -1593,30 +1603,36 @@ export async function moveTermAsAdmin(
   const slot = Math.min(15, Math.max(0, newSlotIndex));
   const dateStr = newDate.slice(0, 10);
 
-  const { data: term } = await admin.from('terms').select('instructor_id, classroom_id, date, slot_index').eq('id', termId).single();
+  const [{ data: term }, { data: nastavciRaw }] = await Promise.all([
+    admin.from('terms').select('instructor_id, classroom_id, date, slot_index').eq('id', termId).single(),
+    admin.from('terms').select('id').eq('nastavak_of_term_id', termId).eq('napomena', AUTO_SPILLOVER_NAPOMENA),
+  ]);
   if (!term) return { error: 'Termin nije pronađen.' };
 
   const isSameSlot = term.date === dateStr && term.slot_index === slot;
   if (isSameSlot) return {}; // nema pomeranja
 
-  const [{ count: termCount }, { data: maxSetting }] = await Promise.all([
-    admin.from('terms').select('*', { count: 'exact', head: true }).eq('date', dateStr).eq('slot_index', slot),
+  // Automatski nastavak ovog (dužeg) časa ne smeta premeštanju – seli se zajedno sa časom.
+  const nastavci = (nastavciRaw ?? []).map((n) => n.id as string);
+  const svoji = new Set([termId, ...nastavci]);
+  const [{ data: uCilju }, { data: maxSetting }] = await Promise.all([
+    admin.from('terms').select('id, instructor_id, classroom_id').eq('date', dateStr).eq('slot_index', slot),
     admin.from('app_settings').select('value').eq('key', 'max_termina_po_slotu').single(),
   ]);
+  const drugi = (uCilju ?? []).filter((t) => !svoji.has(t.id as string));
   const maxTerminaPoSlotu = (maxSetting?.value && parseInt(maxSetting.value, 10)) || 4;
-  if ((termCount ?? 0) >= maxTerminaPoSlotu) {
+  if (drugi.length >= maxTerminaPoSlotu) {
     return { error: `U ciljnom slotu je već ${maxTerminaPoSlotu} termina (maksimum).` };
   }
-
-  const { data: existingInstructor } = await admin.from('terms').select('id').eq('instructor_id', term.instructor_id).eq('date', dateStr).eq('slot_index', slot).maybeSingle();
-  if (existingInstructor) return { error: 'Ovaj instruktor već ima termin u ciljnom slotu.' };
-
-  if (term.classroom_id) {
-    const { data: existingClassroom } = await admin.from('terms').select('id').eq('classroom_id', term.classroom_id).eq('date', dateStr).eq('slot_index', slot).maybeSingle();
-    if (existingClassroom) return { error: 'Ova učionica je već zauzeta u ciljnom slotu.' };
+  if (drugi.some((t) => t.instructor_id === term.instructor_id)) return { error: 'Ovaj instruktor već ima termin u ciljnom slotu.' };
+  if (term.classroom_id && drugi.some((t) => t.classroom_id === term.classroom_id)) {
+    return { error: 'Ova učionica je već zauzeta u ciljnom slotu.' };
   }
 
+  if (nastavci.length > 0) await admin.from('terms').delete().in('id', nastavci);
   const { error } = await admin.from('terms').update({ date: dateStr, slot_index: slot }).eq('id', termId);
+  // I kad premeštanje ne uspe, nastavak se vraća (na staro mesto).
+  await syncSpilloverForTerm(admin, termId);
   if (error) return { error: error.message };
   revalidatePath('/admin/kalendar');
   revalidatePath(`/admin/termin/${termId}`);
