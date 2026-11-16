@@ -43,6 +43,8 @@ export type TestiranjeRow = {
   converted_client_id: string | null;
   dateStr: string;
   termId: string | null;
+  /** Testiranje plaćeno (migracija 054). */
+  placeno: boolean;
 };
 
 export default function TestiranjaList({ list }: { list: TestiranjeRow[] }) {
@@ -114,6 +116,7 @@ export default function TestiranjaList({ list }: { list: TestiranjeRow[] }) {
                   status={pc.status}
                   convertedClientId={pc.converted_client_id}
                   termId={pc.term_id}
+                  placeno={pc.placeno}
                 />
                 {pc.term_id && (
                   <Link

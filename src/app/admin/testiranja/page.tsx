@@ -21,7 +21,7 @@ export default async function TestiranjaPage() {
     id: string; term_id: string | null; ime: string; prezime: string | null; ime_roditelja: string | null;
     mobilni_roditelja: string | null; razred: string | null; status: string;
     komentar: string | null; converted_client_id: string | null; created_at: string;
-    datum_termina?: string | null; slot_termina?: number | null;
+    datum_termina?: string | null; slot_termina?: number | null; placeno?: boolean | null;
     term: { id: string; date: string; slot_index: number } | { id: string; date: string; slot_index: number }[] | null;
   }>;
 
@@ -47,6 +47,7 @@ export default async function TestiranjaPage() {
       converted_client_id: pc.converted_client_id,
       dateStr,
       termId: term?.id ?? null,
+      placeno: pc.placeno === true,
     };
   });
 

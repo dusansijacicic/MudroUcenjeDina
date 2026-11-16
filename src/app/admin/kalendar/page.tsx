@@ -95,7 +95,7 @@ export default async function AdminKalendarPage({
     adminSupabase
       .from('terms')
       // Uz dete samo ono što kalendar prikazuje (bez komentara i ostalih polja časa) – manje podataka za prenos.
-      .select('*, instructor:instructors(id, ime, prezime, color), classroom:classrooms(id, naziv, color), term_category:term_categories(id, naziv, is_testing), predavanja(id, client_id, term_type_id, client:clients(id, ime, prezime), term_type:term_types(naziv)), potential_clients(id, ime, prezime, ime_roditelja, mobilni_roditelja, status)')
+      .select('*, instructor:instructors(id, ime, prezime, color), classroom:classrooms(id, naziv, color), term_category:term_categories(id, naziv, is_testing), predavanja(id, client_id, term_type_id, client:clients(id, ime, prezime), term_type:term_types(naziv)), potential_clients(*)')
       .gte('date', dateFrom)
       .lte('date', dateTo)
       .order('date')

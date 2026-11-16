@@ -25,6 +25,7 @@ import {
   postaviPlacenePakete,
   vratiBezInstruktoraAsAdmin,
   otkaziCasoveAsAdmin,
+  postaviPlacenoTestiranjaAsAdmin,
   type BlokiranTermin,
   type PlaceniPaket,
 } from '@/app/admin/actions';
@@ -83,6 +84,8 @@ export type PotentialClientCalendar = {
   ime_roditelja?: string | null;
   mobilni_roditelja?: string | null;
   status: string;
+  /** Testiranje plaćeno (migracija 054). */
+  placeno?: boolean | null;
 };
 
 export type AdminTerm = {
@@ -248,7 +251,18 @@ const BEZ_INSTRUKTORA = '__bez__';
 
 /** Čas deteta izabran u modu „Označi plaćeno“ (predavanje „p:id“ ili zahtev „z:id“). paketId = već
  * postoji oznaka baš od ovog časa → izbor znači da se ona uklanja. */
-type PaidPick = { key: string; clientId: string; termTypeId: string | null; date: string; slot: number; label: string; paketId?: string };
+type PaidPick = {
+  key: string;
+  clientId: string;
+  termTypeId: string | null;
+  date: string;
+  slot: number;
+  label: string;
+  paketId?: string;
+  /** Dete sa testiranja ("t:id") – plaćanje je na detetu, bez paketa; ukloni = već je plaćeno. */
+  testiranje?: boolean;
+  ukloni?: boolean;
+};
 
 type SwapFields = { termin: boolean; instruktor: boolean; ucionica: boolean; klijent: boolean };
 
@@ -1215,22 +1229,37 @@ export default function AdminCalendarView({
   };
 
   const confirmPaid = async () => {
-    const izabrano = [...paidSelection.values()];
-    if (izabrano.length === 0) return;
+    const sve = [...paidSelection.values()];
+    if (sve.length === 0) return;
+    const testiranja = sve.filter((p) => p.testiranje);
+    const izabrano = sve.filter((p) => !p.testiranje);
     const dodaj = izabrano
       .filter((p) => !p.paketId)
       .map((p) => ({ clientId: p.clientId, termTypeId: p.termTypeId, date: p.date, slotIndex: p.slot, brojCasova: paidSamoJedan ? 1 : 6 }));
     const ukloni = izabrano.filter((p) => p.paketId).map((p) => p.paketId as string);
-    if (ukloni.length > 0 && !confirm(`Ukloniti ${ukloni.length} oznaka „plaćeno“? Časovi iz tih oznaka više neće biti plaćeni.`)) return;
+    const skidaSe = ukloni.length + testiranja.filter((p) => p.ukloni).length;
+    if (skidaSe > 0 && !confirm(`Ukloniti ${skidaSe} oznaka „plaćeno“? Ti časovi/testiranja više neće biti plaćeni.`)) return;
     setPaidLoading(true);
-    const res = await postaviPlacenePakete(dodaj, ukloni);
+    const res = dodaj.length + ukloni.length > 0 ? await postaviPlacenePakete(dodaj, ukloni) : { dodato: 0, uklonjeno: 0 };
+    const resT =
+      testiranja.length > 0
+        ? await postaviPlacenoTestiranjaAsAdmin(testiranja.map((p) => ({ id: p.key.slice(2), placeno: !p.ukloni })))
+        : { promenjeno: 0 };
     setPaidLoading(false);
-    if (res.error) {
-      toast.error(res.error);
+    const greska = ('error' in res ? res.error : undefined) ?? ('error' in resT ? resT.error : undefined);
+    if (greska) {
+      toast.error(greska);
       return;
     }
+    const testOznaceno = testiranja.filter((p) => !p.ukloni).length;
+    const testSkinuto = testiranja.filter((p) => p.ukloni).length;
     toast.success(
-      [res.dodato ? `Plaćeno označeno za ${res.dodato} dete/časa (${paidSamoJedan ? 'samo taj čas' : 'po 6 časova'}).` : '', res.uklonjeno ? `Uklonjeno oznaka: ${res.uklonjeno}.` : '']
+      [
+        res.dodato ? `Plaćeno označeno za ${res.dodato} dete/časa (${paidSamoJedan ? 'samo taj čas' : 'po 6 časova'}).` : '',
+        res.uklonjeno ? `Uklonjeno oznaka: ${res.uklonjeno}.` : '',
+        testOznaceno ? `Plaćeno testiranje: ${testOznaceno}.` : '',
+        testSkinuto ? `Skinuto plaćeno sa testiranja: ${testSkinuto}.` : '',
+      ]
         .filter(Boolean)
         .join(' ') || 'Ništa novo – te oznake već postoje.'
     );
@@ -1606,7 +1635,7 @@ export default function AdminCalendarView({
         getPaketBroj: (paketId: string) => paketBrojById.get(paketId),
         paidSelectionState: (key: string) => {
           const p = paidSelection.get(key);
-          return p ? (p.paketId ? 'ukloni' : 'dodaj') : null;
+          return p ? (p.paketId || p.ukloni ? 'ukloni' : 'dodaj') : null;
         },
         onTogglePaid,
         getPaketStart,
@@ -1803,7 +1832,7 @@ export default function AdminCalendarView({
                     ? 'kliknite dete u terminu koji je plaćen – plaćen je samo taj jedan čas.'
                     : 'kliknite dete u terminu od kog je plaćeno – taj čas i sledećih 5 časova tog deteta iste vrste su plaćeni.'}{' '}
                   Računaju se i časovi bez instruktora/učionice; čas bez vrste ide uz poslednju plaćenu vrstu. Dete sa „💰“: klik uklanja tu
-                  oznaku.
+                  oznaku. Dete na <strong>testiranju</strong>: klik = to testiranje je plaćeno.
                   {view === 'mesec' && <strong className="text-stone-700"> Za izbor pređite na nedeljni ili dnevni prikaz.</strong>}
                 </span>
               </div>
@@ -1813,10 +1842,18 @@ export default function AdminCalendarView({
                     <span
                       key={p.key}
                       className={`rounded-full border px-2 py-0.5 text-xs ${
-                        p.paketId ? 'border-red-300 bg-red-50 text-red-800' : 'border-emerald-300 bg-emerald-50 text-emerald-800'
+                        p.paketId || p.ukloni ? 'border-red-300 bg-red-50 text-red-800' : 'border-emerald-300 bg-emerald-50 text-emerald-800'
                       }`}
                     >
-                      {p.paketId ? '✕ ukloni: ' : paidSamoJedan ? '✓ 1 čas: ' : '✓ 6 časova od: '}
+                      {p.testiranje
+                        ? p.ukloni
+                          ? '✕ nije plaćeno: '
+                          : '✓ plaćeno testiranje: '
+                        : p.paketId
+                        ? '✕ ukloni: '
+                        : paidSamoJedan
+                        ? '✓ 1 čas: '
+                        : '✓ 6 časova od: '}
                       {formatShortDate(p.date)} {TIME_SLOTS[p.slot] ?? ''} · {p.label}
                     </span>
                   ))}
@@ -2439,29 +2476,53 @@ function TermCardVisual({ term, rowOffset = 0 }: { term: AdminTerm; rowOffset?: 
                 const ime = `${pc.ime ?? ''}${pc.prezime ? ` ${pc.prezime}` : ''}`;
                 const otkaziKey = `t:${pc.id}`;
                 const otkazuje = swap.cancelMode && swap.isCancelSelected(otkaziKey);
+                // Označi plaćeno: dete sa testiranja (nije klijent) – plaćanje se pamti na njemu (migracija 054).
+                const placenoStanje = swap.paidMode ? swap.paidSelectionState(otkaziKey) : null;
+                const klik = swap.cancelMode || swap.paidMode;
                 return {
                   key: pc.id,
                   content: (
                     <div
                       style={rowStyle(i)}
-                      role={swap.cancelMode ? 'button' : undefined}
+                      role={klik ? 'button' : undefined}
                       onClick={
-                        swap.cancelMode
+                        klik
                           ? (e) => {
                               e.preventDefault();
                               e.stopPropagation();
-                              swap.onToggleCancel(otkaziKey, `${formatShortDate(term.date)} ${TIME_SLOTS[term.slot_index] ?? ''} · ${ime} (testiranje)`);
+                              const opis = `${formatShortDate(term.date)} ${TIME_SLOTS[term.slot_index] ?? ''} · ${ime} (testiranje)`;
+                              if (swap.cancelMode) swap.onToggleCancel(otkaziKey, opis);
+                              else {
+                                swap.onTogglePaid({
+                                  key: otkaziKey,
+                                  clientId: pc.id,
+                                  termTypeId: null,
+                                  date: term.date,
+                                  slot: term.slot_index,
+                                  label: `${ime} (testiranje)`,
+                                  testiranje: true,
+                                  ukloni: !!pc.placeno,
+                                });
+                              }
                             }
                           : undefined
                       }
-                      className={`px-2 py-1 text-[12px] leading-snug text-stone-900${swap.cancelMode ? ' cursor-pointer hover:brightness-95' : ''}${
+                      title={swap.paidMode ? (pc.placeno ? 'Klik: skini oznaku plaćeno' : 'Klik: testiranje je plaćeno') : undefined}
+                      className={`px-2 py-1 text-[12px] leading-snug text-stone-900${klik ? ' cursor-pointer hover:brightness-95' : ''}${
                         otkazuje ? ' ring-2 ring-inset ring-stone-700' : ''
-                      }`}
+                      }${placenoStanje === 'dodaj' ? ' ring-2 ring-inset ring-emerald-600' : placenoStanje === 'ukloni' ? ' ring-2 ring-inset ring-red-600' : ''}`}
                     >
                       <span className={`font-semibold${otkazuje ? ' line-through' : ''}`}>{ime}</span>
                       {pc.ime_roditelja && <span className="block text-stone-600">rod: {pc.ime_roditelja}</span>}
                       {pc.mobilni_roditelja && <span className="block text-stone-600">{pc.mobilni_roditelja}</span>}
                       {otkazuje && <span className="block text-[11px] font-bold text-stone-700">✕ otkazuje se</span>}
+                      {placenoStanje === 'dodaj' ? (
+                        <span className="block text-[11px] font-bold text-emerald-700">✓ testiranje plaćeno</span>
+                      ) : placenoStanje === 'ukloni' ? (
+                        <span className="block text-[11px] font-bold text-red-700">✕ skini plaćeno</span>
+                      ) : pc.placeno ? (
+                        <span className="block text-[11px] font-semibold text-emerald-700">💰 plaćeno</span>
+                      ) : null}
                     </div>
                   ),
                 };

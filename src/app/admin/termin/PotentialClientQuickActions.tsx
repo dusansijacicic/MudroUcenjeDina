@@ -8,6 +8,7 @@ import {
   convertPotentialClientToClient,
   otkaziCasoveAsAdmin,
   obrisiDecuSaTestiranjaAsAdmin,
+  postaviPlacenoTestiranjaAsAdmin,
 } from '@/app/admin/actions';
 import type { PotentialClientStatus } from '@/app/admin/actions';
 
@@ -25,6 +26,7 @@ export default function PotentialClientQuickActions({
   status,
   convertedClientId,
   termId,
+  placeno = false,
 }: {
   id: string;
   ime: string;
@@ -32,6 +34,8 @@ export default function PotentialClientQuickActions({
   convertedClientId: string | null;
   /** Termin testiranja na kom je dete (null = otkazano ili termin obrisan). */
   termId: string | null;
+  /** Testiranje plaćeno (migracija 054). */
+  placeno?: boolean;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -80,6 +84,19 @@ export default function PotentialClientQuickActions({
     router.refresh();
   };
 
+  const handlePlaceno = async () => {
+    if (placeno && !confirm(`Skinuti oznaku „plaćeno“ sa testiranja za „${ime}“?`)) return;
+    setLoading(true);
+    const res = await postaviPlacenoTestiranjaAsAdmin([{ id, placeno: !placeno }]);
+    setLoading(false);
+    if (res.error) {
+      toast.error(res.error);
+      return;
+    }
+    toast.success(placeno ? 'Skinuto plaćeno.' : 'Testiranje plaćeno.');
+    router.refresh();
+  };
+
   const handleObrisi = async () => {
     if (!confirm(`Trajno obrisati „${ime}“ sa testiranja, BEZ TRAGA (nestaje i iz Istorije testiranja)?`)) return;
     setLoading(true);
@@ -115,6 +132,19 @@ export default function PotentialClientQuickActions({
           className="text-sm text-emerald-700 hover:text-emerald-800 font-medium disabled:opacity-50 whitespace-nowrap"
         >
           Prebaci u klijenta
+        </button>
+      )}
+      {status !== 'otkazan' && (
+        <button
+          type="button"
+          onClick={handlePlaceno}
+          disabled={loading}
+          title={placeno ? 'Klik skida oznaku plaćeno' : 'Označi da je testiranje plaćeno'}
+          className={`text-sm font-medium disabled:opacity-50 whitespace-nowrap ${
+            placeno ? 'rounded-full bg-emerald-100 px-2 py-0.5 text-emerald-800 hover:bg-emerald-200' : 'text-emerald-700 hover:text-emerald-800'
+          }`}
+        >
+          {placeno ? '💰 Plaćeno' : 'Označi plaćeno'}
         </button>
       )}
       {termId && status === 'zakazan' && (

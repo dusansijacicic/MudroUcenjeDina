@@ -3001,7 +3001,40 @@ export type PotentialClientRow = {
   /** Datum/vreme testiranja zapamćeni na detetu (migracija 052) – kad više nije vezano za termin. */
   datum_termina?: string | null;
   slot_termina?: number | null;
+  /** Testiranje plaćeno (migracija 054). */
+  placeno?: boolean | null;
 };
+
+/** Označi plaćeno za decu sa testiranja (nisu klijenti, pa nemaju pakete – plaćanje je na detetu). */
+export async function postaviPlacenoTestiranjaAsAdmin(izbor: { id: string; placeno: boolean }[]): Promise<{ error?: string; promenjeno: number }> {
+  const { admin, error: authErr, actor } = await requireAdmin();
+  if (authErr || !admin) return { error: authErr ?? 'Niste ovlašćeni.', promenjeno: 0 };
+  if (izbor.length === 0) return { promenjeno: 0 };
+  let promenjeno = 0;
+  for (const placeno of [true, false]) {
+    const ids = izbor.filter((x) => x.placeno === placeno).map((x) => x.id);
+    if (ids.length === 0) continue;
+    const { error } = await admin.from('potential_clients').update({ placeno }).in('id', ids);
+    if (error) {
+      return {
+        error: /placeno/i.test(error.message)
+          ? 'Prvo pokrenite migraciju 054_testiranje_placeno.sql u Supabase SQL Editoru.'
+          : error.message,
+        promenjeno,
+      };
+    }
+    promenjeno += ids.length;
+  }
+  revalidatePath('/admin/kalendar');
+  revalidatePath('/admin/testiranja');
+  if (actor) {
+    logActivity(actor, 'potential_client.placeno', `Plaćeno testiranje: ${izbor.filter((x) => x.placeno).length} označeno, ${izbor.filter((x) => !x.placeno).length} skinuto.`, {
+      entityType: 'potential_client',
+      metadata: { izbor },
+    });
+  }
+  return { promenjeno };
+}
 
 /** Trajno briše decu sa testiranja (bez traga) – sa stranice termina ili iz Istorije testiranja.
  * Termin testiranja ostaje i kad ostane prazan (može se dodati drugo dete ili obrisati sam termin). */

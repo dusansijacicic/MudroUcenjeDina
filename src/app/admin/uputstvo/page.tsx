@@ -325,6 +325,10 @@ export default async function AdminUputstvoPage({ searchParams }: { searchParams
               Kliknite <strong>dete</strong> u terminu od kog je plaćeno (može i narandžasti čas bez instruktora) – red dobije zeleni okvir i
               „✓ plaćeno od ovde (6 časova)“. Može više dece odjednom.
             </li>
+            <li>
+              Dete na <strong>testiranju</strong>: klik znači da je to testiranje plaćeno (posle potvrde piše „💰 plaćeno“; ponovni klik
+              skida oznaku). Isto i dugmetom <Ui>Označi plaćeno</Ui> na stranici Testiranja i u terminu. Potrebna je migracija 054.
+            </li>
             <li>Kliknite <Ui>✓ Potvrdi plaćeno (N)</Ui>.</li>
             <li>
               Od tog časa, taj i sledećih 5 časova tog deteta <strong>iste vrste</strong> su plaćeni: na kalendaru piše „1/6 · još 5“,
@@ -489,6 +493,7 @@ export default async function AdminUputstvoPage({ searchParams }: { searchParams
             </li>
             <li><Ui>Obriši</Ui> kod deteta – briše ga BEZ TRAGA (i iz Istorije testiranja). Ceo termin testiranja briše se modom Delete.</li>
             <li><Ui>Prebaci u klijenta</Ui> – od potencijalnog deteta pravi pravog klijenta.</li>
+            <li><Ui>Označi plaćeno</Ui> – testiranje je plaćeno (piše „💰 Plaćeno“; klik ponovo skida oznaku).</li>
             <li>Stranica <Ui>Testiranja</Ui> u meniju: istorija svih testiranja, sa pretragom po detetu ili roditelju.</li>
           </Koraci>
         </Sekcija>

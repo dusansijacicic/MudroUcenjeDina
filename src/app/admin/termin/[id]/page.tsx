@@ -192,6 +192,7 @@ export default async function AdminTerminDetailPage({
                       status={pc.status as PotentialClientStatus}
                       convertedClientId={pc.converted_client_id}
                       termId={termId}
+                      placeno={pc.placeno === true}
                     />
                     <Link
                       href={`/admin/termin/${termId}/testiranje/${pc.id}`}
