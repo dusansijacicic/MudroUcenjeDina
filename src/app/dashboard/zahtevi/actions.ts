@@ -7,7 +7,8 @@ import { SEEDED_TERM_CATEGORY_INDIVIDUAL_ID } from '@/lib/term-categories';
 import { syncSpilloverForTerm } from '@/app/admin/actions';
 import { revalidatePath } from 'next/cache';
 import { logActivity, getInstructorActor } from '@/lib/audit';
-import { TIME_SLOTS } from '@/lib/constants';
+import { TIME_SLOTS, slotsNeeded } from '@/lib/constants';
+import { instruktorSlobodanZaNastavak, trajanjeVrste } from '@/lib/zauzetost-zahteva';
 
 function getAdmin() {
   try {
@@ -120,6 +121,16 @@ export async function potvrdiZahtev(zahtevId: string): Promise<{ error?: string 
     .eq('date', dateStr)
     .eq('slot_index', slot)
     .single();
+  // Duži čas zauzima i sledeće vreme – instruktor tada mora biti slobodan (inače bi se preklopio).
+  const nastavakGreska = await instruktorSlobodanZaNastavak(
+    admin,
+    targetInstructorId,
+    dateStr,
+    slot,
+    slotsNeeded(await trajanjeVrste(admin, zahtev.term_type_id)),
+    existing ? [existing.id] : []
+  );
+  if (nastavakGreska) return { error: nastavakGreska };
   if (existing) {
     termId = existing.id;
   } else {
@@ -221,6 +232,16 @@ export async function promeniTerminZahtev(
     .eq('date', dateStr)
     .eq('slot_index', slot)
     .single();
+  // Duži čas zauzima i sledeće vreme – instruktor tada mora biti slobodan (inače bi se preklopio).
+  const nastavakGreska = await instruktorSlobodanZaNastavak(
+    admin,
+    targetInstructorId,
+    dateStr,
+    slot,
+    slotsNeeded(await trajanjeVrste(admin, zahtev.term_type_id)),
+    existing ? [existing.id] : []
+  );
+  if (nastavakGreska) return { error: nastavakGreska };
   if (existing) {
     termId = existing.id;
   } else {

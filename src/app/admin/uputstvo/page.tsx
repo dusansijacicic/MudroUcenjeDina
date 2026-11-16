@@ -175,12 +175,17 @@ export default async function AdminUputstvoPage({ searchParams }: { searchParams
             <li>
               <M n="G" /> Narandžasta kartica sa isprekidanim okvirom = čas zakazan bez instruktora; čeka da ga neki predavač preuzme. Ako je
               vrsta duža od 45 min (npr. 55 min), u sledećem vremenu stoji narandžasti <strong>↳ Nastavak dužeg časa</strong> – to vreme je
-              zauzeto i pre nego što čas dobije instruktora.
+              zauzeto i pre nego što čas dobije instruktora: to dete tada ne može dobiti drugi čas, njegova učionica se ne može dati drugom,
+              a instruktor koji ga preuzme mora biti slobodan i u tom sledećem vremenu.
             </li>
             <li><M n="H" /> Siva = otkazan čas (istorija). Prugasto „⛔ Blokirano“ = u tom vremenu niko ne može da zakaže.</li>
             <li>
               U jednom vremenu (npr. 9:00) može biti više paralelnih termina – svaki ima svog instruktora i svoju učionicu. Koliko najviše,
               podešava se u <Ui>Podešavanja</Ui>.
+            </li>
+            <li>
+              Na tabletu i telefonu je u kartici skraćeno: inicijali instruktora (npr. „DM“) levo, a desno <strong>uč. 2</strong> = učionica
+              (broj sa početka naziva, npr. „2-Sperry“).
             </li>
           </Lista>
         </Sekcija>
@@ -212,10 +217,11 @@ export default async function AdminUputstvoPage({ searchParams }: { searchParams
             <li>Kliknite <Ui>✓ Potvrdi zamenu</Ui>.</li>
           </Koraci>
           <Napomena>
-            Swap, Copy i Premesti rade i sa <strong>narandžastim časom bez instruktora</strong> – klikne se isto kao termin. Kod njega se
-            menjaju Termin (vreme), Učionica i Klijent (dete sa vrstom časa); Instruktor ne, jer ga taj čas nema (za to je{' '}
-            <Ui>Dodeli instruktora</Ui>). Klijent se menja samo sa terminom u kome je jedno dete. Na računaru se i narandžasti čas
-            prevlači mišem u drugo vreme.
+            Swap, Copy i Premesti rade za <strong>sve na kalendaru</strong>: termine, grupe, testiranja i narandžaste časove bez
+            instruktora. Klik na „↳ Nastavak dužeg časa“ bira njegov čas. <Ui>Klijent</Ui> menja svu decu termina (i decu sa
+            testiranja). <Ui>Instruktor</Ui> sa narandžastim časom: dete iz njega dobija tog instruktora, a deca iz termina postaju
+            narandžasti časovi. Deca sa testiranja ne mogu da čekaju bez instruktora, pa se testiranje sa narandžastim časom menja
+            samo po vremenu i učionici. Na računaru se i narandžasti čas prevlači mišem u drugo vreme (može i u pun slot).
           </Napomena>
 
           <Podnaslov>Copy – kopiranje termina</Podnaslov>
@@ -225,6 +231,10 @@ export default async function AdminUputstvoPage({ searchParams }: { searchParams
             <li>Kliknite jednu ili više praznih ćelija gde ide kopija.</li>
             <li>Kliknite <Ui>✓ Potvrdi kopiranje (N)</Ui>. Održano i plaćeno se ne prenose.</li>
             <li>Kopija narandžastog časa bez instruktora je opet čas bez instruktora za isto dete (bira se samo učionica i vrsta).</li>
+            <li>
+              Kopija testiranja je novo testiranje kod istog instruktora; čekirano <Ui>Deca sa testiranja</Ui> upisuje i ista deca (kao
+              zakazana).
+            </li>
           </Koraci>
 
           <Podnaslov>Premesti – premeštanje termina (tablet, umesto prevlačenja)</Podnaslov>

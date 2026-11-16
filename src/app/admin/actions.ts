@@ -14,6 +14,14 @@ import { logActivity, type Actor } from '@/lib/audit';
 import { getAuthedUser, getIsAdmin } from '@/lib/auth';
 import { beogradIso, danasBeograd, datumBeograd, jeIsoDatum } from '@/lib/datum';
 import { danUNedelji, mapBlokada, sacuvajNedeljneBlokade, upisiBlokade } from '@/lib/blokade';
+import {
+  deteImaZahtev,
+  instruktorSlobodanZaNastavak,
+  proveriMestoZahteva,
+  rezervisaneUcionice,
+  trajanjeVrste,
+  ucionicaRezervisana,
+} from '@/lib/zauzetost-zahteva';
 
 export async function createInstructorAsAdmin(formData: FormData): Promise<{ error?: string; success?: boolean }> {
   const { supabase, user } = await getAuthedUser();
@@ -102,12 +110,14 @@ export async function getTakenForSlot(
   const slot = Math.min(15, Math.max(0, slotIndex));
   const dateStr = date.slice(0, 10);
   const admin = createAdminClient();
-  const [{ data: terms }, { data: blockRows }, { data: nedeljneRows }] = await Promise.all([
+  const [{ data: terms }, { data: blockRows }, { data: nedeljneRows }, rezervisane] = await Promise.all([
     admin.from('terms').select('instructor_id, classroom_id').eq('date', dateStr).eq('slot_index', slot),
     // select('*') – radi i pre migracije 048 (tada nema instructor_id = sve blokade su "za sve").
     admin.from('blokirani_termini').select('*').eq('date', dateStr).eq('slot_index', slot),
     // Stalne nedeljne blokade (048); pre migracije upit vraća grešku → data null → nema ih.
     admin.from('instruktor_nedeljne_blokade').select('instructor_id').eq('dan', danUNedelji(dateStr)).eq('slot_index', slot),
+    // Učionice časova bez instruktora (i nastavaka dužih) u ovom vremenu su zauzete.
+    rezervisaneUcionice(admin, dateStr, slot),
   ]);
   const blokade = (blockRows ?? []).map(mapBlokada);
   const block = blokade.find((b) => b.instructor_id === null) ?? null;
@@ -119,7 +129,7 @@ export async function getTakenForSlot(
   ];
   const takenInstructorIds = [...new Set((terms ?? []).map((t) => t.instructor_id).filter(Boolean))] as string[];
   const takenClassroomIds = [
-    ...new Set((terms ?? []).map((t) => t.classroom_id).filter((id): id is string => id != null)),
+    ...new Set([...(terms ?? []).map((t) => t.classroom_id).filter((id): id is string => id != null), ...rezervisane]),
   ];
   return { takenInstructorIds, takenClassroomIds, blocked: block ? { napomena: block.napomena ?? null } : null, blockedInstructorIds };
 }
@@ -183,6 +193,8 @@ export async function createTermAsAdmin(
     if (existingSameClassroom) {
       return { error: 'Ova učionica je već zauzeta u ovom slotu. Zamena mesta je moguća samo kod izmene postojećeg termina, ne pri kreiranju novog.' };
     }
+    const rezervisana = await ucionicaRezervisana(adminSupabase, dateStr, slot, classroomId);
+    if (rezervisana) return { error: rezervisana };
   }
 
   if (!termCategoryId?.trim()) {
@@ -282,10 +294,37 @@ export async function createBulkZahteviAsAdmin(
     .in('requested_date', [...new Set(slots.map((s) => s.date))]);
   const existingKeys = new Set((existing ?? []).map((r) => `${r.requested_date}|${r.requested_slot_index}`));
 
-  const toInsert = slots.filter((s) => !existingKeys.has(`${s.date}|${s.slotIndex}`));
+  const kandidati = slots.filter((s) => !existingKeys.has(`${s.date}|${s.slotIndex}`));
   const skipped = slots
     .filter((s) => existingKeys.has(`${s.date}|${s.slotIndex}`))
     .map((s) => ({ ...s, error: 'Zahtev za ovo dete već postoji za taj termin.' }));
+
+  // Celo trajanje časa (i nastavak dužeg): dete i učionica moraju biti slobodni, vreme ne sme biti blokirano.
+  const provere = await Promise.all(
+    kandidati.map(async (s) => ({
+      s,
+      greska: await proveriMestoZahteva(
+        admin,
+        { clientId, classroomId, termTypeId, datum: s.date.slice(0, 10), slot: s.slotIndex, seli: true },
+        {}
+      ),
+    }))
+  );
+  const slotova = slotsNeeded(await trajanjeVrste(admin, termTypeId));
+  const toInsert: typeof slots = [];
+  for (const { s, greska } of provere.sort((a, b) => a.s.date.localeCompare(b.s.date) || a.s.slotIndex - b.s.slotIndex)) {
+    if (greska) {
+      skipped.push({ ...s, error: greska });
+      continue;
+    }
+    // Dva izabrana vremena jedno do drugog za duži čas bi se preklopila – drugo se preskače.
+    const preklapa = toInsert.some((x) => x.date === s.date && s.slotIndex - x.slotIndex < slotova && s.slotIndex >= x.slotIndex);
+    if (preklapa) {
+      skipped.push({ ...s, error: 'preklapa se sa prethodnim (dužim) časom istog deteta.' });
+      continue;
+    }
+    toInsert.push(s);
+  }
 
   if (toInsert.length === 0) return { failed: skipped };
 
@@ -335,6 +374,7 @@ export async function createBulkTermsAsAdmin(
   if (slots.length === 0 || clientIds.length === 0) return { failed: [] };
   const effectiveCategoryId =
     termCategoryId || (clientIds.length > 1 ? SEEDED_TERM_CATEGORY_GRUPNI_ID : SEEDED_TERM_CATEGORY_INDIVIDUAL_ID);
+  const slotovaVrste = slotsNeeded(await trajanjeVrste(admin, termTypeId));
 
   const results = await Promise.all(
     slots.map(async (s) => {
@@ -349,10 +389,15 @@ export async function createBulkTermsAsAdmin(
         .eq('slot_index', slot)
         .maybeSingle();
 
+      // Duži čas: instruktor mora biti slobodan i u sledećem vremenu (pre nego što se napravi prazan termin).
+      const nastavakGreska = await instruktorSlobodanZaNastavak(admin, instructorId, dateStr, slot, slotovaVrste, existing ? [existing.id] : []);
+      if (nastavakGreska) return { ...s, error: nastavakGreska };
+      const ucionicaRez = classroomId ? await ucionicaRezervisana(admin, dateStr, slot, classroomId) : null;
+
       let termId: string;
       if (existing) {
         termId = existing.id;
-        if (classroomId && !existing.classroom_id) {
+        if (classroomId && !existing.classroom_id && !ucionicaRez) {
           const { data: roomConflict } = await admin
             .from('terms')
             .select('id')
@@ -375,6 +420,7 @@ export async function createBulkTermsAsAdmin(
             .eq('slot_index', slot)
             .maybeSingle();
           if (roomConflict) return { ...s, error: 'Učionica je već zauzeta u tom terminu.' };
+          if (ucionicaRez) return { ...s, error: ucionicaRez };
         }
         const { data: inserted, error: insErr } = await admin
           .from('terms')
@@ -439,6 +485,15 @@ export async function assignInstructorToTermsAsAdmin(
         .neq('id', termId)
         .maybeSingle();
       if (conflict) return { termId, error: 'Instruktor je već zauzet u tom terminu.' };
+      const nastavakGreska = await instruktorSlobodanZaNastavak(
+        admin,
+        instructorId,
+        String(term.date).slice(0, 10),
+        term.slot_index,
+        await slotovaTermina(admin, termId),
+        [termId]
+      );
+      if (nastavakGreska) return { termId, error: nastavakGreska };
       const { error } = await admin.from('terms').update({ instructor_id: instructorId }).eq('id', termId);
       if (error) return { termId, error: error.message };
       // Automatski "blokirajući" slotovi dužeg časa prate instruktora roditeljskog termina.
@@ -481,6 +536,8 @@ export async function assignClassroomToTermsAsAdmin(
         .neq('id', termId)
         .maybeSingle();
       if (conflict) return { termId, error: 'Učionica je već zauzeta u tom terminu.' };
+      const rez = await ucionicaRezervisana(admin, String(term.date).slice(0, 10), term.slot_index, classroomId);
+      if (rez) return { termId, error: rez };
       const { error } = await admin.from('terms').update({ classroom_id: classroomId }).eq('id', termId);
       if (error) return { termId, error: error.message };
       await admin.from('terms').update({ classroom_id: classroomId }).eq('nastavak_of_term_id', termId).eq('napomena', AUTO_SPILLOVER_NAPOMENA);
@@ -525,6 +582,17 @@ export async function assignInstructorToZahtevAsAdmin(zahtevId: string, instruct
     .eq('date', dateStr)
     .eq('slot_index', slot)
     .maybeSingle();
+  // Duži čas bez instruktora zauzima i sledeće vreme – instruktor tada mora biti slobodan, inače bi
+  // nastavak nestao a čas se preklopio sa drugim.
+  const nastavakGreska = await instruktorSlobodanZaNastavak(
+    admin,
+    instructorId,
+    dateStr,
+    slot,
+    slotsNeeded(await trajanjeVrste(admin, zahtev.term_type_id)),
+    existing ? [existing.id] : []
+  );
+  if (nastavakGreska) return { error: nastavakGreska };
   if (existing) {
     termId = existing.id;
   } else {
@@ -614,22 +682,26 @@ export async function assignClassroomToZahtevAsAdmin(zahtevId: string, classroom
 
   const { data: zahtev } = await admin
     .from('zahtevi_za_cas')
-    .select('status, requested_date, requested_slot_index, created_term_id')
+    .select('status, requested_date, requested_slot_index, created_term_id, term_type_id')
     .eq('id', zahtevId)
     .single();
   if (!zahtev) return { error: 'Zahtev nije pronađen.' };
 
   const dateStr = String(zahtev.requested_date).slice(0, 10);
   const slot = Math.min(15, Math.max(0, zahtev.requested_slot_index));
-  const { data: conflict } = await admin
-    .from('terms')
-    .select('id')
-    .eq('classroom_id', classroomId)
-    .eq('date', dateStr)
-    .eq('slot_index', slot)
-    .maybeSingle();
-  if (conflict && conflict.id !== zahtev.created_term_id) {
-    return { error: 'Učionica je već zauzeta u tom terminu.' };
+  // Čas na čekanju drži učionicu celo svoje trajanje (i nastavak dužeg časa).
+  const slotova = zahtev.status === 'pending' ? slotsNeeded(await trajanjeVrste(admin, zahtev.term_type_id)) : 1;
+  for (let i = 0; i < slotova && slot + i <= 15; i++) {
+    const { data: uSobi } = await admin.from('terms').select('id, nastavak_of_term_id').eq('classroom_id', classroomId).eq('date', dateStr).eq('slot_index', slot + i);
+    const svoj = zahtev.created_term_id as string | null;
+    const drugi = (uSobi ?? []).filter((t) => !svoj || (t.id !== svoj && t.nastavak_of_term_id !== svoj));
+    if (drugi.length > 0) {
+      return { error: i === 0 ? 'Učionica je već zauzeta u tom terminu.' : `Čas traje duže, a učionica je zauzeta u ${TIME_SLOTS[slot + i]}.` };
+    }
+    if (zahtev.status === 'pending') {
+      const rez = await ucionicaRezervisana(admin, dateStr, slot + i, classroomId, [zahtevId]);
+      if (rez) return { error: rez };
+    }
   }
 
   const { error } = await admin.from('zahtevi_za_cas').update({ classroom_id: classroomId }).eq('id', zahtevId);
@@ -681,19 +753,36 @@ export async function assignTermTypeToTermsAsAdmin(
   if (authErr || !admin) return { failed: termIds.map((termId) => ({ termId, error: authErr ?? 'Niste ovlašćeni.' })) };
   if (termIds.length === 0) return { failed: [] };
 
-  const { error } = await admin.from('predavanja').update({ term_type_id: termTypeId }).in('term_id', termIds);
+  // Duža vrsta zauzima i sledeće vreme – termin čiji instruktor tada nije slobodan se ne menja.
+  const failed: { termId: string; error: string }[] = [];
+  const slotova = slotsNeeded(await trajanjeVrste(admin, termTypeId));
+  let zaIzmenu = termIds;
+  if (slotova > 1) {
+    const { data: termini } = await admin.from('terms').select('id, instructor_id, date, slot_index').in('id', termIds);
+    const provere = await Promise.all(
+      (termini ?? []).map(async (t) => ({
+        termId: t.id as string,
+        error: await instruktorSlobodanZaNastavak(admin, t.instructor_id as string, String(t.date).slice(0, 10), t.slot_index as number, slotova, [t.id as string]),
+      }))
+    );
+    for (const p of provere) if (p.error) failed.push({ termId: p.termId, error: p.error });
+    zaIzmenu = termIds.filter((id) => !failed.some((f) => f.termId === id));
+  }
+  if (zaIzmenu.length === 0) return { failed };
+
+  const { error } = await admin.from('predavanja').update({ term_type_id: termTypeId }).in('term_id', zaIzmenu);
   if (error) return { failed: termIds.map((termId) => ({ termId, error: error.message })) };
   // Nova vrsta časa može imati drugo trajanje – uskladi "blokirajuće" slotove dužeg časa za svaki termin.
-  await Promise.all(termIds.map((termId) => syncSpilloverForTerm(admin, termId)));
+  await Promise.all(zaIzmenu.map((termId) => syncSpilloverForTerm(admin, termId)));
   revalidatePath('/admin/kalendar');
   if (actor) {
-    logActivity(actor, 'term.assign_term_type', `Promenjena vrsta časa na ${termIds.length} termin(a).`, {
+    logActivity(actor, 'term.assign_term_type', `Promenjena vrsta časa na ${zaIzmenu.length} termin(a).`, {
       entityType: 'term_type',
       entityId: termTypeId,
-      metadata: { termIds },
+      metadata: { termIds: zaIzmenu },
     });
   }
-  return { failed: [] };
+  return { failed };
 }
 
 /** Batch verzija za zahteve – menja term_type_id direktno na zahtevu na čekanju. */
@@ -705,18 +794,46 @@ export async function assignTermTypeToZahteviAsAdmin(
   if (authErr || !admin) return { failed: zahtevIds.map((zahtevId) => ({ zahtevId, error: authErr ?? 'Niste ovlašćeni.' })) };
   if (zahtevIds.length === 0) return { failed: [] };
 
-  const { error } = await admin.from('zahtevi_za_cas').update({ term_type_id: termTypeId }).in('id', zahtevIds);
+  // Duža vrsta: čas bez instruktora zauzima i sledeće vreme (dete i učionica tada moraju biti slobodni).
+  const failed: { zahtevId: string; error: string }[] = [];
+  let zaIzmenu = zahtevIds;
+  if (slotsNeeded(await trajanjeVrste(admin, termTypeId)) > 1) {
+    const { data: zahtevi } = await admin
+      .from('zahtevi_za_cas')
+      .select('id, client_id, classroom_id, requested_date, requested_slot_index, status')
+      .in('id', zahtevIds);
+    for (const z of zahtevi ?? []) {
+      if (z.status !== 'pending') continue;
+      const greska = await proveriMestoZahteva(
+        admin,
+        {
+          clientId: z.client_id as string,
+          classroomId: (z.classroom_id as string | null) ?? null,
+          termTypeId,
+          datum: String(z.requested_date).slice(0, 10),
+          slot: z.requested_slot_index as number,
+          seli: false,
+        },
+        { zahtevIds: [z.id as string] }
+      );
+      if (greska) failed.push({ zahtevId: z.id as string, error: greska });
+    }
+    zaIzmenu = zahtevIds.filter((id) => !failed.some((f) => f.zahtevId === id));
+  }
+  if (zaIzmenu.length === 0) return { failed };
+
+  const { error } = await admin.from('zahtevi_za_cas').update({ term_type_id: termTypeId }).in('id', zaIzmenu);
   if (error) return { failed: zahtevIds.map((zahtevId) => ({ zahtevId, error: error.message })) };
   revalidatePath('/admin/kalendar');
   revalidatePath('/dashboard/zahtevi');
   if (actor) {
-    logActivity(actor, 'zahtev.assign_term_type', `Promenjena vrsta časa na ${zahtevIds.length} zahtev(a).`, {
+    logActivity(actor, 'zahtev.assign_term_type', `Promenjena vrsta časa na ${zaIzmenu.length} zahtev(a).`, {
       entityType: 'term_type',
       entityId: termTypeId,
-      metadata: { zahtevIds },
+      metadata: { zahtevIds: zaIzmenu },
     });
   }
-  return { failed: [] };
+  return { failed };
 }
 
 export async function getAdminInstructorsList(): Promise<{ id: string; ime: string; prezime: string }[]> {
@@ -901,6 +1018,17 @@ export async function syncSpilloverSlots(
   ]);
 }
 
+/** Koliko vremena termin zauzima – po najdužoj vrsti časa među decom (kao automatski nastavak). */
+async function slotovaTermina(admin: ReturnType<typeof createAdminClient>, termId: string): Promise<number> {
+  const { data: preds } = await admin.from('predavanja').select('term_type:term_types(trajanje_minuta)').eq('term_id', termId);
+  let max = 1;
+  for (const p of preds ?? []) {
+    const tt = p.term_type as { trajanje_minuta?: number } | { trajanje_minuta?: number }[] | null;
+    max = Math.max(max, slotsNeeded(Array.isArray(tt) ? tt[0]?.trajanje_minuta : tt?.trajanje_minuta));
+  }
+  return max;
+}
+
 /**
  * Uzima najduže trajanje među SVIM radionicama u terminu (grupni termin može imati različite vrste
  * časa sa različitim trajanjem) i uskladi broj zauzetih slotova prema tome.
@@ -933,8 +1061,23 @@ export async function createPredavanjeAsAdmin(
 ): Promise<{ error?: string }> {
   const { admin, error: authErr, actor } = await requireAdmin();
   if (authErr || !admin) return { error: authErr ?? 'Niste ovlašćeni.' };
-  const { data: term } = await admin.from('terms').select('id, instructor_id').eq('id', termId).single();
+  const { data: term } = await admin.from('terms').select('id, instructor_id, date, slot_index').eq('id', termId).single();
   if (!term) return { error: 'Termin nije pronađen.' };
+  const termDatum = String(term.date).slice(0, 10);
+  // Dete u to vreme već ima čas bez instruktora (ili nastavak dužeg) – ne pravi se drugi čas preko njega.
+  const zahtevPoruka = await deteImaZahtev(admin, clientId, termDatum, term.slot_index);
+  if (zahtevPoruka) return { error: `${zahtevPoruka} Dodelite instruktora tom času (Dodeli) ili ga premestite.` };
+  // Duži čas zauzima i sledeće vreme – instruktor tada mora biti slobodan.
+  const { data: ostali } = await admin.from('predavanja').select('term_type:term_types(trajanje_minuta)').eq('term_id', termId);
+  const slotova = Math.max(
+    slotsNeeded(await trajanjeVrste(admin, termTypeId)),
+    ...(ostali ?? []).map((p) => {
+      const tt = p.term_type as { trajanje_minuta?: number } | { trajanje_minuta?: number }[] | null;
+      return slotsNeeded(Array.isArray(tt) ? tt[0]?.trajanje_minuta : tt?.trajanje_minuta);
+    })
+  );
+  const nastavakGreska = await instruktorSlobodanZaNastavak(admin, term.instructor_id, termDatum, term.slot_index, slotova, [termId]);
+  if (nastavakGreska) return { error: nastavakGreska };
   const check = await termMozeNovoPredavanje(termId);
   if (!check.ok) {
     return {
@@ -1628,6 +1771,17 @@ export async function moveTermAsAdmin(
   if (term.classroom_id && drugi.some((t) => t.classroom_id === term.classroom_id)) {
     return { error: 'Ova učionica je već zauzeta u ciljnom slotu.' };
   }
+  // Časovi bez instruktora (i nastavci dužih) drže svoju učionicu i svoje dete.
+  const rez = await ucionicaRezervisana(admin, dateStr, slot, term.classroom_id);
+  if (rez) return { error: rez };
+  const { data: decaTermina } = await admin.from('predavanja').select('client_id').eq('term_id', termId);
+  for (const p of decaTermina ?? []) {
+    const poruka = await deteImaZahtev(admin, p.client_id as string, dateStr, slot);
+    if (poruka) return { error: poruka };
+  }
+  // Duži čas nosi svoj nastavak – instruktor mora biti slobodan i u sledećem vremenu.
+  const nastavakGreska = await instruktorSlobodanZaNastavak(admin, term.instructor_id, dateStr, slot, await slotovaTermina(admin, termId), svoji);
+  if (nastavakGreska) return { error: nastavakGreska };
 
   if (nastavci.length > 0) await admin.from('terms').delete().in('id', nastavci);
   const { error } = await admin.from('terms').update({ date: dateStr, slot_index: slot }).eq('id', termId);
@@ -1746,6 +1900,8 @@ export async function updateTermClassroomAsAdmin(termId: string, classroomId: st
   const { data: term } = await admin.from('terms').select('classroom_id, date, slot_index').eq('id', termId).single();
   if (!term) return { error: 'Termin nije pronađen.' };
   if (term.classroom_id === classroomId) return {};
+  const rez = await ucionicaRezervisana(admin, String(term.date).slice(0, 10), term.slot_index, classroomId);
+  if (rez) return { error: rez };
 
   const { data: conflict } = await admin
     .from('terms')
@@ -1788,18 +1944,126 @@ export async function swapTermsAsAdmin(
 ): Promise<{ error?: string }> {
   const { admin, error: authErr, actor } = await requireAdmin();
   if (authErr || !admin) return { error: authErr ?? 'Niste ovlašćeni.' };
+  if (termAId === termBId) return { error: 'Izaberite dva različita termina.' };
 
-  const { error } = await admin.rpc('swap_terms', {
-    p_term_a: termAId,
-    p_term_b: termBId,
-    p_swap_termin: opts.termin,
-    p_swap_instruktor: opts.instruktor,
-    p_swap_ucionica: opts.ucionica,
-    p_swap_klijent: opts.klijent,
+  type Red = {
+    id: string;
+    date: string;
+    slot_index: number;
+    instructor_id: string;
+    classroom_id: string | null;
+    napomena: string | null;
+    nastavak_of_term_id: string | null;
+    term_category_id: string | null;
+    predavanja: { id: string; client_id: string }[] | null;
+    potential_clients: { id: string }[] | null;
+  };
+  const { data: redovi } = await admin
+    .from('terms')
+    .select('id, date, slot_index, instructor_id, classroom_id, napomena, nastavak_of_term_id, term_category_id, predavanja(id, client_id), potential_clients(id)')
+    .in('id', [termAId, termBId]);
+  const a = ((redovi ?? []) as Red[]).find((t) => t.id === termAId);
+  const b = ((redovi ?? []) as Red[]).find((t) => t.id === termBId);
+  if (!a || !b) return { error: 'Termin nije pronađen.' };
+  const jeNastavak = (t: Red) => !!t.nastavak_of_term_id && t.napomena === AUTO_SPILLOVER_NAPOMENA && (t.predavanja ?? []).length === 0;
+  if (jeNastavak(a) || jeNastavak(b)) return { error: 'Automatski blok (nastavak dužeg časa) nije moguće menjati – izaberite pravi termin.' };
+
+  const pa = a.predavanja ?? [];
+  const pb = b.predavanja ?? [];
+  const ta = a.potential_clients ?? [];
+  const tb = b.potential_clients ?? [];
+  // Klijent = cela radionica. Jedno dete ↔ jedno dete ide kroz bazu (swap_terms); grupa i deca sa
+  // testiranja se menjaju ovde – zajedno sa vrstom termina (grupni/testiranje), da sve ostane ispravno.
+  const klijentUBazi = opts.klijent && pa.length === 1 && pb.length === 1 && ta.length === 0 && tb.length === 0;
+  const klijentOvde = opts.klijent && !klijentUBazi;
+  if (klijentOvde) {
+    if (pa.length + pb.length + ta.length + tb.length === 0) return { error: 'U ovim terminima nema dece za zamenu.' };
+    const decaA = new Set(pa.map((p) => p.client_id));
+    if (pb.some((p) => decaA.has(p.client_id))) return { error: 'Isto dete je u oba termina – zamena dece nije moguća.' };
+  }
+
+  // Časovi bez instruktora drže svoju učionicu i svoje dete – nova mesta ne smeju da ih preklope.
+  const novo = (ovaj: Red, drugi: Red) => ({
+    datum: String(opts.termin ? drugi.date : ovaj.date).slice(0, 10),
+    slot: opts.termin ? drugi.slot_index : ovaj.slot_index,
+    soba: opts.ucionica ? drugi.classroom_id : ovaj.classroom_id,
+    instruktor: opts.instruktor ? drugi.instructor_id : ovaj.instructor_id,
+    deca: (opts.klijent ? drugi.predavanja ?? [] : ovaj.predavanja ?? []).map((p) => p.client_id),
+    slotovaOd: opts.klijent ? drugi.id : ovaj.id,
   });
-  if (error) return { error: error.message || 'Greška pri zameni termina.' };
+  const svojiNastavci = async (termId: string) =>
+    ((await admin.from('terms').select('id').eq('nastavak_of_term_id', termId).eq('napomena', AUTO_SPILLOVER_NAPOMENA)).data ?? []).map(
+      (n) => n.id as string
+    );
+  const [nastavciA, nastavciB] = await Promise.all([svojiNastavci(a.id), svojiNastavci(b.id)]);
+  const oba = [a.id, b.id, ...nastavciA, ...nastavciB];
+  for (const [ovaj, n] of [
+    [a, novo(a, b)],
+    [b, novo(b, a)],
+  ] as const) {
+    const seli = n.datum !== String(ovaj.date).slice(0, 10) || n.slot !== ovaj.slot_index;
+    if (seli || n.soba !== ovaj.classroom_id) {
+      const rez = await ucionicaRezervisana(admin, n.datum, n.slot, n.soba);
+      if (rez) return { error: rez };
+    }
+    if (seli || opts.klijent) {
+      for (const clientId of n.deca) {
+        const poruka = await deteImaZahtev(admin, clientId, n.datum, n.slot);
+        if (poruka) return { error: poruka };
+      }
+    }
+    if (seli || opts.klijent || opts.instruktor) {
+      const nastavakGreska = await instruktorSlobodanZaNastavak(admin, n.instruktor, n.datum, n.slot, await slotovaTermina(admin, n.slotovaOd), oba);
+      if (nastavakGreska) return { error: nastavakGreska };
+    }
+  }
 
-  await Promise.all([syncSpilloverForTerm(admin, termAId), syncSpilloverForTerm(admin, termBId)]);
+  // Automatski nastavci oba termina se sklanjaju (ne smetaju zameni) i posle prave ponovo uz čas.
+  if (nastavciA.length + nastavciB.length > 0) await admin.from('terms').delete().in('id', [...nastavciA, ...nastavciB]);
+  const sinhronizuj = () => Promise.all([syncSpilloverForTerm(admin, termAId), syncSpilloverForTerm(admin, termBId)]);
+
+  if (opts.termin || opts.instruktor || opts.ucionica || klijentUBazi) {
+    const { error } = await admin.rpc('swap_terms', {
+      p_term_a: termAId,
+      p_term_b: termBId,
+      p_swap_termin: opts.termin,
+      p_swap_instruktor: opts.instruktor,
+      p_swap_ucionica: opts.ucionica,
+      p_swap_klijent: klijentUBazi,
+    });
+    if (error) {
+      await sinhronizuj();
+      return { error: error.message || 'Greška pri zameni termina.' };
+    }
+  }
+
+  if (klijentOvde) {
+    const premesti = async (tabela: 'predavanja' | 'potential_clients', ids: string[], uTermin: string) =>
+      ids.length > 0 ? (await admin.from(tabela).update({ term_id: uTermin }).in('id', ids)).error : null;
+    const greska =
+      (await premesti('predavanja', pa.map((p) => p.id), b.id)) ??
+      (await premesti('predavanja', pb.map((p) => p.id), a.id)) ??
+      (await premesti('potential_clients', ta.map((p) => p.id), b.id)) ??
+      (await premesti('potential_clients', tb.map((p) => p.id), a.id));
+    if (greska) {
+      await sinhronizuj();
+      return { error: greska.message };
+    }
+    if (a.term_category_id !== b.term_category_id) {
+      await admin.from('terms').update({ term_category_id: b.term_category_id }).eq('id', a.id);
+      await admin.from('terms').update({ term_category_id: a.term_category_id }).eq('id', b.id);
+    }
+    // Deca i (novi) instruktori – kao pri dodavanju deteta u termin (veza već može postojati).
+    const { data: posle } = await admin.from('terms').select('instructor_id, predavanja(client_id)').in('id', [a.id, b.id]);
+    for (const t of posle ?? []) {
+      for (const p of (t.predavanja ?? []) as { client_id: string }[]) {
+        await admin.from('instructor_clients').insert({ instructor_id: t.instructor_id, client_id: p.client_id, placeno_casova: 0 });
+      }
+    }
+    if (ta.length + tb.length > 0) revalidatePath('/admin/testiranja');
+  }
+
+  await sinhronizuj();
 
   revalidatePath('/admin/kalendar');
   if (actor) {
@@ -1832,16 +2096,34 @@ export async function copyTermToSlotsAsAdmin(
 
   const { data: source } = await admin
     .from('terms')
-    .select('instructor_id, classroom_id, term_category_id, napomena, nastavak_of_term_id')
+    .select('instructor_id, classroom_id, term_category_id, napomena, nastavak_of_term_id, term_category:term_categories(is_testing)')
     .eq('id', sourceTermId)
     .single();
   if (!source) return { failed: targets.map((t) => ({ ...t, error: 'Termin za kopiranje nije pronađen.' })) };
+  const kat = source.term_category as { is_testing?: boolean } | { is_testing?: boolean }[] | null;
+  const testiranje = (Array.isArray(kat) ? kat[0]?.is_testing : kat?.is_testing) === true;
   if (source.nastavak_of_term_id) {
     return { failed: targets.map((t) => ({ ...t, error: 'Automatski blok (nastavak dužeg časa) nije moguće kopirati.' })) };
   }
 
   let preds: { client_id: string; term_type_id: string | null; komentar: string | null }[] = [];
-  if (fields.klijent) {
+  // Testiranje: kopiraju se deca sa testiranja (nova, zakazana) – nisu klijenti, pa nemaju časove.
+  let decaTestiranja: { ime: string; prezime: string | null; ime_roditelja: string | null; mobilni_roditelja: string | null; razred: string | null }[] = [];
+  if (fields.klijent && testiranje) {
+    const { data } = await admin
+      .from('potential_clients')
+      .select('ime, prezime, ime_roditelja, mobilni_roditelja, razred, status')
+      .eq('term_id', sourceTermId);
+    decaTestiranja = (data ?? [])
+      .filter((p) => p.status !== 'otkazan')
+      .map((p) => ({
+        ime: (p.ime as string) ?? '',
+        prezime: (p.prezime as string | null) ?? null,
+        ime_roditelja: (p.ime_roditelja as string | null) ?? null,
+        mobilni_roditelja: (p.mobilni_roditelja as string | null) ?? null,
+        razred: (p.razred as string | null) ?? null,
+      }));
+  } else if (fields.klijent) {
     const { data } = await admin.from('predavanja').select('client_id, term_type_id, komentar').eq('term_id', sourceTermId);
     preds = data ?? [];
     if (preds.length === 0) {
@@ -1877,7 +2159,8 @@ export async function copyTermToSlotsAsAdmin(
           .eq('date', t.date)
           .eq('slot_index', t.slotIndex)
           .maybeSingle();
-        useClassroom = !roomConflict;
+        // Rezervisana za čas bez instruktora (ili njegov nastavak) – kopija ide bez nje.
+        useClassroom = !roomConflict && !(await ucionicaRezervisana(admin, t.date.slice(0, 10), t.slotIndex, source.classroom_id));
       }
       const classroomId = useClassroom ? source.classroom_id : null;
 
@@ -1895,13 +2178,30 @@ export async function copyTermToSlotsAsAdmin(
           const res = await createPredavanjeAsAdmin(createRes.termId, p.client_id, false, false, p.komentar, effectiveTermType(p));
           if (res.error) return { ...t, error: res.error };
         }
+        if (decaTestiranja.length > 0) {
+          const { error: pcErr } = await admin
+            .from('potential_clients')
+            .insert(decaTestiranja.map((d) => ({ ...d, term_id: createRes.termId, status: 'zakazan' })));
+          if (pcErr) return { ...t, error: pcErr.message };
+        }
         return { ...t, error: null as string | null };
+      }
+      if (testiranje) {
+        return { ...t, error: 'Testiranje mora imati instruktora – instruktor je u to vreme zauzet (ili nije čekiran).' };
       }
 
       // Bez instruktora (nije čekiran ili je zauzet) – zahtev, ne pravi termin. Nema šta da se
       // kopira bez bar jednog klijenta.
       if (preds.length === 0) {
         return { ...t, error: 'Instruktor je zauzet (ili nije čekiran), a bez klijenta nema šta da se kopira kao zahtev.' };
+      }
+      for (const p of preds) {
+        const greska = await proveriMestoZahteva(
+          admin,
+          { clientId: p.client_id, classroomId, termTypeId: effectiveTermType(p), datum: t.date.slice(0, 10), slot: t.slotIndex, seli: true },
+          {}
+        );
+        if (greska) return { ...t, error: greska };
       }
       const { error } = await admin.from('zahtevi_za_cas').insert(
         preds.map((p) => ({
