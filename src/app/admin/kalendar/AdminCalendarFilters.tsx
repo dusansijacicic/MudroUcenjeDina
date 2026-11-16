@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { searchVariants, variantsMatch } from '@/lib/search';
+import { VRSTA_BEZ, VRSTA_TESTIRANJE } from '@/lib/kalendar-filter';
 
 type Option = { id: string; ime?: string; prezime?: string; naziv?: string };
 
@@ -127,13 +128,17 @@ function KlijentFilter({
   );
 }
 
+type Filteri = { instructor: string | null; classroom: string | null; client: string | null; vrsta: string | null };
+
 export default function AdminCalendarFilters({
   instructors,
   classrooms,
   clients,
+  termTypes,
   filterInstructorId,
   filterClassroomId,
   filterClientId,
+  filterVrsta,
   currentView,
   currentParams,
   shownStartOfWeek,
@@ -144,9 +149,13 @@ export default function AdminCalendarFilters({
   instructors: Option[];
   classrooms: Option[];
   clients: Option[];
+  /** Vrste časa za filter „Vrsta“. */
+  termTypes: Option[];
   filterInstructorId: string | null;
   filterClassroomId: string | null;
   filterClientId: string | null;
+  /** id vrste časa, VRSTA_TESTIRANJE ili VRSTA_BEZ. */
+  filterVrsta: string | null;
   currentView: string;
   currentParams: { week?: string; day?: string; month?: string; view?: string };
   /** Trenutno prikazani period – prelazak Dan/Nedelja/Mesec ostaje na njemu umesto da skoči na danas. */
@@ -157,38 +166,28 @@ export default function AdminCalendarFilters({
 }) {
   const router = useRouter();
 
-  const buildParams = (overrides: Record<string, string | null | undefined>) => {
+  const trenutni: Filteri = { instructor: filterInstructorId, classroom: filterClassroomId, client: filterClientId, vrsta: filterVrsta };
+  // Menja se jedan filter, ostali (i prikazani period) ostaju.
+  const promeni = (izmena: Partial<Filteri>) => {
     const p = new URLSearchParams();
     if (currentParams.view) p.set('view', currentParams.view);
     if (currentParams.week) p.set('week', currentParams.week);
     if (currentParams.day) p.set('day', currentParams.day);
     if (currentParams.month) p.set('month', currentParams.month);
-    if (overrides.instructor !== undefined && overrides.instructor) p.set('instructor', overrides.instructor);
-    if (overrides.classroom !== undefined && overrides.classroom) p.set('classroom', overrides.classroom);
-    if (overrides.client !== undefined && overrides.client) p.set('client', overrides.client);
-    return p.toString();
-  };
-
-  const handleInstructorChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const v = e.target.value || null;
-    const q = buildParams({ instructor: v, classroom: filterClassroomId ?? undefined, client: filterClientId ?? undefined });
-    router.push(q ? `${base}?${q}` : base);
-  };
-  const handleClassroomChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const v = e.target.value || null;
-    const q = buildParams({ instructor: filterInstructorId ?? undefined, classroom: v, client: filterClientId ?? undefined });
-    router.push(q ? `${base}?${q}` : base);
-  };
-  const handleClientSelect = (v: string | null) => {
-    const q = buildParams({ instructor: filterInstructorId ?? undefined, classroom: filterClassroomId ?? undefined, client: v });
+    for (const [k, v] of Object.entries({ ...trenutni, ...izmena })) if (v) p.set(k, v);
+    const q = p.toString();
     router.push(q ? `${base}?${q}` : base);
   };
 
-  const filterQs = [
-    filterInstructorId ? `instructor=${filterInstructorId}` : '',
-    filterClassroomId ? `classroom=${filterClassroomId}` : '',
-    filterClientId ? `client=${filterClientId}` : '',
-  ].filter(Boolean).join('&');
+  const handleInstructorChange = (e: React.ChangeEvent<HTMLSelectElement>) => promeni({ instructor: e.target.value || null });
+  const handleClassroomChange = (e: React.ChangeEvent<HTMLSelectElement>) => promeni({ classroom: e.target.value || null });
+  const handleVrstaChange = (e: React.ChangeEvent<HTMLSelectElement>) => promeni({ vrsta: e.target.value || null });
+  const handleClientSelect = (v: string | null) => promeni({ client: v });
+
+  const filterQs = Object.entries(trenutni)
+    .filter(([, v]) => !!v)
+    .map(([k, v]) => `${k}=${encodeURIComponent(v as string)}`)
+    .join('&');
   const getMonday = (iso: string) => {
     const x = new Date(iso + 'T12:00:00');
     const dow = x.getDay();
@@ -223,6 +222,21 @@ export default function AdminCalendarFilters({
           {classrooms.map((c) => (
             <option key={c.id} value={c.id}>{c.naziv ?? c.ime}</option>
           ))}
+        </select>
+        <label className="text-stone-500 ml-1">Vrsta:</label>
+        <select
+          value={filterVrsta ?? ''}
+          onChange={handleVrstaChange}
+          className={`rounded-lg border px-3 py-1.5 min-w-[140px] ${
+            filterVrsta ? 'border-violet-300 bg-violet-50 text-violet-900' : 'border-stone-200 bg-white text-stone-800'
+          }`}
+        >
+          <option value="">Sve</option>
+          {termTypes.map((t) => (
+            <option key={t.id} value={t.id}>{t.naziv}</option>
+          ))}
+          <option value={VRSTA_TESTIRANJE}>Testiranje</option>
+          <option value={VRSTA_BEZ}>Bez vrste</option>
         </select>
       </div>
     </div>

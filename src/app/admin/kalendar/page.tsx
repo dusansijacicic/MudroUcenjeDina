@@ -7,6 +7,8 @@ import AdminCalendarView, { type AdminTerm, type OtkazaniTerminCalendar } from '
 import AdminCalendarFilters from './AdminCalendarFilters';
 import AdminFromDashboardToast from '@/components/AdminFromDashboardToast';
 import { getMaxTerminaPoSlotu } from '@/lib/settings';
+import { AUTO_SPILLOVER_NAPOMENA } from '@/lib/constants';
+import { VRSTA_BEZ, VRSTA_TESTIRANJE } from '@/lib/kalendar-filter';
 import { getTermTypes, getTermCategories, type PlaceniPaket } from '@/app/admin/actions';
 import { mapBlokada, mapNedeljna, nedeljneUDatume, type BlokiranTermin } from '@/lib/blokade';
 import { NAREDNIH_NEDELJA_COOKIE, parseNarednihNedelja } from '@/lib/kalendar-nedelje';
@@ -14,7 +16,7 @@ import { NAREDNIH_NEDELJA_COOKIE, parseNarednihNedelja } from '@/lib/kalendar-ne
 export default async function AdminKalendarPage({
   searchParams,
 }: {
-  searchParams: Promise<{ week?: string; day?: string; month?: string; view?: string; instructor?: string; classroom?: string; client?: string; from?: string; fokus?: string; slot?: string }>;
+  searchParams: Promise<{ week?: string; day?: string; month?: string; view?: string; instructor?: string; classroom?: string; client?: string; vrsta?: string; from?: string; fokus?: string; slot?: string }>;
 }) {
   const { user } = await getAuthedUser();
   if (!user) redirect('/login');
@@ -27,6 +29,8 @@ export default async function AdminKalendarPage({
   const filterInstructorId = params.instructor?.trim() || null;
   const filterClassroomId = params.classroom?.trim() || null;
   const filterClientId = params.client?.trim() || null;
+  // Filter po vrsti časa: id vrste, "testiranje" ili "bez" (časovi bez vrste).
+  const filterVrsta = params.vrsta?.trim() || null;
   const view = (params.view === 'dan' || params.view === 'mesec') ? params.view : 'nedelja';
   // Danas po beogradskom vremenu (server radi u UTC – posle ponoći u ponedeljak bi inače pokazao prošlu nedelju).
   const todayStr = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Belgrade' });
@@ -166,10 +170,29 @@ export default async function AdminKalendarPage({
 
   if (filterInstructorId) terms = terms.filter((t) => t.instructor_id === filterInstructorId);
   if (filterClassroomId) terms = terms.filter((t) => t.classroom?.id === filterClassroomId);
-  if (filterClientId) terms = terms.filter((t) => (t.predavanja ?? []).some((p) => (p.client as { id?: string })?.id === filterClientId));
+  // Filter po detetu i/ili vrsti časa – važi za isto dete (dete te vrste). Automatski nastavak dužeg
+  // časa ostaje uz svoj čas.
+  const vrstaOk = (termTypeId: string | null | undefined) =>
+    !filterVrsta || (filterVrsta === VRSTA_BEZ ? !termTypeId : termTypeId === filterVrsta);
+  const jeNastavak = (t: AdminTerm) => !!t.nastavak_of_term_id && t.napomena === AUTO_SPILLOVER_NAPOMENA && (t.predavanja ?? []).length === 0;
+  if (filterClientId || filterVrsta) {
+    const prolazi = (t: AdminTerm) => {
+      const testiranje = t.term_category?.is_testing === true;
+      if (filterVrsta === VRSTA_TESTIRANJE) return testiranje && !filterClientId;
+      if (testiranje) return false;
+      return (t.predavanja ?? []).some(
+        (p) => (!filterClientId || (p.client_id ?? (p.client as { id?: string } | null)?.id) === filterClientId) && vrstaOk(p.term_type_id)
+      );
+    };
+    const prosli = new Set(terms.filter((t) => !jeNastavak(t) && prolazi(t)).map((t) => t.id));
+    terms = terms.filter((t) => prosli.has(t.id) || (jeNastavak(t) && prosli.has(t.nastavak_of_term_id as string)));
+  }
+  const brojCasova = terms.filter((t) => !jeNastavak(t)).length;
 
-  // Filter po detetu važi i za zahteve (termini bez instruktora) i otkazane termine tog deteta.
-  const pendingZahtevi = (zahteviRaw ?? []).filter((z) => !filterClientId || z.client_id === filterClientId).map((z) => {
+  // Filteri po detetu i vrsti važe i za zahteve (termini bez instruktora) i otkazane termine.
+  const pendingZahtevi = (zahteviRaw ?? [])
+    .filter((z) => (!filterClientId || z.client_id === filterClientId) && filterVrsta !== VRSTA_TESTIRANJE && vrstaOk(z.term_type_id as string | null))
+    .map((z) => {
     const client = Array.isArray(z.client) ? z.client[0] : z.client;
     const termType = Array.isArray(z.term_type) ? z.term_type[0] : z.term_type;
     const classroom = Array.isArray(z.classroom) ? z.classroom[0] : z.classroom;
@@ -187,8 +210,14 @@ export default async function AdminKalendarPage({
     };
   });
 
+  // Otkazani pamte samo naziv vrste (ne id) – upoređuje se po nazivu.
+  const nazivFilterVrste =
+    filterVrsta && filterVrsta !== VRSTA_TESTIRANJE && filterVrsta !== VRSTA_BEZ ? (termTypes.find((tt) => tt.id === filterVrsta)?.naziv ?? '') : null;
+  const otkazaniVrstaOk = (naziv: string | null | undefined) =>
+    !filterVrsta ||
+    (filterVrsta === VRSTA_TESTIRANJE ? naziv?.toLowerCase() === 'testiranje' : filterVrsta === VRSTA_BEZ ? !naziv : naziv === nazivFilterVrste);
   const otkazaniTermini = ((otkazaniRaw ?? []) as (OtkazaniTerminCalendar & { client_id?: string | null })[]).filter(
-    (ot) => !filterClientId || ot.client_id === filterClientId
+    (ot) => (!filterClientId || ot.client_id === filterClientId) && otkazaniVrstaOk(ot.term_type_naziv)
   );
 
   const base = '/admin/kalendar';
@@ -197,6 +226,7 @@ export default async function AdminKalendarPage({
   if (filterInstructorId) filterParams.set('instructor', filterInstructorId);
   if (filterClassroomId) filterParams.set('classroom', filterClassroomId);
   if (filterClientId) filterParams.set('client', filterClientId);
+  if (filterVrsta) filterParams.set('vrsta', filterVrsta);
   const filterQuery = filterParams.size > 0 ? `&${filterParams.toString()}` : '';
 
   const filterClient = filterClientId ? (clientsList ?? []).find((c) => c.id === filterClientId) : null;
@@ -230,6 +260,8 @@ export default async function AdminKalendarPage({
             instructors={activeInstructors.map((i) => ({ id: i.id, ime: i.ime ?? '', prezime: i.prezime ?? '' }))}
             classrooms={(classroomsList ?? []).map((c) => ({ id: c.id, naziv: c.naziv ?? '' }))}
             clients={(clientsList ?? []).map((c) => ({ id: c.id, ime: c.ime ?? '', prezime: c.prezime ?? '' }))}
+            termTypes={termTypes.map((tt) => ({ id: tt.id, naziv: tt.naziv }))}
+            filterVrsta={filterVrsta}
             filterInstructorId={filterInstructorId}
             filterClassroomId={filterClassroomId}
             filterClientId={filterClientId}
@@ -250,7 +282,7 @@ export default async function AdminKalendarPage({
           <span>
             Prikazani su samo termini za: <strong>{filterClient ? `${filterClient.ime} ${filterClient.prezime}` : 'izabrano dete'}</strong>
             {' – '}
-            {periodLabel}: <strong className="tabular-nums">{terms.length}</strong> zakazano
+            {periodLabel}: <strong className="tabular-nums">{brojCasova}</strong> zakazano
             {pendingZahtevi.length > 0 && (
               <>
                 , <strong className="tabular-nums">{pendingZahtevi.length}</strong> bez instruktora

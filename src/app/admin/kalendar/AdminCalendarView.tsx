@@ -2414,11 +2414,7 @@ function TermCardVisual({ term, rowOffset = 0 }: { term: AdminTerm; rowOffset?: 
           <span className="hidden lg:inline">{instructorName}</span>
         </span>
         <span className="flex min-w-0 items-baseline gap-1">
-          {isTesting ? (
-            <span className="shrink-0 font-bold uppercase tracking-wide text-red-600">Testiranje</span>
-          ) : (
-            vrsta && <span className="truncate text-stone-500">{vrsta}</span>
-          )}
+          {!isTesting && vrsta && <span className="truncate text-stone-500">{vrsta}</span>}
           {classroomName && (
             <span className="shrink-0 rounded bg-stone-100 px-1 font-medium text-stone-600">
               {/* Uzak ekran: samo broj učionice ("2-Sperry" → "uč. 2"). */}
@@ -2428,6 +2424,10 @@ function TermCardVisual({ term, rowOffset = 0 }: { term: AdminTerm; rowOffset?: 
           )}
         </span>
       </div>
+      {/* Svoj red preko cele širine – u uskoj koloni (tablet) ga instruktor i učionica ne mogu istisnuti. */}
+      {isTesting && (
+        <div className="bg-red-50 px-2 py-0.5 text-[10px] font-bold uppercase leading-tight tracking-wide text-red-700">Testiranje</div>
+      )}
       {isTesting ? (
         potentialClients.length === 0 ? (
           <span className="block px-2 pb-1 text-xs text-stone-400">Nema prijavljenih</span>

@@ -198,6 +198,11 @@ export default async function AdminUputstvoPage({ searchParams }: { searchParams
             <li>Ljubičasta traka pokazuje koliko časova ima u prikazanom periodu; <Ui>Ceo mesec za ovo dete →</Ui> otvara mesečni pregled.</li>
             <li>Filter ostaje i kad idete na sledeću/prethodnu nedelju ili menjate Dan/Nedelja/Mesec. Uklanja se klikom na <Ui>✕</Ui>.</li>
             <li>Isto rade i <Ui>Instruktor:</Ui> i <Ui>Učionica:</Ui> – mogu se kombinovati sa detetom.</li>
+            <li>
+              <Ui>Vrsta:</Ui> samo časovi te vrste (i narandžasti bez instruktora i otkazani te vrste). Na kraju liste su{' '}
+              <Ui>Testiranje</Ui> (samo termini testiranja) i <Ui>Bez vrste</Ui>. Sa izabranim detetom pokazuje časove tog deteta te
+              vrste.
+            </li>
           </Koraci>
         </Sekcija>
 
