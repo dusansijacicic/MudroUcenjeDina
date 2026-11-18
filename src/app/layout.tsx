@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Toaster } from "react-hot-toast";
+import MerenjeBrzine from "@/components/MerenjeBrzine";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -70,6 +71,8 @@ export default function RootLayout({
       >
         {children}
         <Toaster position="top-center" toastOptions={{ duration: 5000 }} />
+        {/* Vreme učitavanja stranica i trajanje operacija → Vercel Logs („[merenje]“). */}
+        <MerenjeBrzine />
       </body>
     </html>
   );
