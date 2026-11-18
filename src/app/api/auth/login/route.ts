@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Nedostaju env promenljive za Supabase.' }, { status: 500 });
   }
 
-  let response = NextResponse.json({
+  const response = NextResponse.json({
     ok: true as const,
     next: '/api/auth/resolve-role',
   });

@@ -50,7 +50,7 @@ export default async function UcenikPage() {
     .order('created_at', { ascending: false })
     .limit(20);
 
-  const now = Date.now();
+  const now = new Date().getTime();
   const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
   const recentConfirmedOrChanged = (zahteviRaw ?? []).filter(
     (z: { status: string; resolved_at?: string | null }) =>

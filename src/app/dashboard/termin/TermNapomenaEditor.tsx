@@ -1,24 +1,26 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { updateTermNapomenaAsInstructor } from '@/app/dashboard/termin/actions';
 
-export default function TermNapomenaEditor({
-  termId,
-  initialNapomena,
-}: {
+type TermNapomenaProps = {
   termId: string;
   initialNapomena: string | null;
-}) {
+};
+
+export default function TermNapomenaEditor(props: TermNapomenaProps) {
+  return <TermNapomenaForm key={`${props.termId}:${props.initialNapomena ?? ''}`} {...props} />;
+}
+
+function TermNapomenaForm({
+  termId,
+  initialNapomena,
+}: TermNapomenaProps) {
   const router = useRouter();
   const [text, setText] = useState(initialNapomena ?? '');
   const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    setText(initialNapomena ?? '');
-  }, [initialNapomena]);
 
   const save = async () => {
     setLoading(true);
