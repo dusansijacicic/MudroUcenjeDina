@@ -12,7 +12,7 @@ const DAY_NAMES = ['Pon', 'Uto', 'Sre', 'Čet', 'Pet', 'Sub', 'Ned'];
 
 export type RawTerm = {
   id: string;
-  instructor_id: string;
+  instructor_id: string | null;
   date: string;
   slot_index: number;
   classroom?: { id: string; naziv: string; color?: string } | null;
@@ -49,6 +49,8 @@ function isAutoSpillover(term: RawTerm): boolean {
 /** Tuđi termin (samo prikaz, bez linka) – boja instruktora i učionice za color coding */
 export type OtherTerm = RawTerm & {
   request_id?: string;
+  request_continuation?: boolean;
+  cancelled?: boolean;
   instructor?: { ime: string; prezime: string; color?: string } | null;
   classroom?: { id: string; naziv: string; color?: string } | null;
 };
@@ -307,7 +309,7 @@ function CalendarViewInner({
   );
 }
 
-function OtherTermCard({ term }: { term: OtherTerm }) {
+function OtherTermCard({ term, own = false }: { term: OtherTerm; own?: boolean }) {
   const isTesting = term.term_category?.is_testing === true;
   const textColor = term.instructor?.color ?? '#475569';
   const names = isTesting
@@ -317,27 +319,29 @@ function OtherTermCard({ term }: { term: OtherTerm }) {
   const termTypeName = Array.isArray(tt) ? tt[0]?.naziv : tt?.naziv;
   return (
     <div
-      className={`rounded-lg border-2 p-2 text-xs ${isAutoSpillover(term) ? 'border-dashed' : ''}`}
+      className={`rounded-lg border-2 p-2 text-xs ${isAutoSpillover(term) || term.request_id ? 'border-dashed' : ''} ${term.cancelled ? 'opacity-60' : ''}`}
       style={{
-        borderColor: term.classroom?.color ?? '#e5e7eb',
+        borderColor: term.cancelled ? '#a8a29e' : term.classroom?.color ?? (term.request_id ? '#fbbf24' : '#e5e7eb'),
         backgroundColor: term.classroom?.color ? hexWithAlpha(term.classroom.color, 0.08) : 'rgba(0,0,0,0.03)',
         color: textColor,
       }}
     >
-      {term.classroom && <span className="block text-stone-500 font-medium">{term.classroom.naziv}</span>}
+      <span className="block text-stone-500 font-medium">{term.classroom?.naziv ?? 'Bez učionice'}</span>
       <span className="font-medium">
-        {term.instructor ? `${term.instructor.ime} ${term.instructor.prezime}` : 'Čeka instruktora'}
+        {term.instructor ? `${term.instructor.ime} ${term.instructor.prezime}` : own ? 'Vaš termin' : 'Bez instruktora'}
       </span>
+      {term.cancelled && <span className="block font-semibold text-stone-600">Otkazano</span>}
       {isAutoSpillover(term) ? (
         <span className="block text-stone-500">↳ Nastavak dužeg časa</span>
       ) : (
         <>
           {isTesting && <span className="block font-bold text-red-600">Testiranje</span>}
-          {!isTesting && termTypeName && <span className="block font-semibold">{termTypeName}</span>}
+          {term.request_continuation && <span className="block text-stone-500">↳ Nastavak dužeg časa</span>}
+          {!isTesting && <span className="block font-semibold">{termTypeName ?? 'Bez vrste'}</span>}
           <TruncatedNameList
             items={sortByFullName(names, (item) => item.name)}
             keyFn={(item) => item.id}
-            renderItem={(item) => <span className="block text-[13px] font-semibold text-stone-900 break-words">{item.name}</span>}
+            renderItem={(item) => <span className={`block text-[13px] font-semibold text-stone-900 break-words ${term.cancelled ? 'line-through' : ''}`}>{item.name}</span>}
           />
           {isTesting && names.length === 0 && <span className="block text-stone-500">Nema prijavljenih</span>}
           {term.napomena && <span className="block mt-1 text-stone-500 whitespace-pre-wrap">{term.napomena}</span>}
@@ -433,12 +437,12 @@ function CellContent({
           onDragStart={() => setDraggedTermId(term.id)}
           onDragEnd={() => setDraggedTermId(null)}
         >
-          {term.classroom && (
-            <span className="text-xs block mb-0.5 text-stone-500">
+          <span className="text-xs block mb-0.5 text-stone-500">
+            {term.classroom ? <>
               <span className="lg:hidden">{shortClassroomLabel(term.classroom.naziv)}</span>
               <span className="hidden lg:inline">{term.classroom.naziv}</span>
-            </span>
-          )}
+            </> : 'Bez učionice'}
+          </span>
           {isTesting ? (
             <div>
               <span className="text-xs block mb-1 font-bold uppercase tracking-wide text-red-600">
@@ -816,6 +820,7 @@ function CalendarMonth({
   monthStart,
   terms,
   otherTerms,
+  instructorId,
   instructorColor,
   linkSuffix,
 }: {
@@ -885,7 +890,9 @@ function CalendarMonth({
             if (!date) {
               return <div key={`e-${i}`} className="min-h-[80px] border-b border-r border-stone-100 bg-stone-50/50" />;
             }
-            const dayTerms = [...terms, ...otherTerms].filter((t) => t.date === date);
+            const dayTerms = [...terms, ...otherTerms]
+              .filter((t) => t.date === date)
+              .sort((a, b) => a.slot_index - b.slot_index);
             const slotCount = dayTerms.length;
             return (
               <div
@@ -911,6 +918,22 @@ function CalendarMonth({
                     +
                   </Link>
                 )}
+                <div className="mt-1 space-y-2">
+                  {dayTerms.map((term) => {
+                    const own = term.instructor_id === instructorId;
+                    return (
+                      <div key={term.id}>
+                        <Link
+                          href={own && !(term as OtherTerm).cancelled ? `/dashboard/termin/${isAutoSpillover(term) ? term.nastavak_of_term_id : term.id}` : `/dashboard?view=dan&day=${date}${linkSuffix}`}
+                          className="text-xs font-medium text-amber-700 hover:underline"
+                        >
+                          {TIME_SLOTS[term.slot_index]}
+                        </Link>
+                        <OtherTermCard term={term} own={own} />
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             );
           })}

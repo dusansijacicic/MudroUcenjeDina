@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
-import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { readAllCalendarRows } from '@/lib/calendar-rows';
 import { getDashboardInstructor } from '@/lib/dashboard';
 import { getOdrzanoPoVrstamaZaPredavaca } from '@/app/admin/actions';
 import { mapBlokada, mapNedeljna, nedeljneUDatume } from '@/lib/blokade';
@@ -9,7 +9,7 @@ import AddTermButton from './AddTermButton';
 import CalendarFilters from './CalendarFilters';
 import DashboardErrorToast from './DashboardErrorToast';
 import DashboardDebugLog from './DashboardDebugLog';
-import { DEFAULT_INSTRUCTOR_COLOR } from '@/lib/constants';
+import { DEFAULT_INSTRUCTOR_COLOR, TIME_SLOTS, slotsNeeded } from '@/lib/constants';
 import type { RawTerm, OtherTerm } from './CalendarView';
 
 // Svaki instruktor vidi ceo raspored, uključujući časove koji čekaju instruktora.
@@ -37,8 +37,8 @@ export default async function DashboardPage({
   const view = (params.view === 'dan' || params.view === 'mesec') ? params.view : 'nedelja';
   const clientFilterId = params.client?.trim() || null;
 
-  const today = new Date();
-  const todayStr = today.toISOString().slice(0, 10);
+  const todayStr = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Belgrade' });
+  const today = new Date(todayStr + 'T12:00:00');
   const getMonday = (d: Date) => {
     const x = new Date(d);
     const dow = x.getDay();
@@ -76,7 +76,7 @@ export default async function DashboardPage({
 
   type TermRow = {
     id: string;
-    instructor_id: string;
+    instructor_id: string | null;
     date: string;
     slot_index: number;
     classroom_id?: string | null;
@@ -89,54 +89,72 @@ export default async function DashboardPage({
     potential_clients?: RawTerm['potential_clients'];
   };
 
-  let allTermsRaw: TermRow[] | null = null;
-  let classroomsRaw: { id: string; naziv: string | null; color: string | null }[] = [];
-  let serviceRoleUsed = false;
-  let calendarSupabase;
-  try {
-    calendarSupabase = createAdminClient();
-    serviceRoleUsed = true;
-  } catch (err) {
-    console.error('[dashboard] Service role unavailable; reading calendar through RLS.', err);
-    calendarSupabase = await createClient();
-  }
-  const [termsRes, classRes, requestsRes] = await Promise.all([
-    calendarSupabase.from('terms').select('id, instructor_id, date, slot_index, classroom_id, napomena, nastavak_of_term_id, instructor:instructors(id, ime, prezime, color), classroom:classrooms(id, naziv, color), term_category:term_categories(id, naziv, is_testing), predavanja(*, client:clients(id, ime, prezime), term_type:term_types(naziv)), potential_clients(id, ime, prezime, ime_roditelja, mobilni_roditelja, status)').gte('date', dateFrom).lte('date', dateTo).order('date').order('slot_index'),
+  // Isti pristup kao admin: raspored se čita bez ograničenja po instruktoru, klijentu ili učionici.
+  // Korisnički RLS nije rezerva: on može da sakrije zahteve nepovezane dece i drugih instruktora.
+  const calendarSupabase = createAdminClient();
+  const [allTermsRaw, classRes, requestsRaw, cancelledRaw] = await Promise.all([
+    readAllCalendarRows('Termini nisu učitani', (from, to) => calendarSupabase.from('terms').select('id, instructor_id, date, slot_index, classroom_id, napomena, nastavak_of_term_id, instructor:instructors(id, ime, prezime, color), classroom:classrooms(id, naziv, color), term_category:term_categories(id, naziv, is_testing), predavanja(*, client:clients(id, ime, prezime), term_type:term_types(naziv)), potential_clients(id, ime, prezime, ime_roditelja, mobilni_roditelja, status)').gte('date', dateFrom).lte('date', dateTo).order('date').order('slot_index').order('id').range(from, to)),
     calendarSupabase.from('classrooms').select('id, naziv, color').order('naziv'),
-    calendarSupabase.from('zahtevi_za_cas').select('id, client_id, requested_date, requested_slot_index, client:clients(id, ime, prezime), term_type:term_types(naziv), classroom:classrooms(id, naziv, color)').eq('status', 'pending').gte('requested_date', dateFrom).lte('requested_date', dateTo),
+    readAllCalendarRows('Časovi na čekanju nisu učitani', (from, to) => calendarSupabase.from('zahtevi_za_cas').select('id, client_id, requested_date, requested_slot_index, client:clients(id, ime, prezime), term_type:term_types(naziv, trajanje_minuta), classroom:classrooms(id, naziv, color)').eq('status', 'pending').gte('requested_date', dateFrom).lte('requested_date', dateTo).order('requested_date').order('requested_slot_index').order('id').range(from, to)),
+    readAllCalendarRows('Otkazani časovi nisu učitani', (from, to) => calendarSupabase.from('otkazani_termini').select('id, client_id, client_ime, client_prezime, instructor_id, instructor_ime, instructor_prezime, classroom_naziv, term_date, slot_index, term_type_naziv, placeno').gte('term_date', dateFrom).lte('term_date', dateTo).order('term_date').order('slot_index').order('id').range(from, to)),
   ]);
-  if (termsRes.error) throw new Error(`Kalendar nije učitan: ${termsRes.error.message}`);
-  if (requestsRes.error) throw new Error(`Časovi na čekanju nisu učitani: ${requestsRes.error.message}`);
-  allTermsRaw = (termsRes.data ?? []) as TermRow[];
-  classroomsRaw = classRes.data ?? [];
+  const classroomsRaw = classRes.data ?? [];
 
   const one = <T,>(value: T | T[] | null): T | null => Array.isArray(value) ? value[0] ?? null : value;
-  const pendingTerms: OtherTerm[] = (requestsRes.data ?? []).map((r) => ({
-    id: `zahtev-${r.id}`,
-    request_id: r.id,
-    instructor_id: '',
-    date: r.requested_date,
-    slot_index: r.requested_slot_index,
-    classroom: one(r.classroom) ?? null,
+  const pendingTerms: OtherTerm[] = requestsRaw.flatMap((r) => {
+    const termType = one(r.term_type);
+    const term: OtherTerm = {
+      id: `zahtev-${r.id}`,
+      request_id: r.id,
+      instructor_id: null,
+      date: r.requested_date,
+      slot_index: r.requested_slot_index,
+      classroom: one(r.classroom),
+      predavanja: [{
+        id: r.id,
+        term_id: '',
+        client_id: r.client_id,
+        odrzano: false,
+        placeno: false,
+        komentar: null,
+        client: one(r.client),
+        term_type: termType,
+      }],
+    };
+    const occupiedSlots = Math.min(slotsNeeded(termType?.trajanje_minuta), TIME_SLOTS.length - term.slot_index);
+    return Array.from({ length: occupiedSlots }, (_, offset) => ({
+      ...term,
+      id: offset === 0 ? term.id : `${term.id}-nastavak-${offset}`,
+      slot_index: term.slot_index + offset,
+      request_continuation: offset > 0,
+    }));
+  });
+  const cancelledTerms: OtherTerm[] = cancelledRaw.map((r) => ({
+    id: `otkazan-${r.id}`,
+    cancelled: true,
+    instructor_id: r.instructor_id,
+    instructor: r.instructor_ime ? { ime: r.instructor_ime, prezime: r.instructor_prezime ?? '' } : null,
+    date: r.term_date,
+    slot_index: r.slot_index,
+    classroom: r.classroom_naziv ? { id: '', naziv: r.classroom_naziv } : null,
     predavanja: [{
       id: r.id,
       term_id: '',
-      client_id: r.client_id,
+      client_id: r.client_id ?? '',
       odrzano: false,
-      placeno: false,
+      placeno: r.placeno,
       komentar: null,
-      client: one(r.client),
-      term_type: one(r.term_type),
+      client: { id: r.client_id ?? '', ime: r.client_ime, prezime: r.client_prezime ?? '' },
+      term_type: r.term_type_naziv ? { naziv: r.term_type_naziv } : null,
     }],
   }));
 
-  // Blokade – čitaju se sa korisnikovim klijentom (RLS dozvoljava svim ulogovanima). Predavač vidi
+  // Predavač vidi
   // blokade za SVE i SVOJE (za datum i stalne nedeljne) – tuđe blokade instruktora ga se ne tiču.
   // select('*') radi i pre migracije 048; bez 044/048 data je null → nema blokada.
-  const userSupabase = await createClient();
   const [{ data: blockedRaw }, { data: nedeljneRaw }] = await Promise.all([
-    userSupabase.from('blokirani_termini').select('*').gte('date', dateFrom).lte('date', dateTo),
-    userSupabase.from('instruktor_nedeljne_blokade').select('*').eq('instructor_id', instructorId),
+    calendarSupabase.from('blokirani_termini').select('*').gte('date', dateFrom).lte('date', dateTo),
+    calendarSupabase.from('instruktor_nedeljne_blokade').select('*').eq('instructor_id', instructorId),
   ]);
   const blockedSlots = [
     ...(blockedRaw ?? []).map(mapBlokada),
@@ -188,7 +206,7 @@ export default async function DashboardPage({
         instructor: inst ? { ime: inst.ime, prezime: inst.prezime, color: inst.color ?? undefined } : null,
         classroom: room ? { id: room.id, naziv: room.naziv, color: room.color ?? undefined } : null,
       };
-    }).concat(pendingTerms);
+    }).concat(pendingTerms, cancelledTerms);
 
   let terms: RawTerm[] = myTerms.map((t) => {
     const { classroom: room } = norm(t);
@@ -229,9 +247,9 @@ export default async function DashboardPage({
       }
     }
   }
-  for (const t of pendingTerms) {
+  for (const t of [...pendingTerms, ...cancelledTerms]) {
     const client = t.predavanja?.[0]?.client;
-    if (client) clientMap.set(client.id, client);
+    if (client?.id) clientMap.set(client.id, client);
   }
   const clients = Array.from(clientMap.values()).sort(
     (a, b) => (a.prezime || '').localeCompare(b.prezime || '') || (a.ime || '').localeCompare(b.ime || '')
@@ -263,7 +281,7 @@ export default async function DashboardPage({
     <div className="animate-in">
       <DashboardDebugLog
         payload={{
-          serviceRoleUsed,
+          serviceRoleUsed: true,
           allTermsLength: allTerms.length,
           myTermsLength: myTerms.length,
           otherTermsLength: otherTerms.length,
@@ -272,13 +290,8 @@ export default async function DashboardPage({
         }}
       />
       <DashboardErrorToast />
-      {!serviceRoleUsed && (
-        <div className="mb-4 rounded-xl border-2 border-amber-300 bg-amber-50 p-4 text-amber-900 text-sm" role="alert">
-          Neki podaci kalendara možda nisu dostupni. Obratite se administratoru da proveri pristup podacima.
-        </div>
-      )}
       <div className="flex items-center justify-between mb-4 flex-wrap gap-2 animate-in-delay-1">
-        <h1 className="text-xl font-semibold text-stone-800">Kalendar</h1>
+        <h1 className="text-xl font-semibold text-stone-800">Kalendar (svi termini)</h1>
         <div className="flex items-center gap-2 flex-wrap">
           <CalendarFilters
             clients={clients ?? []}

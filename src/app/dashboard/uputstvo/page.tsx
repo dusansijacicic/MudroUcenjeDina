@@ -61,7 +61,7 @@ export default async function PredavacUputstvoPage({ searchParams }: { searchPar
 
         <Sekcija prikazi={prikazi} id="kalendar" naslov="Kalendar">
           <Koraci>
-            <li>Na kalendaru su termini SVIH instruktora, testiranja i časovi koji čekaju instruktora. Birajte dan, nedelju ili mesec; strelicama menjate period.</li>
+            <li>Na kalendaru su SVI termini kao kod admina: sa instruktorom i bez njega, sa učionicom i bez nje, testiranja, nastavci dužih časova i otkazani časovi. Birajte dan, nedelju ili mesec; strelicama menjate period.</li>
             <li>Polje <Ui>Klijent:</Ui> gore – izaberite dete da vidite samo njegove časove (<Ui>Svi</Ui> = sva deca).</li>
             <li><Ui>+ Zakaži termin</Ui> ili <Ui>Novi termin</Ui> otvara zakazivanje za bilo kog instruktora i klijenta.</li>
             <li>Klik na vaš termin otvara ga – deca u terminu, održano, plaćeno, komentar. Tuđe termine vidite kao pregled.</li>

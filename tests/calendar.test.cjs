@@ -38,6 +38,7 @@ function database(respond) {
         eq(key, value) { q.filters.push([key, value]); return chain; },
         gte() { return chain; }, lte() { return chain; }, order() { return chain; },
         in() { return chain; },
+        range(from, to) { q.range = [from, to]; return chain; },
         single() { return chain; }, maybeSingle() { return chain; },
         then(onFulfilled, onRejected) { return Promise.resolve(respond(q)).then(onFulfilled, onRejected); },
       };
@@ -188,6 +189,12 @@ test('own continuation does not hide other teachers in the same slot', () => {
   assert.match(html, /Nastavak dužeg časa/);
 });
 
+test('cancelled own classes in the month link to the day instead of a deleted term', () => {
+  const html = renderCalendar({ view: 'mesec', otherTerms: [{ ...otherTerm, id: 'otkazan-own', instructor_id: 'teacher-a', cancelled: true }] });
+  assert.match(html, /Otkazano/);
+  assert.doesNotMatch(html, /href="\/dashboard\/termin\/otkazan-own"/);
+});
+
 test('personal block allows scheduling for others; global block prevents it', () => {
   const block = { date: '2026-11-23', slot_index: 0, napomena: null };
   const booking = /href="\/dashboard\/termin\/novi\?date=2026-11-23&amp;slot=0"/;
@@ -207,43 +214,100 @@ function findComponent(node, component) {
   return null;
 }
 
-for (const serviceRoleAvailable of [true, false]) {
-  test(`dashboard loads everyone's terms, testing details and pending classes (service role: ${serviceRoleAvailable})`, async (t) => {
-    const pending = { id: 'pending', client_id: 'waiting-child', requested_date: '2026-11-23', requested_slot_index: 2, client: { id: 'waiting-child', ime: 'Čeka', prezime: 'Čas' } };
-    const db = database((q) => {
-      let data = [];
-      if (q.table === 'terms') data = [
-        { ...otherTerm, instructor_id: 'teacher-a', id: 'own-term' },
-        { ...otherTerm, term_category: { id: 'testing', naziv: 'Testiranje', is_testing: true }, potential_clients: [{ id: 'candidate', ime: 'Test' }] },
-      ];
-      if (q.table === 'zahtevi_za_cas') data = [pending];
-      if (q.table === 'terms') data = data.filter((row) => q.filters.every(([key, value]) => row[key] === value));
-      return { data, error: null };
-    });
-    const CalendarStub = () => null;
-    t.mock.method(console, 'error', () => {});
-    const page = loadSource('src/app/dashboard/page.tsx', {
-      '@/lib/supabase/admin': { createAdminClient: () => { if (!serviceRoleAvailable) throw new Error('No service role'); return db; } },
-      '@/lib/supabase/server': { createClient: async () => db },
-      '@/lib/dashboard': { getDashboardInstructor: async () => ({ instructor: { id: 'teacher-a' } }) },
-      '@/app/admin/actions': { getOdrzanoPoVrstamaZaPredavaca: async () => [] },
-      '@/lib/blokade': { mapBlokada: (r) => r, mapNedeljna: (r) => r, nedeljneUDatume: () => [] },
-      '@/lib/constants': constants,
-      'next/navigation': { redirect: (path) => { throw new Error(`redirect:${path}`); } },
-      './CalendarView': CalendarStub,
-      './AddTermButton': () => null, './CalendarFilters': () => null,
-      './DashboardErrorToast': () => null, './DashboardDebugLog': () => null,
-    }).default;
-    const tree = await page({ searchParams: Promise.resolve({ week: '2026-11-23' }) });
-    const calendar = findComponent(tree, CalendarStub).props;
-    assert.equal(calendar.terms.length, 1);
-    assert.equal(calendar.otherTerms.length, 2);
-    assert.equal(calendar.otherTerms[0].term_category.is_testing, true);
-    assert.equal(calendar.otherTerms[0].potential_clients[0].id, 'candidate');
-    assert.equal(calendar.otherTerms[1].request_id, 'pending');
-    assert.equal(calendar.otherTerms[1].predavanja[0].client.id, 'waiting-child');
+const calendarRows = loadSource('src/lib/calendar-rows.ts');
+function dashboardFor(db, serviceRoleAvailable = true) {
+  const CalendarStub = () => null;
+  const page = loadSource('src/app/dashboard/page.tsx', {
+    '@/lib/supabase/admin': { createAdminClient: () => { if (!serviceRoleAvailable) throw new Error('No service role'); return db; } },
+    '@/lib/calendar-rows': calendarRows,
+    '@/lib/dashboard': { getDashboardInstructor: async () => ({ instructor: { id: 'teacher-a' } }) },
+    '@/app/admin/actions': { getOdrzanoPoVrstamaZaPredavaca: async () => [] },
+    '@/lib/blokade': { mapBlokada: (r) => r, mapNedeljna: (r) => r, nedeljneUDatume: () => [] },
+    '@/lib/constants': constants,
+    'next/navigation': { redirect: (path) => { throw new Error(`redirect:${path}`); } },
+    './CalendarView': CalendarStub,
+    './AddTermButton': () => null, './CalendarFilters': () => null,
+    './DashboardErrorToast': () => null, './DashboardDebugLog': () => null,
+  }).default;
+  return { page, CalendarStub };
+}
+
+test('dashboard includes unassigned classes, missing rooms/types, continuations and cancellations', async () => {
+  const pending = { id: 'pending', status: 'pending', client_id: 'waiting-child', requested_date: '2026-11-23', requested_slot_index: 2, client: { id: 'waiting-child', ime: 'Čeka', prezime: 'Čas' }, classroom: null, term_type: null };
+  const db = database((q) => {
+    let data = [];
+    if (q.table === 'terms') data = [
+      { ...otherTerm, instructor_id: 'teacher-a', id: 'own-term', classroom: null },
+      { ...otherTerm, term_category: { id: 'testing', naziv: 'Testiranje', is_testing: true }, potential_clients: [{ id: 'candidate', ime: 'Test' }] },
+    ];
+    if (q.table === 'zahtevi_za_cas') data = [pending, {
+      ...pending, id: 'long-pending', requested_slot_index: 4,
+      term_type: [{ naziv: 'Duži čas', trajanje_minuta: 90 }], classroom: [{ id: 'room', naziv: 'Učionica 1' }],
+    }];
+    if (q.table === 'otkazani_termini') data = [{ id: 'cancelled', client_id: null, client_ime: 'Otkazani', term_date: '2026-11-23', slot_index: 6 }];
+    data = data.filter((row) => q.filters.every(([key, value]) => row[key] === value));
+    return { data, error: null };
+  });
+  const { page, CalendarStub } = dashboardFor(db);
+  const tree = await page({ searchParams: Promise.resolve({ week: '2026-11-23' }) });
+  const calendar = findComponent(tree, CalendarStub).props;
+  assert.equal(calendar.terms.length, 1);
+  assert.equal(calendar.otherTerms.length, 5);
+  assert.equal(calendar.otherTerms[0].term_category.is_testing, true);
+  assert.equal(calendar.otherTerms[0].potential_clients[0].id, 'candidate');
+  assert.equal(calendar.otherTerms[1].request_id, 'pending');
+  assert.equal(calendar.otherTerms[1].classroom, null);
+  assert.equal(calendar.otherTerms[1].predavanja[0].term_type, null);
+  assert.equal(calendar.otherTerms[1].predavanja[0].client.id, 'waiting-child');
+  const continuation = calendar.otherTerms.find((term) => term.request_continuation);
+  assert.equal(continuation.slot_index, 5);
+  assert.equal(continuation.classroom.naziv, 'Učionica 1');
+  assert.equal(calendar.otherTerms.at(-1).cancelled, true);
+});
+
+test('dashboard never substitutes a calendar restricted by instructor RLS', async () => {
+  const db = database(() => { throw new Error('Should not read a partial calendar'); });
+  const { page } = dashboardFor(db, false);
+  await assert.rejects(() => page({ searchParams: Promise.resolve({}) }), /No service role/);
+  assert.equal(db.queries.length, 0);
+});
+
+for (const view of ['dan', 'nedelja', 'mesec']) {
+  test(`${view}: appointments remain visible with any combination of missing instructor, room and type`, () => {
+    const unassigned = {
+      ...otherTerm, id: 'request', request_id: 'request', instructor_id: null, instructor: null,
+      classroom: null, predavanja: [{ id: 'child', client: { ime: 'Bez', prezime: 'Dodele' } }],
+    };
+    const html = renderCalendar({ view, otherTerms: [
+      otherTerm, unassigned,
+      { ...otherTerm, id: 'assigned-with-room', classroom: { id: 'room-2', naziv: 'Učionica 2' } },
+      { ...unassigned, id: 'with-room', classroom: { id: 'room', naziv: 'Učionica 1' } },
+      { ...unassigned, id: 'continuation', request_continuation: true, slot_index: 1 },
+      { ...unassigned, id: 'cancelled', request_id: undefined, cancelled: true, slot_index: 2 },
+    ] });
+    for (const label of ['Drugi Profesor', 'Bez instruktora', 'Bez učionice', 'Bez vrste', 'Bez Dodele', 'Učionica 1', 'Učionica 2', 'Nastavak dužeg časa', 'Otkazano']) {
+      assert.ok(html.includes(label), `Missing ${label}`);
+    }
   });
 }
+
+test('a calendar with over 1000 entries loads every row', async () => {
+  const all = Array.from({ length: 1005 }, (_, id) => ({ id }));
+  const calls = [];
+  const rows = await calendarRows.readAllCalendarRows('Calendar', async (from, to) => {
+    calls.push([from, to]);
+    return { data: all.slice(from, to + 1), error: null };
+  });
+  assert.deepEqual(rows, all);
+  assert.equal(calls.length, 3);
+});
+
+test('calendar read errors cannot silently hide a page of appointments', async () => {
+  await assert.rejects(
+    () => calendarRows.readAllCalendarRows('Calendar', async () => ({ data: null, error: { message: 'Database unavailable' } })),
+    /Database unavailable/
+  );
+});
 
 for (const mode of ['admin', 'instructor']) {
   test(`${mode} booking form offers all teachers and clients and returns to the correct calendar`, async () => {

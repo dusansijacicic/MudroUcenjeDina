@@ -10,7 +10,7 @@ export type DashboardDebugPayload = {
   instructorId: string;
   termsSummary: Array<{
     id: string;
-    instructor_id: string;
+    instructor_id: string | null;
     date: string;
     slot_index: number;
     instructor_name: string | null;

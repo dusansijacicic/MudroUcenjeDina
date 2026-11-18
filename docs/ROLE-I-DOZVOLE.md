@@ -22,7 +22,7 @@ Aplikacija ima **3 osnovne uloge**. Dozvole su definisane ispod.
   - može da zakaže individualni ili grupni čas, testiranje, nastavak i ponavljanje, kao i čas bez instruktora;
   - **upravlja samo svojim postojećim terminima**; izmena i brisanje tuđih termina ostaju pravo admina;
   - bira **time slot** pod uslovom da je **slobodan**.
-- U **dnevnom, nedeljnom i mesečnom kalendaru** vidi **sve zakazane časove** (uključujući od drugih predavača), **testiranja sa prijavljenom decom** i **časove koji čekaju instruktora**. Tuđe termine vidi kao pregled.
+- U **dnevnom, nedeljnom i mesečnom kalendaru** vidi **sve zakazane časove** (uključujući od drugih predavača), **testiranja sa prijavljenom decom**, **časove koji čekaju instruktora i njihove nastavke** i **otkazane časove**, kao admin. Termin se prikazuje i kada nema instruktora, učionicu ili vrstu časa, bez obzira na to kome je dete povezano. Tuđe termine vidi kao pregled.
 - Lična blokada sprečava zakazivanje tom instruktoru; u isto vreme može da zakaže drugom slobodnom instruktoru. Globalna blokada važi za sve.
 
 ---
