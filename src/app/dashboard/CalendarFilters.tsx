@@ -62,19 +62,19 @@ export default function CalendarFilters({
   return (
     <div className="flex flex-wrap items-center gap-2">
       <div className="flex rounded-lg border border-stone-200 bg-white p-0.5 text-sm">
-        <Link
+        <Link prefetch={false}
           href={`${base}?view=dan&day=${today}${clientFilterId ? `&client=${clientFilterId}` : ''}${currentParams.instructor ? `&instructor=${currentParams.instructor}` : ''}`}
           className={`px-3 py-1.5 rounded-md ${currentView === 'dan' ? 'bg-amber-100 text-amber-800' : 'text-stone-600 hover:bg-stone-100'}`}
         >
           Dan
         </Link>
-        <Link
+        <Link prefetch={false}
           href={`${base}${clientFilterId ? `?client=${clientFilterId}` : ''}${currentParams.instructor ? `${clientFilterId ? '&' : '?'}instructor=${currentParams.instructor}` : ''}`}
           className={`px-3 py-1.5 rounded-md ${currentView === 'nedelja' ? 'bg-amber-100 text-amber-800' : 'text-stone-600 hover:bg-stone-100'}`}
         >
           Nedelja
         </Link>
-        <Link
+        <Link prefetch={false}
           href={`${base}?view=mesec&month=${month}${clientFilterId ? `&client=${clientFilterId}` : ''}${currentParams.instructor ? `&instructor=${currentParams.instructor}` : ''}`}
           className={`px-3 py-1.5 rounded-md ${currentView === 'mesec' ? 'bg-amber-100 text-amber-800' : 'text-stone-600 hover:bg-stone-100'}`}
         >

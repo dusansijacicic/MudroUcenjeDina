@@ -76,8 +76,8 @@ function TermTypeRow({
         )}
         <p className="text-xs text-stone-500 mt-0.5">
           Program: {programNaziv ?? <span className="text-stone-400">nije izabran</span>}
-          {trajanjeMinuta != null && trajanjeMinuta !== 45 && (
-            <span className="ml-2 text-amber-700 font-medium">· {trajanjeMinuta} min (dvočas)</span>
+          {trajanjeMinuta != null && (
+            <span className="ml-2 text-amber-700 font-medium">· {trajanjeMinuta} min{trajanjeMinuta > 45 ? ' (duži čas)' : ''}</span>
           )}
         </p>
       </div>

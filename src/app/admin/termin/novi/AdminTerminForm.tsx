@@ -1,14 +1,15 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
-import { createTermAsAdmin, createPredavanjeAsAdmin, repeatTermAsAdmin, addPotentialClientsAsAdmin, getTakenForSlot, getTermsForNastavak, createBulkZahteviAsAdmin } from '../../actions';
+import { bookTermWithLessons, getTakenForSlot, getTermsForNastavak, createBulkZahteviAsAdmin } from '../../actions';
 import type { TermForNastavak } from '../../actions';
 import GrupniKlijentiPicker from '@/components/GrupniKlijentiPicker';
 import SingleKlijentPicker from '@/components/SingleKlijentPicker';
 import PotentialClientRowsInput, { emptyPotentialClientDraft, draftsToPayload, type PotentialClientDraft } from '../PotentialClientRowsInput';
 import { TIME_SLOTS } from '@/lib/constants';
+import CalendarProgress from '@/components/CalendarProgress';
 import { findDefaultCitanjeTermTypeId } from '@/lib/term-types';
 
 type Instructor = { id: string; ime: string; prezime: string };
@@ -66,6 +67,11 @@ export default function AdminTerminForm({
   helpHref?: string;
 }) {
   const router = useRouter();
+  const [navigating, startNavigation] = useTransition();
+  const [completed, setCompleted] = useState(false);
+  const submitting = useRef(false);
+  const booking = useRef<{ signature: string; id: string } | null>(null);
+  const initialSlotLoaded = useRef(true);
   const [date, setDate] = useState(defaultDate);
   const [slotIndex, setSlotIndex] = useState(defaultSlotIndex);
   const [takenInstructorIds, setTakenInstructorIds] = useState<string[]>(initialTakenInstructorIds);
@@ -116,6 +122,7 @@ export default function AdminTerminForm({
   const selectedParentTerm = nastavakTerms.find((t) => t.id === nastavakOfTermId) ?? null;
 
   useEffect(() => {
+    if (initialSlotLoaded.current) { initialSlotLoaded.current = false; return; }
     let cancelled = false;
     getTakenForSlot(date, slotIndex).then(({ takenInstructorIds: ti, takenClassroomIds: tc, blocked: b, blockedInstructorIds: bi }) => {
       if (!cancelled) {
@@ -163,6 +170,8 @@ export default function AdminTerminForm({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (submitting.current || completed) return;
+    submitting.current = true;
     setError('');
     setLoading(true);
     try {
@@ -203,72 +212,31 @@ export default function AdminTerminForm({
         } else {
           toast.success(`Kreirano ${slots.length} zahtev(a) bez instruktora.`);
         }
-        router.push(`${calendarHref}?view=nedelja&week=${monday}&fokus=${date}&slot=${slotIndex}`);
-        router.refresh();
+        setCompleted(true);
+        startNavigation(() => router.push(`${calendarHref}?view=nedelja&week=${monday}&fokus=${date}&slot=${slotIndex}`));
         return;
       }
 
-      const termResult = await createTermAsAdmin(
-        instructorId,
-        date,
-        slotIndex,
-        classroomId || null,
-        termCategoryId,
-        termNapomena.trim() || null,
-        isNastavakCat ? nastavakOfTermId : null
-      );
-      if (termResult.error || !termResult.termId) {
-        setError(termResult.error ?? 'Greška pri kreiranju termina.');
-        return;
-      }
-
-      const idsToAdd = (isNastavakCat || allowsMultipleClients) ? grupniIds : [clientId];
-      if (!isTestingCat) {
-        for (const cid of idsToAdd) {
-          const predavanjeResult = await createPredavanjeAsAdmin(
-            termResult.termId,
-            cid,
-            false,
-            false,
-            null,
-            (!isNastavakCat && termTypeId) ? termTypeId : null
-          );
-          if (predavanjeResult.error) { setError(predavanjeResult.error); return; }
-        }
-      } else {
-        const potentialPayload = draftsToPayload(potentialRows);
-        if (potentialPayload.length > 0) {
-          const pcResult = await addPotentialClientsAsAdmin(termResult.termId, potentialPayload);
-          if (pcResult.error) { setError(pcResult.error); return; }
-        }
-      }
-
-      // "Zakaži isti termin i narednih N dana" – samo za obične (ne testiranje/nastavak) termine.
-      // Jedan poziv serveru koji sam iznutra paralelizuje dane, umesto N poziva sa klijenta (svaki
-      // pun HTTP round-trip) – to je ono što je prethodno pravilo "visi na Kreiranje…".
-      const effectiveRepeatDays = !isTestingCat && !isNastavakCat ? repeatDays : 0;
-      if (effectiveRepeatDays > 0) {
-        const { failed } = await repeatTermAsAdmin(
-          instructorId,
-          date,
-          slotIndex,
-          classroomId || null,
-          termCategoryId,
-          termNapomena.trim() || null,
-          idsToAdd,
-          termTypeId || null,
-          effectiveRepeatDays
-        );
-        if (failed.length > 0) {
-          toast.error(`Nije zakazano za: ${failed.map((f) => `${f.date} (${f.error})`).join('; ')}`);
-        } else {
-          toast.success(`Zakazano i za narednih ${effectiveRepeatDays} dana.`);
-        }
-      }
-
-      router.push(`${calendarHref}?view=nedelja&week=${monday}&fokus=${date}&slot=${slotIndex}`);
-      router.refresh();
+      const payload = {
+        instructorId, date, slotIndex, classroomId: classroomId || null, termCategoryId,
+        napomena: termNapomena.trim() || null,
+        nastavakOfTermId: isNastavakCat ? nastavakOfTermId : null,
+        clientIds: isTestingCat ? [] : (isNastavakCat || allowsMultipleClients) ? grupniIds : [clientId],
+        termTypeId: !isNastavakCat && termTypeId ? termTypeId : null,
+        potentialClients: isTestingCat ? draftsToPayload(potentialRows) : [],
+        repeatDays: !isTestingCat && !isNastavakCat ? repeatDays : 0,
+      };
+      const signature = JSON.stringify(payload);
+      if (booking.current?.signature !== signature) booking.current = { signature, id: crypto.randomUUID() };
+      const result = await bookTermWithLessons({ ...payload, bookingId: booking.current.id });
+      if (result.error) { setError(result.error); return; }
+      if (result.failed?.length) toast.error(result.failed.map((f) => `${f.date}: ${f.error}`).join('; '));
+      setCompleted(true);
+      startNavigation(() => router.push(`${calendarHref}?view=nedelja&week=${monday}&fokus=${date}&slot=${slotIndex}`));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Nije stigla potvrda zakazivanja. Pokušajte ponovo.');
     } finally {
+      submitting.current = false;
       setLoading(false);
     }
   };
@@ -291,6 +259,7 @@ export default function AdminTerminForm({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
+      <CalendarProgress active={navigating} />
       <div className="flex justify-end">
         <a
           href={helpHref}
@@ -569,7 +538,7 @@ export default function AdminTerminForm({
       )}
       <button
         type="submit"
-        disabled={loading || cannotSubmit}
+        disabled={loading || navigating || completed || cannotSubmit}
         className="rounded-lg bg-amber-600 px-4 py-2 text-white font-medium hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed"
       >
         {loading

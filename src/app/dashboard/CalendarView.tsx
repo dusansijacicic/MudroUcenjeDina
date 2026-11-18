@@ -345,7 +345,7 @@ function OtherTermCard({ term, own = false }: { term: OtherTerm; own?: boolean }
           />
           {isTesting && names.length === 0 && <span className="block text-stone-500">Nema prijavljenih</span>}
           {term.napomena && <span className="block mt-1 text-stone-500 whitespace-pre-wrap">{term.napomena}</span>}
-          {term.request_id && <Link href="/dashboard/zahtevi" className="block mt-1 text-amber-700 hover:underline">Pregled zahteva →</Link>}
+          {term.request_id && <Link prefetch={false} href="/dashboard/zahtevi" className="block mt-1 text-amber-700 hover:underline">Pregled zahteva →</Link>}
         </>
       )}
     </div>
@@ -383,7 +383,7 @@ function CellContent({
     </div>
   ) : null;
   const NewTermLink = !blocked || blocked.ownOnly ? (
-    <Link
+    <Link prefetch={false}
       href={`/dashboard/termin/novi?date=${emptyDate}&slot=${emptySlot}`}
       className="block rounded-lg border border-dashed border-stone-200 p-2 text-sm text-stone-500 hover:border-stone-400 hover:bg-stone-50/50"
       onDragOver={(e) => { if (draggedTermId) e.preventDefault(); }}
@@ -407,7 +407,7 @@ function CellContent({
   if (isAutoSpillover(term)) {
     return (
       <div className="space-y-1.5 min-h-[52px]">
-        <Link
+        <Link prefetch={false}
           href={`/dashboard/termin/${term.nastavak_of_term_id}`}
           className="block rounded-lg border-2 border-dashed p-2 text-xs text-stone-500 bg-stone-50 hover:bg-stone-100"
           style={{ borderColor: term.classroom?.color ?? '#94a3b8' }}
@@ -429,7 +429,7 @@ function CellContent({
     <div className="space-y-1.5 min-h-[52px]">
       {BlockedBadge}
       {term && (
-        <Link
+        <Link prefetch={false}
           href={`/dashboard/termin/${term.id}`}
           className="block rounded-lg border-2 p-2 transition-opacity hover:opacity-90"
           style={{ borderColor, backgroundColor: bgLight }}
@@ -594,13 +594,13 @@ function CalendarWeek({
       <div className="flex items-center justify-between">
         <span className="font-medium text-stone-700">{rangeLabel}</span>
         <div className="flex gap-2">
-          <Link
+          <Link prefetch={false}
             href={`/dashboard?week=${prevWeek}${linkSuffix}`}
             className="px-3 py-1.5 rounded-lg bg-stone-200 text-stone-700 text-sm hover:bg-stone-300"
           >
             ← Prethodna
           </Link>
-          <Link
+          <Link prefetch={false}
             href={`/dashboard?week=${nextWeek}${linkSuffix}`}
             className="px-3 py-1.5 rounded-lg bg-stone-200 text-stone-700 text-sm hover:bg-stone-300"
           >
@@ -712,13 +712,13 @@ function CalendarDay({
       <div className="hidden md:flex items-center justify-between">
         <span className="font-medium text-stone-700 capitalize">{label}</span>
         <div className="flex gap-2">
-          <Link
+          <Link prefetch={false}
             href={`/dashboard?view=dan&day=${prevDay}${linkSuffix}`}
             className="px-3 py-1.5 rounded-lg bg-stone-200 text-stone-700 text-sm hover:bg-stone-300"
           >
             ← Prethodni
           </Link>
-          <Link
+          <Link prefetch={false}
             href={`/dashboard?view=dan&day=${nextDay}${linkSuffix}`}
             className="px-3 py-1.5 rounded-lg bg-stone-200 text-stone-700 text-sm hover:bg-stone-300"
           >
@@ -808,7 +808,7 @@ function DateStrip({
           selected ? 'bg-amber-600 text-white' : 'bg-stone-100 text-stone-700 hover:bg-stone-200'
         }`;
         if (makeHref) {
-          return <Link key={d} href={makeHref(d)} className={className}>{label}</Link>;
+          return <Link prefetch={false} key={d} href={makeHref(d)} className={className}>{label}</Link>;
         }
         return <button key={d} type="button" onClick={() => onSelect?.(d)} className={className}>{label}</button>;
       })}
@@ -863,13 +863,13 @@ function CalendarMonth({
       <div className="flex items-center justify-between">
         <span className="font-medium text-stone-700 capitalize">{monthLabel}</span>
         <div className="flex gap-2">
-          <Link
+          <Link prefetch={false}
             href={`/dashboard?view=mesec&month=${prevMonth}${linkSuffix}`}
             className="px-3 py-1.5 rounded-lg bg-stone-200 text-stone-700 text-sm hover:bg-stone-300"
           >
             ← Prethodni
           </Link>
-          <Link
+          <Link prefetch={false}
             href={`/dashboard?view=mesec&month=${nextMonth}${linkSuffix}`}
             className="px-3 py-1.5 rounded-lg bg-stone-200 text-stone-700 text-sm hover:bg-stone-300"
           >
@@ -903,7 +903,7 @@ function CalendarMonth({
                   {new Date(date + 'T12:00:00').getDate()}.
                 </div>
                 {slotCount > 0 ? (
-                  <Link
+                  <Link prefetch={false}
                     href={`/dashboard?view=dan&day=${date}${linkSuffix}`}
                     className="text-xs hover:underline"
                     style={{ color: instructorColor }}
@@ -911,7 +911,7 @@ function CalendarMonth({
                     {slotCount} termin(a)
                   </Link>
                 ) : (
-                  <Link
+                  <Link prefetch={false}
                     href={`/dashboard?view=dan&day=${date}${linkSuffix}`}
                     className="text-xs text-stone-400 hover:opacity-70"
                   >
@@ -923,7 +923,7 @@ function CalendarMonth({
                     const own = term.instructor_id === instructorId;
                     return (
                       <div key={term.id}>
-                        <Link
+                        <Link prefetch={false}
                           href={own && !(term as OtherTerm).cancelled ? `/dashboard/termin/${isAutoSpillover(term) ? term.nastavak_of_term_id : term.id}` : `/dashboard?view=dan&day=${date}${linkSuffix}`}
                           className="text-xs font-medium text-amber-700 hover:underline"
                         >

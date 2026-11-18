@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 
@@ -29,7 +29,18 @@ const FALLBACK_POLL_MS = 5 * 60_000;
  */
 export function useKalendarRealtime(paused: boolean, svezPodatak?: unknown) {
   const router = useRouter();
-  const state = useRef({ paused, pending: false, timer: undefined as number | undefined, hiddenAt: 0 });
+  const [refreshing, startRefresh] = useTransition();
+  const state = useRef({ paused, pending: false, refreshing: false, revision: 0, requestedRevision: 0, timer: undefined as number | undefined, hiddenAt: 0 });
+
+  const refresh = useCallback(() => {
+    const s = state.current;
+    if (s.refreshing) return;
+    window.clearTimeout(s.timer);
+    s.pending = false;
+    s.refreshing = true;
+    s.requestedRevision = s.revision;
+    startRefresh(() => router.refresh());
+  }, [router]);
 
   const flush = useCallback(() => {
     const s = state.current;
@@ -37,9 +48,8 @@ export function useKalendarRealtime(paused: boolean, svezPodatak?: unknown) {
     s.timer = undefined;
     // Samo ako zaista ima neosvežene izmene (tajmer i kraj moda ne smeju oba da osveže isto).
     if (!s.pending || s.paused || document.visibilityState !== 'visible') return;
-    s.pending = false;
-    router.refresh();
-  }, [router]);
+    refresh();
+  }, [refresh]);
 
   const zakazi = useCallback(
     (ms: number) => {
@@ -54,10 +64,21 @@ export function useKalendarRealtime(paused: boolean, svezPodatak?: unknown) {
   // (Mora biti pre efekta za `paused`, da se pri istom renderu prvo očisti, pa tek onda proveri.)
   useEffect(() => {
     const s = state.current;
-    s.pending = false;
+    const changedDuringRefresh = s.refreshing && s.revision > s.requestedRevision;
+    s.refreshing = false;
+    s.pending = changedDuringRefresh;
     window.clearTimeout(s.timer);
     s.timer = undefined;
-  }, [svezPodatak]);
+    if (s.pending && !s.paused) zakazi(POSLE_MODA_MS);
+  }, [svezPodatak, zakazi]);
+
+  useEffect(() => {
+    const s = state.current;
+    if (!refreshing) {
+      s.refreshing = false;
+      if (s.pending && !s.paused) zakazi(POSLE_MODA_MS);
+    }
+  }, [refreshing, zakazi]);
 
   useEffect(() => {
     state.current.paused = paused;
@@ -67,6 +88,7 @@ export function useKalendarRealtime(paused: boolean, svezPodatak?: unknown) {
   useEffect(() => {
     const s = state.current;
     const markDirty = () => {
+      s.revision += 1;
       s.pending = true;
       zakazi(DEBOUNCE_MS);
     };
@@ -83,7 +105,7 @@ export function useKalendarRealtime(paused: boolean, svezPodatak?: unknown) {
       if (s.pending) flush();
     };
     document.addEventListener('visibilitychange', onVisibility);
-    const poll = window.setInterval(markDirty, FALLBACK_POLL_MS);
+    const poll = window.setInterval(() => { s.refreshing = false; markDirty(); }, FALLBACK_POLL_MS);
 
     return () => {
       window.clearTimeout(s.timer);
@@ -92,4 +114,5 @@ export function useKalendarRealtime(paused: boolean, svezPodatak?: unknown) {
       supabase.removeChannel(channel);
     };
   }, [flush, zakazi]);
+  return refresh;
 }

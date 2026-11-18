@@ -153,8 +153,7 @@ export default async function AdminUputstvoPage({ searchParams }: { searchParams
             <li><Ui>+ Dodaj još termin u ovom slotu</Ui> ispod postojećih = još jedan paralelan termin u istom vremenu (drugi instruktor/učionica).</li>
             <li>
               Žuta traka na vrhu „termini bez instruktora/učionice“: klik na datum vodi pravo do tog časa. <Ui>✕</Ui> u ćošku datuma (uz
-              potvrdu) uklanja samo podsetnik za taj dan – časovi ostaju na kalendaru; nov čas bez instruktora tog dana ga vraća. Potrebna je
-              migracija 055.
+              potvrdu) uklanja samo podsetnik za taj dan – časovi ostaju na kalendaru; nov čas bez instruktora tog dana ga vraća.
             </li>
             <li><Ui>🖨 Print / PDF</Ui> = raspored spreman za štampu ili čuvanje kao PDF.</li>
             <li>Kalendar se sam osvežava kad bilo ko nešto promeni (drugi admin, predavač, nova uplata) – ne treba F5.</li>
@@ -337,7 +336,7 @@ export default async function AdminUputstvoPage({ searchParams }: { searchParams
             </li>
             <li>
               Dete na <strong>testiranju</strong>: klik znači da je to testiranje plaćeno (posle potvrde piše „💰 plaćeno“; ponovni klik
-              skida oznaku). Isto i dugmetom <Ui>Označi plaćeno</Ui> na stranici Testiranja i u terminu. Potrebna je migracija 054.
+              skida oznaku). Isto i dugmetom <Ui>Označi plaćeno</Ui> na stranici Testiranja i u terminu.
             </li>
             <li>Kliknite <Ui>✓ Potvrdi plaćeno (N)</Ui>.</li>
             <li>

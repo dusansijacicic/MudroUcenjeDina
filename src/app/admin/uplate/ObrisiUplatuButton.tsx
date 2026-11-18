@@ -22,7 +22,7 @@ export default function ObrisiUplatuButton({
   const [loading, setLoading] = useState(false);
 
   const handleClick = async () => {
-    if (!window.confirm(`Obrisati uplatu: ${opis}?\n\nDetetu se smanjuje broj plaćenih časova.`)) return;
+    if (!window.confirm(`Obrisati uplatu: ${opis}?\n\nBriše se evidencija novca. Oznake plaćenih časova na kalendaru ostaju.`)) return;
     setLoading(true);
     const res = await deleteUplata(id);
     setLoading(false);

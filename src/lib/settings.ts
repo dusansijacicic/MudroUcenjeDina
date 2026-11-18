@@ -1,12 +1,13 @@
 import { createClient } from '@/lib/supabase/server';
 import { jedanKlijentIzJoinaPouzdano } from '@/lib/term-categories';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { cache } from 'react';
 
 const DEFAULT_MAX_CASOVA_PO_TERMINU = 4;
 export const DEFAULT_MAX_TERMINA_PO_SLOTU = 4;
 
 /** Maksimalan broj časova (predavanja) u jednom terminu. Superadmin može da menja u /admin/podesavanja. */
-export async function getMaxCasovaPoTerminu(): Promise<number> {
+export const getMaxCasovaPoTerminu = cache(async function getMaxCasovaPoTerminu(): Promise<number> {
   const supabase = await createClient();
   const { data } = await supabase
     .from('app_settings')
@@ -16,10 +17,10 @@ export async function getMaxCasovaPoTerminu(): Promise<number> {
   if (!data?.value) return DEFAULT_MAX_CASOVA_PO_TERMINU;
   const n = parseInt(data.value, 10);
   return Number.isFinite(n) && n >= 1 ? n : DEFAULT_MAX_CASOVA_PO_TERMINU;
-}
+});
 
 /** Maksimalan broj termina (predavač+učionica) u jednom vremenskom slotu (npr. 10:00). Superadmin menja u /admin/podesavanja. */
-export async function getMaxTerminaPoSlotu(): Promise<number> {
+export const getMaxTerminaPoSlotu = cache(async function getMaxTerminaPoSlotu(): Promise<number> {
   const supabase = await createClient();
   const { data } = await supabase
     .from('app_settings')
@@ -29,7 +30,7 @@ export async function getMaxTerminaPoSlotu(): Promise<number> {
   if (!data?.value) return DEFAULT_MAX_TERMINA_PO_SLOTU;
   const n = parseInt(data.value, 10);
   return Number.isFinite(n) && n >= 1 ? n : DEFAULT_MAX_TERMINA_PO_SLOTU;
-}
+});
 
 /** true = u terminu najviše jedno dete (individualni); false = grupni do max_casova. */
 export async function jedanDeteMaksimalnoPoTerminu(

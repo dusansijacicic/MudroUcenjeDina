@@ -1,7 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useOptimistic, useTransition } from 'react';
+import CalendarProgress from '@/components/CalendarProgress';
 import { useRouter } from 'next/navigation';
 import { searchVariants, variantsMatch } from '@/lib/search';
 import { VRSTA_BEZ, VRSTA_TESTIRANJE } from '@/lib/kalendar-filter';
@@ -167,6 +168,8 @@ export default function AdminCalendarFilters({
   const router = useRouter();
 
   const trenutni: Filteri = { instructor: filterInstructorId, classroom: filterClassroomId, client: filterClientId, vrsta: filterVrsta };
+  const [optimisticFilters, setOptimisticFilters] = useOptimistic(trenutni);
+  const [navigating, startNavigation] = useTransition();
   // Menja se jedan filter, ostali (i prikazani period) ostaju.
   const promeni = (izmena: Partial<Filteri>) => {
     const p = new URLSearchParams();
@@ -176,7 +179,10 @@ export default function AdminCalendarFilters({
     if (currentParams.month) p.set('month', currentParams.month);
     for (const [k, v] of Object.entries({ ...trenutni, ...izmena })) if (v) p.set(k, v);
     const q = p.toString();
-    router.push(q ? `${base}?${q}` : base);
+    startNavigation(() => {
+      setOptimisticFilters({ ...trenutni, ...izmena });
+      router.push(q ? `${base}?${q}` : base);
+    });
   };
 
   const handleInstructorChange = (e: React.ChangeEvent<HTMLSelectElement>) => promeni({ instructor: e.target.value || null });
@@ -201,14 +207,15 @@ export default function AdminCalendarFilters({
 
   return (
     <div className="flex flex-wrap items-center gap-3">
+      <CalendarProgress active={navigating} />
       <div className="flex rounded-lg border border-stone-200 bg-white p-0.5 text-sm">
-        <Link href={`${base}?${q(`view=dan&day=${dayParam}`)}`} className={`px-3 py-1.5 rounded-md ${currentView === 'dan' ? 'bg-amber-100 text-amber-800' : 'text-stone-600 hover:bg-stone-100'}`}>Dan</Link>
-        <Link href={`${base}?${q(`view=nedelja&week=${weekStart}`)}`} className={`px-3 py-1.5 rounded-md ${currentView === 'nedelja' ? 'bg-amber-100 text-amber-800' : 'text-stone-600 hover:bg-stone-100'}`}>Nedelja</Link>
-        <Link href={`${base}?${q(`view=mesec&month=${monthParam}`)}`} className={`px-3 py-1.5 rounded-md ${currentView === 'mesec' ? 'bg-amber-100 text-amber-800' : 'text-stone-600 hover:bg-stone-100'}`}>Mesec</Link>
+        <Link prefetch={false} href={`${base}?${q(`view=dan&day=${dayParam}`)}`} className={`px-3 py-1.5 rounded-md ${currentView === 'dan' ? 'bg-amber-100 text-amber-800' : 'text-stone-600 hover:bg-stone-100'}`}>Dan</Link>
+        <Link prefetch={false} href={`${base}?${q(`view=nedelja&week=${weekStart}`)}`} className={`px-3 py-1.5 rounded-md ${currentView === 'nedelja' ? 'bg-amber-100 text-amber-800' : 'text-stone-600 hover:bg-stone-100'}`}>Nedelja</Link>
+        <Link prefetch={false} href={`${base}?${q(`view=mesec&month=${monthParam}`)}`} className={`px-3 py-1.5 rounded-md ${currentView === 'mesec' ? 'bg-amber-100 text-amber-800' : 'text-stone-600 hover:bg-stone-100'}`}>Mesec</Link>
       </div>
       <div className="flex flex-wrap items-center gap-2 text-sm">
         <label className="text-stone-500">Dete:</label>
-        <KlijentFilter clients={clients} value={filterClientId} onSelect={handleClientSelect} />
+        <KlijentFilter clients={clients} value={optimisticFilters.client} onSelect={handleClientSelect} />
         <label className="text-stone-500 ml-1">Instruktor:</label>
         <select value={filterInstructorId ?? ''} onChange={handleInstructorChange} className="rounded-lg border border-stone-200 bg-white px-3 py-1.5 text-stone-800 min-w-[140px]">
           <option value="">Svi</option>

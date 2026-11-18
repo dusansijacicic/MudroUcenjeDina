@@ -33,8 +33,11 @@ function database(respond) {
       const q = { table, filters: [], operation: 'select' };
       queries.push(q);
       const chain = {
-        select(fields) { q.fields = fields; return chain; },
+        select(fields, options) { q.fields = fields; q.options = options; return chain; },
         insert(values) { q.operation = 'insert'; q.values = values; return chain; },
+        delete() { q.operation = 'delete'; return chain; },
+        update(values) { q.operation = 'update'; q.values = values; return chain; },
+        or(filter) { q.orFilter = filter; return chain; },
         eq(key, value) { q.filters.push([key, value]); return chain; },
         gte() { return chain; }, lte() { return chain; }, order() { return chain; },
         in() { return chain; },
@@ -43,6 +46,11 @@ function database(respond) {
         then(onFulfilled, onRejected) { return Promise.resolve(respond(q)).then(onFulfilled, onRejected); },
       };
       return chain;
+    },
+    rpc(name, args) {
+      const q = { table: 'rpc', name, args };
+      queries.push(q);
+      return Promise.resolve(respond(q));
     },
   };
 }
@@ -63,6 +71,7 @@ const constants = loadSource('src/lib/constants.ts');
 function actionsFor(role, db, events = [], refreshed = []) {
   return loadSource('src/app/admin/actions.ts', {
     '@/lib/scheduling-access': { requireSchedulingAccess: accessFor(role, db) },
+    '@/lib/payment-starts': loadSource('src/lib/payment-starts.ts'),
     '@/lib/auth': {
       getAuthedUser: async () => ({ user: role === 'anonymous' ? null : { id: 'logged-in-user' } }),
       getIsAdmin: async () => role === 'admin',
@@ -80,7 +89,7 @@ function actionsFor(role, db, events = [], refreshed = []) {
     'next/cache': { revalidatePath: (path) => refreshed.push(path) },
     'next/navigation': { redirect: (path) => { throw new Error(`redirect:${path}`); } },
     '@/lib/stanje': {}, '@/lib/stanje-svih': {}, '@/lib/term-categories': {},
-    '@/lib/client-pol': {}, '@/lib/datum': {}, '@/lib/blokade': {},
+    '@/lib/client-pol': {}, '@/lib/datum': loadSource('src/lib/datum.ts'), '@/lib/blokade': {},
   });
 }
 
@@ -143,9 +152,10 @@ test('instructor can book testing and a class awaiting an instructor', async () 
   assert.equal(db.queries.find((q) => q.table === 'zahtevi_za_cas' && q.operation === 'insert').values[0].instructor_id, null);
 });
 
+const calendarLinks = [];
 const Calendar = loadSource('src/app/dashboard/CalendarView.tsx', {
   'next/navigation': { useRouter: () => ({ refresh() {} }) },
-  'next/link': ({ children, ...props }) => React.createElement('a', props, children),
+  'next/link': ({ children, ...props }) => { calendarLinks.push({ ...props }); delete props.prefetch; return React.createElement('a', props, children); },
   '@/lib/use-kalendar-realtime': { useKalendarRealtime() {} },
   '@/lib/constants': constants,
   '@/app/dashboard/termin/actions': { moveTermAsInstructor() {} },
@@ -161,6 +171,13 @@ function renderCalendar(overrides = {}) {
     startOfWeek: '2026-11-23', singleDay: '2026-11-23', monthStart: '2026-11-01', ...overrides,
   }));
 }
+
+test('calendar cells and period links do not automatically prefetch pages', () => {
+  calendarLinks.length = 0;
+  for (const view of ['dan', 'nedelja', 'mesec']) renderCalendar({ view });
+  assert.ok(calendarLinks.some((link) => link.href.startsWith('/dashboard/termin/novi')));
+  assert.ok(calendarLinks.every((link) => link.prefetch === false));
+});
 
 for (const view of ['dan', 'nedelja']) {
   test(`${view}: other teachers' classes and testing children are visible`, () => {
@@ -335,3 +352,173 @@ for (const mode of ['admin', 'instructor']) {
     assert.equal(db.queries.some((q) => q.operation === 'insert'), false);
   });
 }
+
+test('retrying the whole booking creates one term and one lesson', async () => {
+  const bookingId = '11111111-1111-4111-8111-111111111111';
+  let saved = null;
+  const children = new Set();
+  const db = database((q) => {
+    if (q.table === 'term_categories') return { data: { id: 'individual', jedan_klijent_po_terminu: true } };
+    if (q.table === 'app_settings') return { data: { value: '4' } };
+    if (q.table === 'terms') {
+      if (q.operation === 'insert') { saved = { ...q.values }; return { data: { id: saved.id } }; }
+      if (q.options?.head) return { count: saved ? 1 : 0, data: null };
+      if (q.filters.some(([key]) => key === 'nastavak_of_term_id')) return { data: [] };
+      if (q.filters.some(([key, value]) => key === 'id' && value === bookingId)) return { data: saved };
+      return { data: null };
+    }
+    if (q.table === 'predavanja') {
+      if (q.operation === 'insert') { children.add(q.values.client_id); return { error: null }; }
+      if (q.fields === 'id') return { data: null };
+      return { data: [...children].map((client_id) => ({ client_id })) };
+    }
+    return { data: null, error: null };
+  });
+  const action = actionsFor('instructor', db).bookTermWithLessons;
+  const payload = { bookingId, instructorId: 'teacher-b', date: '2026-11-23', slotIndex: 0, classroomId: null, termCategoryId: 'individual', napomena: null, nastavakOfTermId: null, clientIds: ['child'], termTypeId: null, potentialClients: [], repeatDays: 0 };
+  assert.equal((await action(payload)).termId, bookingId);
+  assert.equal((await action(payload)).termId, bookingId);
+  assert.equal(db.queries.filter((q) => q.table === 'terms' && q.operation === 'insert').length, 1);
+  assert.equal(db.queries.filter((q) => q.table === 'predavanja' && q.operation === 'insert').length, 1);
+});
+
+test('student cannot submit a combined staff booking', async () => {
+  const db = database(() => { throw new Error('Unauthorized access'); });
+  assert.ok((await actionsFor('student', db).bookTermWithLessons({})).error);
+  assert.equal(db.queries.length, 0);
+});
+
+test('bulk Delete uses one transactional database call', async () => {
+  const db = database((q) => { assert.equal(q.name, 'delete_calendar_entries'); return { data: null, error: null }; });
+  assert.deepEqual(await actionsFor('admin', db).deleteTermsAsAdmin(['term'], ['cancelled'], ['request']), { failed: [] });
+  assert.equal(db.queries.length, 1);
+  assert.deepEqual(db.queries[0].args, { p_term_ids: ['term'], p_request_ids: ['request'], p_cancelled_ids: ['cancelled'] });
+});
+
+test('a transactional deletion error never falls back to separate destructive writes', async () => {
+  const db = database(() => ({ error: { code: '23503', message: 'Constraint violation' } }));
+  const result = await actionsFor('admin', db).deleteTermsAsAdmin(['term']);
+  assert.equal(result.failed[0].error, 'Constraint violation');
+  assert.equal(db.queries.length, 1);
+});
+
+test('hard-delete cleanup removes only payment starts at the selected child and time', async () => {
+  const db = database(() => ({ error: null }));
+  const starts = [{ client_id: '11111111-1111-4111-8111-111111111111', date: '2027-03-01', slot_index: 4 }];
+  assert.equal(await loadSource('src/lib/payment-starts.ts').deletePaymentStarts(db, [...starts, ...starts]), null);
+  assert.equal(db.queries.length, 1);
+  assert.equal(db.queries[0].operation, 'delete');
+  assert.equal(db.queries[0].table, 'placeni_paketi');
+  assert.equal(db.queries[0].orFilter, 'and(client_id.eq.11111111-1111-4111-8111-111111111111,od_datum.eq.2027-03-01,od_slot.eq.4)');
+});
+
+test('missing calendar RPC is retried after a minute even with continuous requests', async (t) => {
+  let now = 1000, calls = 0;
+  t.mock.method(Date, 'now', () => now);
+  const { readCalendarRpc } = loadSource('src/lib/calendar-rpc.ts');
+  const db = { rpc: async () => { calls++; return calls === 1 ? { data: null, error: { code: 'PGRST202' } } : { data: { terms: [] }, error: null }; } };
+  await readCalendarRpc(db, '2027-03-01', '2027-03-07');
+  now += 30_000;
+  await readCalendarRpc(db, '2027-03-01', '2027-03-07');
+  assert.equal(calls, 1);
+  now += 31_000;
+  assert.deepEqual((await readCalendarRpc(db, '2027-03-01', '2027-03-07')).data, { terms: [] });
+  assert.equal(calls, 2);
+});
+
+test('calendar connection failures are retried immediately', async () => {
+  let calls = 0;
+  const { readCalendarRpc } = loadSource('src/lib/calendar-rpc.ts');
+  const db = { rpc: async () => { calls++; return { data: null, error: { code: 'NETWORK_ERROR' } }; } };
+  await readCalendarRpc(db, '2027-03-01', '2027-03-07');
+  await readCalendarRpc(db, '2027-03-01', '2027-03-07');
+  assert.equal(calls, 2);
+});
+
+function realtimeHarness(t) {
+  const slots = [];
+  let cursor = 0, effects = [], nextTimer = 1, broadcasts, refreshes = 0, latestPaused = false, latestSnapshot = {};
+  const timers = new Map();
+  const oldWindow = global.window, oldDocument = global.document;
+  global.window = {
+    setTimeout: (fn) => { const id = nextTimer++; timers.set(id, fn); return id; },
+    clearTimeout: (id) => timers.delete(id), setInterval: () => 0, clearInterval() {},
+  };
+  global.document = { visibilityState: 'visible', addEventListener() {}, removeEventListener() {} };
+  t.after(() => { global.window = oldWindow; global.document = oldDocument; });
+  const depsEqual = (a, b) => a && b && a.length === b.length && a.every((v, i) => Object.is(v, b[i]));
+  const transition = { pending: false };
+  const react = {
+    useRef(value) { const i = cursor++; if (!slots[i]) slots[i] = { current: value }; return slots[i]; },
+    useCallback(fn, deps) { const i = cursor++; if (!depsEqual(slots[i]?.deps, deps)) slots[i] = { deps, fn }; return slots[i].fn; },
+    useEffect(fn, deps) {
+      const i = cursor++;
+      if (!depsEqual(slots[i]?.deps, deps)) effects.push(() => { slots[i]?.cleanup?.(); slots[i] = { deps, cleanup: fn() }; });
+    },
+    useTransition: () => [transition.pending, (fn) => { transition.pending = true; fn(); }],
+  };
+  const router = { refresh: () => refreshes++ };
+  const channel = { on(_event, _filter, fn) { broadcasts = fn; return channel; }, subscribe() { return channel; } };
+  const hook = loadSource('src/lib/use-kalendar-realtime.ts', {
+    react,
+    'next/navigation': { useRouter: () => router },
+    '@/lib/supabase/client': { createClient: () => ({ channel: () => channel, removeChannel() {} }) },
+  }).useKalendarRealtime;
+  let refresh;
+  const render = (paused = latestPaused, snapshot = latestSnapshot) => {
+    latestPaused = paused; latestSnapshot = snapshot; cursor = 0; effects = [];
+    refresh = hook(paused, snapshot);
+    for (const effect of effects) effect();
+  };
+  render();
+  return {
+    render, refresh: () => refresh(), broadcast: () => broadcasts(), count: () => refreshes,
+    flush: () => { const queued = [...timers.values()]; timers.clear(); for (const fn of queued) fn(); },
+    complete: (snapshot = latestSnapshot) => { transition.pending = false; render(latestPaused, snapshot); },
+  };
+}
+
+test('realtime and fallback refresh requests share one in-flight calendar load', (t) => {
+  const h = realtimeHarness(t);
+  h.refresh();
+  h.render();
+  h.refresh();
+  assert.equal(h.count(), 1);
+  h.complete();
+  h.refresh();
+  assert.equal(h.count(), 2);
+});
+
+test('a broadcast during a calendar fetch is not lost', (t) => {
+  const h = realtimeHarness(t);
+  h.refresh();
+  h.render();
+  h.broadcast();
+  h.flush();
+  assert.equal(h.count(), 1);
+  h.complete({ pendingRequests: ['new-request'] });
+  h.flush();
+  assert.equal(h.count(), 2);
+});
+
+test('own operation broadcasts do not fetch again after fresh pending-class data arrives', (t) => {
+  const h = realtimeHarness(t);
+  h.render(true);
+  h.broadcast();
+  h.flush();
+  assert.equal(h.count(), 0);
+  h.render(false, { pendingRequests: ['saved-request'] });
+  h.flush();
+  assert.equal(h.count(), 0);
+});
+
+test('occupied starts include long-class continuations and the requested class duration', () => {
+  const { unavailableCalendarStarts } = loadSource('src/lib/calendar-availability.ts');
+  const occupied = unavailableCalendarStarts([
+    { clientId: 'child-a', date: '2027-03-02', slot: 2, slots: 2 },
+    { clientId: 'other-child', date: '2027-03-02', slot: 10, slots: 2 },
+  ], ['child-a'], 2);
+  assert.deepEqual([...occupied], ['2027-03-02|1', '2027-03-02|2', '2027-03-02|3']);
+  assert.equal(occupied.has('2027-03-02|4'), false);
+  assert.equal(occupied.has('2027-03-02|10'), false);
+});

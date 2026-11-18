@@ -24,25 +24,11 @@ export default async function TermBookingPage({
   const slotFromUrl = params.slot != null ? Math.min(15, Math.max(0, parseInt(params.slot, 10) || 0)) : undefined;
 
   const adminSupabase = createAdminClient();
-  const { data: instructors } = await adminSupabase
-    .from('instructors')
-    .select('id, ime, prezime')
-    .eq('aktivan', true)
-    .order('prezime')
-    .order('ime');
-  const { data: clients } = await adminSupabase
-    .from('clients')
-    .select('id, ime, prezime, godiste, datum_testiranja')
-    .order('prezime')
-    .order('ime');
-  const { data: classrooms } = await adminSupabase
-    .from('classrooms')
-    .select('id, naziv')
-    .order('naziv');
-  const [termTypes, termCategories, completedMap] = await Promise.all([
-    getTermTypes(),
-    getTermCategories(),
-    getAllClientsCompletedProgramIds(),
+  const [{ data: instructors }, { data: clients }, { data: classrooms }, termTypes, termCategories, completedMap] = await Promise.all([
+    adminSupabase.from('instructors').select('id, ime, prezime').eq('aktivan', true).order('prezime').order('ime'),
+    adminSupabase.from('clients').select('id, ime, prezime, godiste, datum_testiranja').order('prezime').order('ime'),
+    adminSupabase.from('classrooms').select('id, naziv').order('naziv'),
+    getTermTypes(), getTermCategories(), getAllClientsCompletedProgramIds(),
   ]);
   const completedProgramIdsByClient: Record<string, string[]> = {};
   for (const [cid, set] of completedMap) completedProgramIdsByClient[cid] = [...set];

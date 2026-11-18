@@ -6,7 +6,6 @@ import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { createClientAsAdminDirect } from '../../actions';
 import ClientPolSelect from '@/components/ClientPolSelect';
-import { findDefaultCitanjeProgramId } from '@/lib/programi';
 
 type TermTypeOption = { id: string; naziv: string };
 type ProgramStatus = { term_type_id: string; zavrseno: boolean };
@@ -33,10 +32,7 @@ export default function AdminNoviKlijentForm({
   const [datumTestiranja, setDatumTestiranja] = useState('');
   const [napomena, setNapomena] = useState('');
   const [programStatuses, setProgramStatuses] = useState<ProgramStatus[]>([]);
-  const [programiSelections, setProgramiSelections] = useState<ProgramSelection[]>(() => {
-    const defaultId = findDefaultCitanjeProgramId(programs);
-    return defaultId ? [{ program_id: defaultId, zavrseno: false }] : [];
-  });
+  const [programiSelections, setProgramiSelections] = useState<ProgramSelection[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -200,7 +196,7 @@ export default function AdminNoviKlijentForm({
       {termTypes.length > 0 && (
         <div className="rounded-lg border border-stone-200 bg-stone-50/80 p-3 space-y-2">
           <label className="block text-sm font-medium text-stone-700">
-            Programi koje dete pohađa <span className="text-stone-400 font-normal">(opciono)</span>
+            Vrste časova koje dete pohađa <span className="text-stone-400 font-normal">(opciono)</span>
           </label>
           <p className="text-xs text-stone-500">
             Označite koje programe dete pohađa. Kad dete završi program, čekirajte „Završeno“ – ostaje u istoriji.

@@ -13,6 +13,7 @@ import { getTermTypes, getTermCategories, type PlaceniPaket } from '@/app/admin/
 import { mapBlokada, mapNedeljna, nedeljneUDatume, type BlokiranTermin } from '@/lib/blokade';
 import { NAREDNIH_NEDELJA_COOKIE, parseNarednihNedelja } from '@/lib/kalendar-nedelje';
 import { merenje } from '@/lib/merenje';
+import { readCalendarRpc } from '@/lib/calendar-rpc';
 
 export default async function AdminKalendarPage({
   searchParams,
@@ -167,7 +168,7 @@ export default async function AdminKalendarPage({
   // Svi podaci kalendara JEDNIM pozivom ka bazi (migracija 056) – isti oblik kao stari put.
   const [isAdmin, jedanPoziv] = await Promise.all([
     m.meri('admin', adminProvera),
-    m.meri('jedan_poziv', adminSupabase.rpc('kalendar_podaci', { p_from: dateFrom, p_to: dateTo })),
+    m.meri('jedan_poziv', readCalendarRpc(adminSupabase, dateFrom, dateTo)),
   ]);
   if (!isAdmin) redirect('/login');
   let nacin = 'jedan poziv';
@@ -363,7 +364,7 @@ export default async function AdminKalendarPage({
             shownMonth={monthStart?.slice(0, 7)}
             base={base}
           />
-          <Link href="/admin/termin/novi" className="inline-flex rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700">
+          <Link prefetch={false} href="/admin/termin/novi" className="inline-flex rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700">
             Novi termin
           </Link>
         </div>
@@ -382,17 +383,17 @@ export default async function AdminKalendarPage({
             .
           </span>
           {view !== 'mesec' && (
-            <Link
+            <Link prefetch={false}
               href={`${base}?view=mesec&month=${(singleDay ?? startOfWeek).slice(0, 7)}${filterQuery}`}
               className="font-medium text-violet-800 underline-offset-2 hover:underline"
             >
               Ceo mesec za ovo dete →
             </Link>
           )}
-          <Link href={`/admin/klijenti/${filterClientId}`} className="font-medium text-violet-800 underline-offset-2 hover:underline">
+          <Link prefetch={false} href={`/admin/klijenti/${filterClientId}`} className="font-medium text-violet-800 underline-offset-2 hover:underline">
             Profil klijenta →
           </Link>
-          <Link
+          <Link prefetch={false}
             href={clearClientParams.size > 0 ? `${base}?${clearClientParams.toString()}` : base}
             className="ml-auto rounded-md px-2 py-1 font-medium text-violet-800 hover:bg-violet-100"
           >

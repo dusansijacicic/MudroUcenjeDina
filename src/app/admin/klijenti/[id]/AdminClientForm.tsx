@@ -160,7 +160,7 @@ export default function AdminClientForm({
       {termTypes.length > 0 && (
         <div className="rounded-lg border border-stone-200 bg-stone-50/80 p-3 space-y-2">
           <label className="block text-sm font-medium text-stone-700">
-            Programi koje dete pohađa <span className="text-stone-400 font-normal">(opciono)</span>
+            Vrste časova koje dete pohađa <span className="text-stone-400 font-normal">(opciono)</span>
           </label>
           <p className="text-xs text-stone-500">
             Označite koje programe dete pohađa. Kad dete završi program, čekirajte „Završeno“ – ostaje u istoriji.

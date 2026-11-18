@@ -114,11 +114,11 @@ export default async function AdminUplatePage() {
                   <td className="p-3 text-stone-700">
                     {u.client ? `${u.client.ime} ${u.client.prezime}` : '—'}
                   </td>
-                  <td className="p-3 text-right font-medium">
+                  <td className="p-3 text-right font-semibold text-stone-900">
                     {u.iznos != null ? `${Number(u.iznos).toLocaleString('sr-Latn-RS')} RSD` : '—'}
                   </td>
                   <td className="p-3 text-right">{u.popust_percent != null ? `${u.popust_percent}%` : '—'}</td>
-                  <td className="p-3 text-right">{u.broj_casova ?? '—'}</td>
+                  <td className="p-3 text-right font-semibold text-stone-900">{u.broj_casova ?? '—'}</td>
                   <td className="p-3 text-stone-600">{u.term_type?.naziv ?? '—'}</td>
                   <td className="p-3 text-stone-500 max-w-[180px] truncate" title={u.napomena ?? ''}>
                     {u.napomena ?? '—'}

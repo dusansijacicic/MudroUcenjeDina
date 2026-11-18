@@ -3,6 +3,8 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { useKalendarRealtime } from '@/lib/use-kalendar-realtime';
+import CalendarProgress from '@/components/CalendarProgress';
+import { unavailableCalendarStarts } from '@/lib/calendar-availability';
 import toast from 'react-hot-toast';
 import { TIME_SLOTS, AUTO_SPILLOVER_NAPOMENA, slotsNeeded } from '@/lib/constants';
 import Link from 'next/link';
@@ -144,6 +146,7 @@ type SwapContextValue = {
   onToggleBulkSlot: (date: string, slot: number) => void;
   /** Instruktor izabran u "Zakaži više časova" ('' = bez) – vremena kada on ne radi se ne mogu izabrati. */
   bulkInstructorId: string;
+  isBulkUnavailable: (date: string, slot: number) => boolean;
   blockMode: boolean;
   isBlockSelected: (date: string, slot: number) => boolean;
   onToggleBlockSlot: (date: string, slot: number) => void;
@@ -214,6 +217,7 @@ const SwapContext = createContext<SwapContextValue>({
   isBulkSelected: () => false,
   onToggleBulkSlot: () => {},
   bulkInstructorId: '',
+  isBulkUnavailable: () => false,
   blockMode: false,
   isBlockSelected: () => false,
   onToggleBlockSlot: () => {},
@@ -457,8 +461,8 @@ function PeriodNav({
     // Dan na telefonu ima svoju traku dana ispod, pa se ovde krije da se ne duplira.
     <div className={`${view === 'dan' ? 'hidden md:flex' : 'flex'} flex-wrap items-center gap-2`}>
       <span className="font-medium text-stone-700 text-sm capitalize tabular-nums mr-1">{label}</span>
-      <Link href={prevHref} className={btn}>{prevText}</Link>
-      <Link href={nextHref} className={btn}>{nextText}</Link>
+      <Link prefetch={false} href={prevHref} className={btn}>{prevText}</Link>
+      <Link prefetch={false} href={nextHref} className={btn}>{nextText}</Link>
       {view === 'nedelja' && (
         <label className="flex items-center gap-2 text-sm text-stone-600">
           <span className="whitespace-nowrap">Narednih nedelja</span>
@@ -666,6 +670,11 @@ export default function AdminCalendarView({
   trenutnaNedelja: string;
 }) {
   const router = useRouter();
+  const [navigating, startNavigation] = useTransition();
+  const [mutationPending, startMutation] = useTransition();
+  const mutationInFlight = useRef(false);
+  const [refreshAfterMutation, setRefreshAfterMutation] = useState<number | null>(null);
+  const calendarSnapshot = useMemo(() => ({ termsProp, pendingZahteviProp, otkazaniTerminiProp, blockedSlotsProp, allPendingZahteviDates, placeniPaketi }), [termsProp, pendingZahteviProp, otkazaniTerminiProp, blockedSlotsProp, allPendingZahteviDates, placeniPaketi]);
 
   // "Narednih nedelja" (padajući izbor): manje nedelja se samo sakrije odmah, kolačić pamti izbor za ovaj
   // uređaj, a server odmah učita nedelje koje još nisu bile učitane.
@@ -738,7 +747,7 @@ export default function AdminCalendarView({
     const inView = view === 'nedelja' && d >= startOfWeek && d <= weekEnd.toISOString().slice(0, 10);
     if (inView && scrollToZahtev(d)) return;
     focusedForRef.current = null;
-    router.push(`/admin/kalendar?view=nedelja&week=${getMonday(d)}&fokus=${d}${filterQuery}`);
+    startNavigation(() => router.push(`/admin/kalendar?view=nedelja&week=${getMonday(d)}&fokus=${d}${filterQuery}`));
   };
 
   // ✕ uz datum u žutoj traci: podsetnik nestaje odmah, a server ga trajno skriva (055).
@@ -819,6 +828,14 @@ export default function AdminCalendarView({
   const [bulkClassroomChoice, setBulkClassroomChoice] = useState('');
   const [bulkSlots, setBulkSlots] = useState<Set<string>>(new Set());
   const [bulkLoading, setBulkLoading] = useState(false);
+  const bulkUnavailable = useMemo(() => {
+    const duration = new Map(termTypes.map((type) => [type.id, slotsNeeded(type.trajanje_minuta)]));
+    const lessons = [
+      ...terms.flatMap((term) => (term.predavanja ?? []).map((p) => ({ clientId: p.client_id ?? p.client?.id ?? '', date: term.date, slot: term.slot_index, slots: duration.get(p.term_type_id ?? '') ?? 1 }))),
+      ...pendingZahtevi.map((request) => ({ clientId: request.client_id ?? '', date: request.date, slot: request.slot_index, slots: duration.get(request.term_type_id ?? '') ?? 1 })),
+    ];
+    return unavailableCalendarStarts(lessons, bulkGroupMode ? bulkGroupClientIds : [bulkClientId], duration.get(bulkTermTypeId) ?? 1);
+  }, [terms, pendingZahtevi, termTypes, bulkGroupMode, bulkGroupClientIds, bulkClientId, bulkTermTypeId]);
   // "Zakaži više časova" ne radi optimistički update (kao swap) – nakon potvrde čeka se pravi
   // router.refresh() da bi se novi termini uopšte pojavili. Bez ovoga, "Zakazujem…" nestaje čim
   // server odgovori, ali PRE nego što svež termsProp stigne – admin u međuvremenu otvori mod za
@@ -830,7 +847,7 @@ export default function AdminCalendarView({
       bulkRefreshTimeoutRef.current = null;
       setBulkLoading(false);
     }
-  }, [termsProp]);
+  }, [calendarSnapshot]);
 
   const grupneKategorije = termCategories.filter((c) => !c.jedan_klijent_po_terminu && !c.is_testing && !c.is_nastavak);
 
@@ -891,18 +908,36 @@ export default function AdminCalendarView({
   const verzijaPodataka = useRef(0);
   useEffect(() => {
     verzijaPodataka.current += 1;
-  }, [termsProp]);
-  const osveziAkoNijeStiglo = (verzijaPre: number) => {
-    window.setTimeout(() => {
-      if (verzijaPodataka.current === verzijaPre) router.refresh();
-    }, 1500);
-  };
+  }, [calendarSnapshot]);
+  const osveziAkoNijeStiglo = (verzijaPre: number) => setRefreshAfterMutation(verzijaPre);
 
-  useKalendarRealtime(
-    swapMode || copyMode || deleteMode || bulkMode || assignMode || blockMode || paidMode || cancelMode || moveMode || draggedTermId !== null,
+  const refreshCalendar = useKalendarRealtime(
+    mutationPending || swapMode || copyMode || deleteMode || bulkMode || assignMode || blockMode || paidMode || cancelMode || moveMode || draggedTermId !== null || swapLoading || copyLoading || deleteLoading || bulkLoading || assignLoading || blockLoading || paidLoading || cancelLoading || moveLoading,
     // Svež kalendar (posle operacije ili osvežavanja) – poruke primljene do tada su već uračunate.
-    termsProp
+    calendarSnapshot
   );
+
+  useEffect(() => {
+    if (mutationPending || refreshAfterMutation === null) return;
+    setRefreshAfterMutation(null);
+    if (verzijaPodataka.current === refreshAfterMutation) refreshCalendar();
+  }, [mutationPending, refreshAfterMutation, refreshCalendar, calendarSnapshot]);
+
+  const runMutation = (action: () => Promise<unknown>) => {
+    if (mutationPending || mutationInFlight.current) return;
+    mutationInFlight.current = true;
+    startMutation(async () => {
+      try {
+        await action();
+      } catch (err) {
+        setSwapLoading(false); setCopyLoading(false); setDeleteLoading(false); setBulkLoading(false);
+        setAssignLoading(false); setBlockLoading(false); setPaidLoading(false); setCancelLoading(false); setMoveLoading(false);
+        toast.error(err instanceof Error ? err.message : 'Operacija nije završena. Pokušajte ponovo.', { duration: 7000 });
+      } finally {
+        mutationInFlight.current = false;
+      }
+    });
+  };
 
   // Swap/Copy/Delete/Bulk/Assign/Block su međusobno isključivi – uključivanje jednog gasi ostale da
   // klikovi na kalendaru ne budu dvosmisleni.
@@ -1076,6 +1111,7 @@ export default function AdminCalendarView({
     setBulkTermCategoryId('');
     setBulkInstructorChoice('');
     setBulkClassroomChoice('');
+    setBulkTermTypeId('');
   };
 
   const onToggleDeleteSelect = (termId: string) => {
@@ -1133,6 +1169,10 @@ export default function AdminCalendarView({
 
   const onToggleBulkSlot = (date: string, slot: number) => {
     const key = `${date}|${slot}`;
+    if (!bulkSlots.has(key) && bulkUnavailable.has(key)) {
+      toast.error('Dete već ima čas u ovo vreme.', { duration: 7000 });
+      return;
+    }
     setBulkSlots((prev) => {
       const next = new Set(prev);
       if (next.has(key)) next.delete(key);
@@ -1143,6 +1183,10 @@ export default function AdminCalendarView({
 
   const confirmBulk = async () => {
     const verzija = verzijaPodataka.current;
+    if ([...bulkSlots].some((key) => bulkUnavailable.has(key))) {
+      toast.error('Izabrana vremena se preklapaju sa časovima deteta. Uklonite zauzeta vremena.', { duration: 7000 });
+      return;
+    }
     if (bulkGroupMode) {
       if (bulkGroupClientIds.length === 0 || !bulkInstructorChoice || !bulkTermCategoryId || bulkSlots.size === 0) return;
     } else if (!bulkClientId || bulkSlots.size === 0) {
@@ -1301,6 +1345,7 @@ export default function AdminCalendarView({
       toast.error(res.error);
       return;
     }
+    toast.success('Termin je odblokiran.');
     osveziAkoNijeStiglo(verzija);
   };
 
@@ -1645,7 +1690,7 @@ export default function AdminCalendarView({
         linkSuffix={linkSuffix}
         base={base}
         draggedTermId={draggedTermId}
-        onDropCell={handleDrop}
+        onDropCell={(date, slot) => runMutation(() => handleDrop(date, slot))}
         maxTerminaPoSlotu={maxTerminaPoSlotu}
       />
     );
@@ -1672,7 +1717,7 @@ export default function AdminCalendarView({
         pendingZahtevi={pendingZahtevi}
         draggedTermId={draggedTermId}
         setDraggedTermId={setDraggedTermId}
-        onDropCell={handleDrop}
+        onDropCell={(date, slot) => runMutation(() => handleDrop(date, slot))}
         maxTerminaPoSlotu={maxTerminaPoSlotu}
       />
     );
@@ -1713,17 +1758,17 @@ export default function AdminCalendarView({
             : bulkMode
               ? { label: `Potvrdi zakazivanje (${bulkSlots.size})`, disabled: bulkDisabled, color: 'bg-emerald-600 hover:bg-emerald-700' }
               : null;
-  const runActiveConfirm = () => {
-    if (paidMode) confirmPaid();
-    else if (cancelMode) confirmCancel();
-    else if (moveMode) confirmMove();
-    else if (blockMode) confirmBlock();
-    else if (deleteMode) confirmDelete();
-    else if (assignMode) confirmAssign();
-    else if (swapMode) confirmSwap();
-    else if (copyMode) confirmCopy();
-    else if (bulkMode) confirmBulk();
-  };
+  const runActiveConfirm = () => runMutation(async () => {
+    if (paidMode) await confirmPaid();
+    else if (cancelMode) await confirmCancel();
+    else if (moveMode) await confirmMove();
+    else if (blockMode) await confirmBlock();
+    else if (deleteMode) await confirmDelete();
+    else if (assignMode) await confirmAssign();
+    else if (swapMode) await confirmSwap();
+    else if (copyMode) await confirmCopy();
+    else if (bulkMode) await confirmBulk();
+  });
 
   return (
     <SwapContext.Provider
@@ -1731,7 +1776,7 @@ export default function AdminCalendarView({
         swapMode,
         isSelected,
         onSelectTerm,
-        onDeleteOtkazani: handleDeleteOtkazani,
+        onDeleteOtkazani: (id) => runMutation(() => handleDeleteOtkazani(id)),
         copyMode,
         copySourceId: copySource?.vrsta === 'termin' ? copySource.id : null,
         onSelectCopySource,
@@ -1748,12 +1793,13 @@ export default function AdminCalendarView({
         isBulkSelected: (date: string, slot: number) => bulkSlots.has(`${date}|${slot}`),
         onToggleBulkSlot,
         bulkInstructorId: bulkInstructorChoice,
+        isBulkUnavailable: (date, slot) => bulkUnavailable.has(`${date}|${slot}`),
         blockMode,
         isBlockSelected: (date: string, slot: number) => blockSlots.has(`${date}|${slot}`),
         onToggleBlockSlot,
         getBlocked: (date: string, slot: number) => blokiraniByKey.get(`${date}|${slot}`),
         getInstructorBlocks: (date: string, slot: number) => instruktorBlokadeByKey.get(`${date}|${slot}`) ?? [],
-        onUnblock: handleUnblock,
+        onUnblock: (id) => runMutation(() => handleUnblock(id)),
         assignMode,
         isMarkedForAssign: (termId: string) => assignSelection.has(termId),
         onToggleAssignSelect,
@@ -1789,10 +1835,11 @@ export default function AdminCalendarView({
       }}
     >
       {headerContent}
+      <CalendarProgress active={navigating || mutationPending} />
       {podsetnikDatumi.length > 0 && (
         <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-amber-400 bg-amber-50 px-4 py-2.5 text-sm text-amber-900">
           <span className="font-semibold">
-            ⚠ {podsetnikDatumi.length} {podsetnikDatumi.length === 1 ? 'termin' : 'termina'} bez instruktora/učionice:
+            ⚠ Datumi sa terminima bez instruktora/učionice: {podsetnikDatumi.length}
           </span>
           <span className="flex flex-wrap gap-2.5 pt-1">
             {podsetnikDatumi.map((d) => (
@@ -1802,13 +1849,13 @@ export default function AdminCalendarView({
                   onClick={() => openZahtevDate(d)}
                   className="rounded-full bg-amber-200 py-0.5 pl-2 pr-3.5 font-medium text-amber-900 hover:bg-amber-300"
                 >
-                  {formatShortDate(d)}
+                  {formatShortDate(d)}{new Date(d + 'T12:00:00').getFullYear()}.
                 </button>
                 <button
                   type="button"
                   title="Ukloni podsetnik za ovaj dan (časovi ostaju na kalendaru)"
                   aria-label={`Ukloni podsetnik za ${formatShortDate(d)}`}
-                  onClick={() => ukloniPodsetnik(d)}
+                  onClick={() => runMutation(() => ukloniPodsetnik(d))}
                   className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full border border-amber-400 bg-white text-[10px] font-bold leading-none text-amber-800 shadow-sm hover:border-red-500 hover:bg-red-500 hover:text-white"
                 >
                   ✕
@@ -1936,7 +1983,7 @@ export default function AdminCalendarView({
                 ✓ {activeConfirm.label}
               </button>
             )}
-            <Link
+            <Link prefetch={false}
               href={`/admin/kalendar/print?week=${startOfWeek}`}
               className="hidden md:inline-flex px-3 py-1.5 rounded-lg text-sm font-medium bg-stone-100 text-stone-600 hover:bg-stone-200"
             >
@@ -1958,7 +2005,7 @@ export default function AdminCalendarView({
               <div className="flex items-center gap-3 flex-wrap">
                 <button
                   type="button"
-                  onClick={confirmPaid}
+                  onClick={() => runMutation(confirmPaid)}
                   disabled={paidDisabled}
                   className="px-3 py-1.5 rounded-lg text-sm font-medium bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed"
                 >
@@ -2037,7 +2084,7 @@ export default function AdminCalendarView({
                 </div>
                 <button
                   type="button"
-                  onClick={confirmBlock}
+                  onClick={() => runMutation(confirmBlock)}
                   disabled={blockDisabled}
                   className="px-3 py-2 rounded-lg text-sm font-medium bg-stone-800 text-white hover:bg-stone-900 disabled:opacity-40 disabled:cursor-not-allowed"
                 >
@@ -2061,7 +2108,7 @@ export default function AdminCalendarView({
             <div className="flex items-center gap-3 flex-wrap text-sm">
               <button
                 type="button"
-                onClick={confirmDelete}
+                onClick={() => runMutation(confirmDelete)}
                 disabled={deleteDisabled}
                 className="px-3 py-1.5 rounded-lg text-sm font-medium bg-red-600 text-white hover:bg-red-700 disabled:opacity-40 disabled:cursor-not-allowed"
               >
@@ -2077,7 +2124,7 @@ export default function AdminCalendarView({
               <div className="flex items-center gap-3 flex-wrap">
                 <button
                   type="button"
-                  onClick={confirmCancel}
+                  onClick={() => runMutation(confirmCancel)}
                   disabled={cancelDisabled}
                   className="px-3 py-1.5 rounded-lg text-sm font-medium bg-stone-700 text-white hover:bg-stone-800 disabled:opacity-40 disabled:cursor-not-allowed"
                 >
@@ -2103,7 +2150,7 @@ export default function AdminCalendarView({
             <div className="flex items-center gap-3 flex-wrap text-sm">
               <button
                 type="button"
-                onClick={confirmMove}
+                onClick={() => runMutation(confirmMove)}
                 disabled={moveDisabled}
                 className="px-3 py-1.5 rounded-lg text-sm font-medium bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed"
               >
@@ -2163,7 +2210,7 @@ export default function AdminCalendarView({
                 </select>
                 <button
                   type="button"
-                  onClick={confirmAssign}
+                  onClick={() => runMutation(confirmAssign)}
                   disabled={assignDisabled}
                   className="px-3 py-1.5 rounded-lg text-sm font-medium bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed"
                 >
@@ -2238,7 +2285,7 @@ export default function AdminCalendarView({
                 </label>
                 <button
                   type="button"
-                  onClick={confirmSwap}
+                  onClick={() => runMutation(confirmSwap)}
                   disabled={swapDisabled}
                   className="px-3 py-1.5 rounded-lg text-sm font-medium bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed"
                 >
@@ -2362,7 +2409,7 @@ export default function AdminCalendarView({
                   )}
                   <button
                     type="button"
-                    onClick={confirmCopy}
+                    onClick={() => runMutation(confirmCopy)}
                     disabled={copyDisabled}
                     className="px-3 py-1.5 rounded-lg text-sm font-medium bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed"
                   >
@@ -2471,7 +2518,7 @@ export default function AdminCalendarView({
                 </div>
                 <button
                   type="button"
-                  onClick={confirmBulk}
+                  onClick={() => runMutation(confirmBulk)}
                   disabled={bulkDisabled}
                   className="px-3 py-1.5 rounded-lg text-sm font-medium bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed"
                 >
@@ -3079,13 +3126,14 @@ function AdminCellContent({
     </div>
   ) : null;
 
-  if (swap.bulkMode && blocked) {
+  if (swap.bulkMode && (blocked || (swap.isBulkUnavailable(emptyDate, emptySlot) && !swap.isBulkSelected(emptyDate, emptySlot)))) {
     return (
       <div className="space-y-1.5 min-h-[52px] cursor-not-allowed">
         {BlockedBadge}
         {InstructorBlocksBadge}
         {termsInSlot.map((term, ti) => <TermCardVisual key={term.id} term={term} rowOffset={rowOffsets[ti]} />)}
         {PendingZahteviEntries}
+        {!blocked && <div className="rounded-lg border border-red-300 bg-red-50 p-2 text-xs text-red-700">Dete već ima čas u ovo vreme.</div>}
       </div>
     );
   }
@@ -3178,7 +3226,7 @@ function AdminCellContent({
           isAutoSpillover(term) ? (
             <TermCardVisual key={term.id} term={term} />
           ) : (
-            <Link
+            <Link prefetch={false}
               key={term.id}
               href={`/admin/termin/${term.id}`}
               title="Otvori termin (izmena) – ili ga prevuci u drugi termin"
@@ -3217,7 +3265,7 @@ function AdminCellContent({
     return (
       <div className="space-y-1">
         {InstructorBlocksBadge}
-        <Link
+        <Link prefetch={false}
           href={newTermHref}
           className={`block rounded-lg border border-dashed border-stone-200 p-2 text-stone-400 hover:border-amber-400 hover:bg-amber-50/50 min-h-[52px]${
             (swap.copyMode && swap.isCopyTargetSelected(emptyDate, emptySlot)) || (moveCilj && swap.isMoveTarget(emptyDate, emptySlot))
@@ -3253,7 +3301,7 @@ function AdminCellContent({
               : 'Premesti ovde'
             : '+'}
         </Link>
-        <Link
+        <Link prefetch={false}
           href={newTestHref}
           className="block rounded-lg border border-dashed border-stone-200 p-1 text-[11px] text-center text-stone-400 hover:border-amber-400 hover:bg-amber-50/50 hover:text-amber-800"
         >
@@ -3281,7 +3329,7 @@ function AdminCellContent({
         if (isAutoSpillover(term)) {
           const roditeljId = term.nastavak_of_term_id as string;
           return (
-            <Link
+            <Link prefetch={false}
               key={term.id}
               href={`/admin/termin/${roditeljId}`}
               className={`block rounded-lg hover:opacity-90${terminIzabran(roditeljId) ? ' ring-2 ring-offset-1 ring-amber-500' : ''}`}
@@ -3304,7 +3352,7 @@ function AdminCellContent({
         const anyModeActive = terminModAktivan;
 
         return (
-          <Link
+          <Link prefetch={false}
             key={term.id}
             href={`/admin/termin/${term.id}`}
             className={`block rounded-lg transition-opacity hover:opacity-90${
@@ -3325,7 +3373,7 @@ function AdminCellContent({
       {PendingZahteviEntries}
       {canAddParallelTerm ? (
         <>
-          <Link
+          <Link prefetch={false}
             href={newTermHref}
             className={`block rounded-lg border border-dashed border-stone-200 p-1.5 text-stone-500 hover:border-amber-400 hover:bg-amber-50/50 hover:text-amber-800 text-xs text-center${
               (swap.copyMode && swap.isCopyTargetSelected(emptyDate, emptySlot)) || (moveCilj && swap.isMoveTarget(emptyDate, emptySlot))
@@ -3352,9 +3400,9 @@ function AdminCellContent({
               ? swap.isMoveTarget(emptyDate, emptySlot)
                 ? '✓ ovde'
                 : 'Premesti ovde'
-              : `+ Dodaj ${slotCount > 0 ? 'još ' : ''}termin u ovom slotu (${slotCount}/${maxTerminaPoSlotu})`}
+              : `+ Dodaj ${slotCount > 0 ? 'još ' : ''}termin u ovom slotu`}
           </Link>
-          <Link
+          <Link prefetch={false}
             href={newTestHref}
             className="block rounded-lg border border-dashed border-stone-200 p-1 text-[11px] text-center text-stone-400 hover:border-amber-400 hover:bg-amber-50/50 hover:text-amber-800"
           >
@@ -3731,7 +3779,7 @@ function AdminDateStrip({
         }`;
         if (makeHref) {
           return (
-            <Link key={d} href={makeHref(d)} className={className}>
+            <Link prefetch={false} key={d} href={makeHref(d)} className={className}>
               {label}
             </Link>
           );
@@ -3867,11 +3915,11 @@ function AdminMonthView({
             const dayHref = `${base}?view=dan&day=${date}${linkSuffix}`;
             return (
               <div key={date} className="min-h-[96px] min-w-0 border-b border-r border-stone-100 p-1 flex flex-col gap-0.5">
-                <Link href={dayHref} className="self-start rounded px-1 text-xs text-stone-500 hover:bg-amber-50 hover:text-amber-800">
+                <Link prefetch={false} href={dayHref} className="self-start rounded px-1 text-xs text-stone-500 hover:bg-amber-50 hover:text-amber-800">
                   {new Date(date + 'T12:00:00').getDate()}.
                 </Link>
                 {shown.map((e) => (
-                  <Link
+                  <Link prefetch={false}
                     key={e.key}
                     href={e.href}
                     title={e.title}
@@ -3891,7 +3939,7 @@ function AdminMonthView({
                   </Link>
                 ))}
                 {entries.length > shown.length && (
-                  <Link href={dayHref} className="px-1 text-[11px] font-medium text-amber-700 hover:underline">
+                  <Link prefetch={false} href={dayHref} className="px-1 text-[11px] font-medium text-amber-700 hover:underline">
                     +{entries.length - shown.length} još →
                   </Link>
                 )}
