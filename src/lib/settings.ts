@@ -3,7 +3,7 @@ import { jedanKlijentIzJoinaPouzdano } from '@/lib/term-categories';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 const DEFAULT_MAX_CASOVA_PO_TERMINU = 4;
-const DEFAULT_MAX_TERMINA_PO_SLOTU = 4;
+export const DEFAULT_MAX_TERMINA_PO_SLOTU = 4;
 
 /** Maksimalan broj časova (predavanja) u jednom terminu. Superadmin može da menja u /admin/podesavanja. */
 export async function getMaxCasovaPoTerminu(): Promise<number> {

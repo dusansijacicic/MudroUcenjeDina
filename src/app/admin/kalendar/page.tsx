@@ -6,7 +6,7 @@ import Link from 'next/link';
 import AdminCalendarView, { type AdminTerm, type OtkazaniTerminCalendar } from './AdminCalendarView';
 import AdminCalendarFilters from './AdminCalendarFilters';
 import AdminFromDashboardToast from '@/components/AdminFromDashboardToast';
-import { getMaxTerminaPoSlotu } from '@/lib/settings';
+import { getMaxTerminaPoSlotu, DEFAULT_MAX_TERMINA_PO_SLOTU } from '@/lib/settings';
 import { AUTO_SPILLOVER_NAPOMENA } from '@/lib/constants';
 import { VRSTA_BEZ, VRSTA_TESTIRANJE } from '@/lib/kalendar-filter';
 import { getTermTypes, getTermCategories, type PlaceniPaket } from '@/app/admin/actions';
@@ -78,72 +78,141 @@ export default async function AdminKalendarPage({
   }
 
   const adminSupabase = createAdminClient();
-  const [
-    { data: termsRaw },
-    { data: instructorsList },
-    { data: classroomsList },
-    { data: clientsList },
-    { data: otkazaniRaw },
-    { data: zahteviRaw },
+
+  // Stari put (pre migracije 056, ili ako ona ne uspe): ~16 upita odjednom – u bazi se međusobno čekaju.
+  const viseUpita = async () => {
+    const [
+      { data: termsRaw },
+      { data: instructorsList },
+      { data: classroomsList },
+      { data: clientsList },
+      { data: otkazaniRaw },
+      { data: zahteviRaw },
+      maxTerminaPoSlotu,
+      termTypes,
+      termCategories,
+      { data: allPendingZahteviRaw },
+      { data: blockedRaw },
+      { data: redniRaw },
+      { data: nedeljneRaw },
+      paketiRes,
+    ] = await Promise.all([
+      m.meri(
+        'terms',
+        adminSupabase
+          .from('terms')
+          // Uz dete samo ono što kalendar prikazuje (bez komentara i ostalih polja časa) – manje podataka za prenos.
+          .select('*, instructor:instructors(id, ime, prezime, color), classroom:classrooms(id, naziv, color), term_category:term_categories(id, naziv, is_testing), predavanja(id, client_id, term_type_id, client:clients(id, ime, prezime), term_type:term_types(naziv)), potential_clients(*)')
+          .gte('date', dateFrom)
+          .lte('date', dateTo)
+          .order('date')
+          .order('slot_index')
+      ),
+      m.meri('instruktori', adminSupabase.from('instructors').select('id, ime, prezime, color, aktivan').order('prezime').order('ime')),
+      m.meri('ucionice', adminSupabase.from('classrooms').select('id, naziv').order('naziv')),
+      m.meri('klijenti', adminSupabase.from('clients').select('id, ime, prezime, godiste, datum_testiranja').order('ime').order('prezime')),
+      m.meri(
+        'otkazani',
+        adminSupabase.from('otkazani_termini').select('id, client_id, client_ime, client_prezime, instructor_id, instructor_ime, instructor_prezime, term_date, slot_index, term_type_naziv, placeno').gte('term_date', dateFrom).lte('term_date', dateTo)
+      ),
+      m.meri(
+        'zahtevi',
+        adminSupabase
+          .from('zahtevi_za_cas')
+          .select('id, client_id, term_type_id, requested_date, requested_slot_index, client:clients(ime, prezime), term_type:term_types(naziv), classroom:classrooms(naziv)')
+          .eq('status', 'pending')
+          .gte('requested_date', dateFrom)
+          .lte('requested_date', dateTo)
+      ),
+      m.meri('podesavanja', getMaxTerminaPoSlotu()),
+      m.meri('vrste', getTermTypes()),
+      m.meri('kategorije', getTermCategories()),
+      // Globalno (bez obzira na trenutno prikazanu nedelju/dan) – da admin ne propusti zahtev van
+      // trenutnog prikaza. Samo datumi (i da li je podsetnik uklonjen ✕, migracija 055), radi lakog dugmeta
+      // "skoči na tu nedelju". U ISTOM Promise.all-u (ne odvojen await posle) da ne doda dodatan krug.
+      m.meri('podsetnik', adminSupabase.from('zahtevi_za_cas').select('requested_date, podsetnik_skriven').eq('status', 'pending').order('requested_date')),
+      // Ako migracija 044 još nije pokrenuta, upit vraća grešku → data je null → nema blokiranih.
+      // select('*'): radi i pre migracije 048 (tada nema instructor_id → sve blokade su "za sve").
+      m.meri('blokade', adminSupabase.from('blokirani_termini').select('*').gte('date', dateFrom).lte('date', dateTo)),
+      // "x / y" uz svako dete (koji je čas po redu od plaćenih) – baza računa; bez migracije 047 nema oznaka.
+      m.meri('redni', adminSupabase.rpc('redni_broj_casova', { p_from: dateFrom, p_to: dateTo })),
+      // Stalne nedeljne blokade instruktora (048) – pre migracije greška → null → nema ih.
+      m.meri('nedeljne', adminSupabase.from('instruktor_nedeljne_blokade').select('*')),
+      // Oznake „plaćeno od ovog časa“ (049) – za mod Označi plaćeno (💰 od ovde / uklanjanje).
+      m.meri(
+        'paketi',
+        adminSupabase.from('placeni_paketi').select('id, client_id, term_type_id, od_datum, od_slot, broj_casova').gte('od_datum', dateFrom).lte('od_datum', dateTo)
+      ),
+    ]);
+    return {
+      termsRaw,
+      instructorsList,
+      classroomsList,
+      clientsList,
+      otkazaniRaw,
+      zahteviRaw,
+      maxTerminaPoSlotu,
+      termTypes,
+      termCategories,
+      allPendingZahteviRaw,
+      blockedRaw,
+      redniRaw,
+      nedeljneRaw,
+      paketi: paketiRes.data,
+      paketiMigracija: !paketiRes.error,
+    };
+  };
+  type Podaci = Awaited<ReturnType<typeof viseUpita>>;
+
+  // Svi podaci kalendara JEDNIM pozivom ka bazi (migracija 056) – isti oblik kao stari put.
+  const [isAdmin, jedanPoziv] = await Promise.all([
+    m.meri('admin', adminProvera),
+    m.meri('jedan_poziv', adminSupabase.rpc('kalendar_podaci', { p_from: dateFrom, p_to: dateTo })),
+  ]);
+  if (!isAdmin) redirect('/login');
+  let nacin = 'jedan poziv';
+  let podaci: Podaci;
+  const jp = jedanPoziv.data as Record<string, unknown> | null;
+  if (!jedanPoziv.error && jp && Array.isArray(jp.terms)) {
+    const maxIzBaze = parseInt(String(jp.max_termina_po_slotu ?? ''), 10);
+    podaci = {
+      termsRaw: jp.terms as Podaci['termsRaw'],
+      instructorsList: jp.instruktori as Podaci['instructorsList'],
+      classroomsList: jp.ucionice as Podaci['classroomsList'],
+      clientsList: jp.klijenti as Podaci['clientsList'],
+      otkazaniRaw: jp.otkazani as Podaci['otkazaniRaw'],
+      zahteviRaw: jp.zahtevi as Podaci['zahteviRaw'],
+      maxTerminaPoSlotu: Number.isFinite(maxIzBaze) && maxIzBaze >= 1 ? maxIzBaze : DEFAULT_MAX_TERMINA_PO_SLOTU,
+      termTypes: jp.vrste as Podaci['termTypes'],
+      termCategories: jp.kategorije as Podaci['termCategories'],
+      allPendingZahteviRaw: jp.podsetnik as Podaci['allPendingZahteviRaw'],
+      blockedRaw: jp.blokade as Podaci['blockedRaw'],
+      redniRaw: jp.redni as Podaci['redniRaw'],
+      nedeljneRaw: jp.nedeljne as Podaci['nedeljneRaw'],
+      paketi: jp.paketi as Podaci['paketi'],
+      paketiMigracija: true,
+    };
+  } else {
+    nacin = `rezerva, upit po upit: ${jedanPoziv.error?.message ?? 'prazan odgovor'}`;
+    podaci = await viseUpita();
+  }
+  const {
+    termsRaw,
+    instructorsList,
+    classroomsList,
+    clientsList,
+    otkazaniRaw,
+    zahteviRaw,
     maxTerminaPoSlotu,
     termTypes,
     termCategories,
-    { data: allPendingZahteviRaw },
-    { data: blockedRaw },
-    { data: redniRaw },
-    { data: nedeljneRaw },
-    paketiRes,
-    isAdmin,
-  ] = await Promise.all([
-    m.meri(
-      'terms',
-      adminSupabase
-        .from('terms')
-        // Uz dete samo ono što kalendar prikazuje (bez komentara i ostalih polja časa) – manje podataka za prenos.
-        .select('*, instructor:instructors(id, ime, prezime, color), classroom:classrooms(id, naziv, color), term_category:term_categories(id, naziv, is_testing), predavanja(id, client_id, term_type_id, client:clients(id, ime, prezime), term_type:term_types(naziv)), potential_clients(*)')
-        .gte('date', dateFrom)
-        .lte('date', dateTo)
-        .order('date')
-        .order('slot_index')
-    ),
-    m.meri('instruktori', adminSupabase.from('instructors').select('id, ime, prezime, color, aktivan').order('prezime').order('ime')),
-    m.meri('ucionice', adminSupabase.from('classrooms').select('id, naziv').order('naziv')),
-    m.meri('klijenti', adminSupabase.from('clients').select('id, ime, prezime, godiste, datum_testiranja').order('ime').order('prezime')),
-    m.meri(
-      'otkazani',
-      adminSupabase.from('otkazani_termini').select('id, client_id, client_ime, client_prezime, instructor_id, instructor_ime, instructor_prezime, term_date, slot_index, term_type_naziv, placeno').gte('term_date', dateFrom).lte('term_date', dateTo)
-    ),
-    m.meri(
-      'zahtevi',
-      adminSupabase
-        .from('zahtevi_za_cas')
-        .select('id, client_id, term_type_id, requested_date, requested_slot_index, client:clients(ime, prezime), term_type:term_types(naziv), classroom:classrooms(naziv)')
-        .eq('status', 'pending')
-        .gte('requested_date', dateFrom)
-        .lte('requested_date', dateTo)
-    ),
-    m.meri('podesavanja', getMaxTerminaPoSlotu()),
-    m.meri('vrste', getTermTypes()),
-    m.meri('kategorije', getTermCategories()),
-    // Globalno (bez obzira na trenutno prikazanu nedelju/dan) – da admin ne propusti zahtev van
-    // trenutnog prikaza. Samo datumi (i da li je podsetnik uklonjen ✕, migracija 055), radi lakog dugmeta
-    // "skoči na tu nedelju". U ISTOM Promise.all-u (ne odvojen await posle) da ne doda dodatan krug.
-    m.meri('podsetnik', adminSupabase.from('zahtevi_za_cas').select('requested_date, podsetnik_skriven').eq('status', 'pending').order('requested_date')),
-    // Ako migracija 044 još nije pokrenuta, upit vraća grešku → data je null → nema blokiranih.
-    // select('*'): radi i pre migracije 048 (tada nema instructor_id → sve blokade su "za sve").
-    m.meri('blokade', adminSupabase.from('blokirani_termini').select('*').gte('date', dateFrom).lte('date', dateTo)),
-    // "x / y" uz svako dete (koji je čas po redu od plaćenih) – baza računa; bez migracije 047 nema oznaka.
-    m.meri('redni', adminSupabase.rpc('redni_broj_casova', { p_from: dateFrom, p_to: dateTo })),
-    // Stalne nedeljne blokade instruktora (048) – pre migracije greška → null → nema ih.
-    m.meri('nedeljne', adminSupabase.from('instruktor_nedeljne_blokade').select('*')),
-    // Oznake „plaćeno od ovog časa“ (049) – za mod Označi plaćeno (💰 od ovde / uklanjanje).
-    m.meri(
-      'paketi',
-      adminSupabase.from('placeni_paketi').select('id, client_id, term_type_id, od_datum, od_slot, broj_casova').gte('od_datum', dateFrom).lte('od_datum', dateTo)
-    ),
-    m.meri('admin', adminProvera),
-  ]);
-  if (!isAdmin) redirect('/login');
+    allPendingZahteviRaw,
+    blockedRaw,
+    redniRaw,
+    nedeljneRaw,
+    paketi,
+    paketiMigracija,
+  } = podaci;
   const redniPoPredavanju = (redniRaw ?? {}) as Record<string, [number, number]>;
   const imeInstruktora = new Map((instructorsList ?? []).map((i) => [i.id, `${i.ime ?? ''} ${i.prezime ?? ''}`.trim()]));
   const blockedSlots: BlokiranTermin[] = [
@@ -352,7 +421,7 @@ export default async function AdminKalendarPage({
     </>
   );
 
-  m.kraj(`${view}, ${dateFrom}–${dateTo}, ${terms.length} termina`);
+  m.kraj(`${view}, ${dateFrom}–${dateTo}, ${terms.length} termina, ${nacin}`);
   return (
     <div>
       <AdminFromDashboardToast from={params.from} />
@@ -385,8 +454,8 @@ export default async function AdminKalendarPage({
         focusDate={params.fokus?.slice(0, 10)}
         focusSlot={params.slot && /^\d{1,2}$/.test(params.slot) ? Number(params.slot) : undefined}
         blockedSlots={blockedSlots}
-        placeniPaketi={(paketiRes.data ?? []).map((p) => ({ ...p, od_datum: String(p.od_datum).slice(0, 10) })) as PlaceniPaket[]}
-        paketiMigracija={!paketiRes.error}
+        placeniPaketi={(paketi ?? []).map((p) => ({ ...p, od_datum: String(p.od_datum).slice(0, 10) })) as PlaceniPaket[]}
+        paketiMigracija={paketiMigracija}
       />
     </div>
   );
