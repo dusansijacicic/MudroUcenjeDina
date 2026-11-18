@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { merenaFetch } from '@/lib/merenje';
 
 /**
  * Server-only Supabase client sa service_role ključem.
@@ -17,5 +18,7 @@ export function createAdminClient() {
       autoRefreshToken: false,
       detectSessionInUrl: false,
     },
+    // Spori pozivi ka bazi se upisuju u log (Vercel → Logs, „[merenje]“).
+    global: { fetch: merenaFetch },
   });
 }

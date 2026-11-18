@@ -12,13 +12,16 @@ import { VRSTA_BEZ, VRSTA_TESTIRANJE } from '@/lib/kalendar-filter';
 import { getTermTypes, getTermCategories, type PlaceniPaket } from '@/app/admin/actions';
 import { mapBlokada, mapNedeljna, nedeljneUDatume, type BlokiranTermin } from '@/lib/blokade';
 import { NAREDNIH_NEDELJA_COOKIE, parseNarednihNedelja } from '@/lib/kalendar-nedelje';
+import { merenje } from '@/lib/merenje';
 
 export default async function AdminKalendarPage({
   searchParams,
 }: {
   searchParams: Promise<{ week?: string; day?: string; month?: string; view?: string; instructor?: string; classroom?: string; client?: string; vrsta?: string; from?: string; fokus?: string; slot?: string }>;
 }) {
-  const { user } = await getAuthedUser();
+  // Vreme učitavanja kalendara i svakog upita → Vercel Logs, „[merenje] kalendar …“.
+  const m = merenje('kalendar');
+  const { user } = await m.meri('prijava', getAuthedUser());
   if (!user) redirect('/login');
 
   // Provera admina ide ZAJEDNO sa upitima ispod (ne pre njih) – jedan krug do baze manje pri otvaranju.
@@ -92,42 +95,53 @@ export default async function AdminKalendarPage({
     paketiRes,
     isAdmin,
   ] = await Promise.all([
-    adminSupabase
-      .from('terms')
-      // Uz dete samo ono što kalendar prikazuje (bez komentara i ostalih polja časa) – manje podataka za prenos.
-      .select('*, instructor:instructors(id, ime, prezime, color), classroom:classrooms(id, naziv, color), term_category:term_categories(id, naziv, is_testing), predavanja(id, client_id, term_type_id, client:clients(id, ime, prezime), term_type:term_types(naziv)), potential_clients(*)')
-      .gte('date', dateFrom)
-      .lte('date', dateTo)
-      .order('date')
-      .order('slot_index'),
-    adminSupabase.from('instructors').select('id, ime, prezime, color, aktivan').order('prezime').order('ime'),
-    adminSupabase.from('classrooms').select('id, naziv').order('naziv'),
-    adminSupabase.from('clients').select('id, ime, prezime, godiste, datum_testiranja').order('ime').order('prezime'),
-    adminSupabase.from('otkazani_termini').select('id, client_id, client_ime, client_prezime, instructor_id, instructor_ime, instructor_prezime, term_date, slot_index, term_type_naziv, placeno').gte('term_date', dateFrom).lte('term_date', dateTo),
-    adminSupabase
-      .from('zahtevi_za_cas')
-      .select('id, client_id, term_type_id, requested_date, requested_slot_index, client:clients(ime, prezime), term_type:term_types(naziv), classroom:classrooms(naziv)')
-      .eq('status', 'pending')
-      .gte('requested_date', dateFrom)
-      .lte('requested_date', dateTo),
-    getMaxTerminaPoSlotu(),
-    getTermTypes(),
-    getTermCategories(),
+    m.meri(
+      'terms',
+      adminSupabase
+        .from('terms')
+        // Uz dete samo ono što kalendar prikazuje (bez komentara i ostalih polja časa) – manje podataka za prenos.
+        .select('*, instructor:instructors(id, ime, prezime, color), classroom:classrooms(id, naziv, color), term_category:term_categories(id, naziv, is_testing), predavanja(id, client_id, term_type_id, client:clients(id, ime, prezime), term_type:term_types(naziv)), potential_clients(*)')
+        .gte('date', dateFrom)
+        .lte('date', dateTo)
+        .order('date')
+        .order('slot_index')
+    ),
+    m.meri('instruktori', adminSupabase.from('instructors').select('id, ime, prezime, color, aktivan').order('prezime').order('ime')),
+    m.meri('ucionice', adminSupabase.from('classrooms').select('id, naziv').order('naziv')),
+    m.meri('klijenti', adminSupabase.from('clients').select('id, ime, prezime, godiste, datum_testiranja').order('ime').order('prezime')),
+    m.meri(
+      'otkazani',
+      adminSupabase.from('otkazani_termini').select('id, client_id, client_ime, client_prezime, instructor_id, instructor_ime, instructor_prezime, term_date, slot_index, term_type_naziv, placeno').gte('term_date', dateFrom).lte('term_date', dateTo)
+    ),
+    m.meri(
+      'zahtevi',
+      adminSupabase
+        .from('zahtevi_za_cas')
+        .select('id, client_id, term_type_id, requested_date, requested_slot_index, client:clients(ime, prezime), term_type:term_types(naziv), classroom:classrooms(naziv)')
+        .eq('status', 'pending')
+        .gte('requested_date', dateFrom)
+        .lte('requested_date', dateTo)
+    ),
+    m.meri('podesavanja', getMaxTerminaPoSlotu()),
+    m.meri('vrste', getTermTypes()),
+    m.meri('kategorije', getTermCategories()),
     // Globalno (bez obzira na trenutno prikazanu nedelju/dan) – da admin ne propusti zahtev van
-    // trenutnog prikaza. Samo datumi, radi lakog dugmeta "skoči na tu nedelju". U ISTOM Promise.all-u
-    // (ne odvojen await posle) da ne doda dodatan sekvencijalni round-trip.
-    // select('*'): radi i pre migracije 055 (tada nema podsetnik_skriven → ništa nije skriveno).
-    adminSupabase.from('zahtevi_za_cas').select('*').eq('status', 'pending').order('requested_date'),
+    // trenutnog prikaza. Samo datumi (i da li je podsetnik uklonjen ✕, migracija 055), radi lakog dugmeta
+    // "skoči na tu nedelju". U ISTOM Promise.all-u (ne odvojen await posle) da ne doda dodatan krug.
+    m.meri('podsetnik', adminSupabase.from('zahtevi_za_cas').select('requested_date, podsetnik_skriven').eq('status', 'pending').order('requested_date')),
     // Ako migracija 044 još nije pokrenuta, upit vraća grešku → data je null → nema blokiranih.
     // select('*'): radi i pre migracije 048 (tada nema instructor_id → sve blokade su "za sve").
-    adminSupabase.from('blokirani_termini').select('*').gte('date', dateFrom).lte('date', dateTo),
+    m.meri('blokade', adminSupabase.from('blokirani_termini').select('*').gte('date', dateFrom).lte('date', dateTo)),
     // "x / y" uz svako dete (koji je čas po redu od plaćenih) – baza računa; bez migracije 047 nema oznaka.
-    adminSupabase.rpc('redni_broj_casova', { p_from: dateFrom, p_to: dateTo }),
+    m.meri('redni', adminSupabase.rpc('redni_broj_casova', { p_from: dateFrom, p_to: dateTo })),
     // Stalne nedeljne blokade instruktora (048) – pre migracije greška → null → nema ih.
-    adminSupabase.from('instruktor_nedeljne_blokade').select('*'),
+    m.meri('nedeljne', adminSupabase.from('instruktor_nedeljne_blokade').select('*')),
     // Oznake „plaćeno od ovog časa“ (049) – za mod Označi plaćeno (💰 od ovde / uklanjanje).
-    adminSupabase.from('placeni_paketi').select('id, client_id, term_type_id, od_datum, od_slot, broj_casova').gte('od_datum', dateFrom).lte('od_datum', dateTo),
-    adminProvera,
+    m.meri(
+      'paketi',
+      adminSupabase.from('placeni_paketi').select('id, client_id, term_type_id, od_datum, od_slot, broj_casova').gte('od_datum', dateFrom).lte('od_datum', dateTo)
+    ),
+    m.meri('admin', adminProvera),
   ]);
   if (!isAdmin) redirect('/login');
   const redniPoPredavanju = (redniRaw ?? {}) as Record<string, [number, number]>;
@@ -338,6 +352,7 @@ export default async function AdminKalendarPage({
     </>
   );
 
+  m.kraj(`${view}, ${dateFrom}–${dateTo}, ${terms.length} termina`);
   return (
     <div>
       <AdminFromDashboardToast from={params.from} />

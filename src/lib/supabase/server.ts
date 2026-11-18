@@ -1,5 +1,6 @@
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
+import { merenaFetch } from '@/lib/merenje';
 
 export async function createClient() {
   const cookieStore = await cookies();
@@ -10,6 +11,8 @@ export async function createClient() {
     url,
     key,
     {
+      // Spori pozivi ka bazi/auth-u se upisuju u log (Vercel → Logs, „[merenje]“).
+      global: { fetch: merenaFetch },
       cookies: {
         getAll() {
           return cookieStore.getAll();
