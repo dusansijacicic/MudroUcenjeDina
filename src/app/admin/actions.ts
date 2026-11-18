@@ -3185,6 +3185,57 @@ export async function updateOtkazaniTerminPlaceno(id: string, placeno: boolean, 
   return {};
 }
 
+/** ✕ uz datum u žutoj traci „termini bez instruktora“: uklanja podsetnik za taj dan (časovi ostaju). */
+export async function sakrijPodsetnikBezInstruktoraAsAdmin(datum: string): Promise<{ error?: string }> {
+  const { admin, error: authErr, actor } = await requireAdmin();
+  if (authErr || !admin) return { error: authErr ?? 'Niste ovlašćeni.' };
+  if (!jeIsoDatum(datum)) return { error: 'Neispravan datum.' };
+  const { error } = await admin
+    .from('zahtevi_za_cas')
+    .update({ podsetnik_skriven: true })
+    .eq('status', 'pending')
+    .eq('requested_date', datum);
+  if (error) {
+    return {
+      error: /podsetnik_skriven/i.test(error.message)
+        ? 'Prvo pokrenite migraciju 055_podsetnik_bez_instruktora.sql u Supabase SQL Editoru.'
+        : error.message,
+    };
+  }
+  revalidatePath('/admin/kalendar');
+  if (actor) {
+    logActivity(actor, 'zahtev.podsetnik_skriven', `Uklonjen podsetnik „bez instruktora“ za ${datum}.`, {
+      entityType: 'zahtev',
+      metadata: { datum },
+    });
+  }
+  return {};
+}
+
+/** Mod „Označi plaćeno“ na kalendaru: otkazani časovi koji su naplaćeni (ili skidanje te oznake). */
+export async function postaviPlacenoOtkazanihAsAdmin(izbor: { id: string; placeno: boolean }[]): Promise<{ error?: string; promenjeno: number }> {
+  const { admin, error: authErr, actor } = await requireAdmin();
+  if (authErr || !admin) return { error: authErr ?? 'Niste ovlašćeni.', promenjeno: 0 };
+  if (izbor.length === 0) return { promenjeno: 0 };
+  let promenjeno = 0;
+  for (const placeno of [true, false]) {
+    const ids = izbor.filter((x) => x.placeno === placeno).map((x) => x.id);
+    if (ids.length === 0) continue;
+    const { error } = await admin.from('otkazani_termini').update({ placeno }).in('id', ids);
+    if (error) return { error: error.message, promenjeno };
+    promenjeno += ids.length;
+  }
+  revalidatePath('/admin/kalendar');
+  revalidatePath('/admin/klijenti', 'layout');
+  if (actor) {
+    logActivity(actor, 'otkazani.placeno', `Naplaćeno otkazanih: ${izbor.filter((x) => x.placeno).length} označeno, ${izbor.filter((x) => !x.placeno).length} skinuto.`, {
+      entityType: 'otkazani_termin',
+      metadata: { izbor },
+    });
+  }
+  return { promenjeno };
+}
+
 export async function deleteOtkazaniTermin(id: string, clientId?: string): Promise<{ error?: string }> {
   const { admin, error: authErr } = await requireAdmin();
   if (authErr || !admin) return { error: authErr ?? 'Niste ovlašćeni.' };

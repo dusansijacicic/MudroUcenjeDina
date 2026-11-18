@@ -26,6 +26,8 @@ import {
   vratiBezInstruktoraAsAdmin,
   otkaziCasoveAsAdmin,
   postaviPlacenoTestiranjaAsAdmin,
+  postaviPlacenoOtkazanihAsAdmin,
+  sakrijPodsetnikBezInstruktoraAsAdmin,
   type BlokiranTermin,
   type PlaceniPaket,
 } from '@/app/admin/actions';
@@ -164,6 +166,8 @@ type SwapContextValue = {
   getPaketBroj: (paketId: string) => number | undefined;
   paidSelectionState: (key: string) => 'dodaj' | 'ukloni' | null;
   onTogglePaid: (pick: PaidPick) => void;
+  /** Klik na ceo termin (ili njegov nastavak): bira svu decu u njemu; ako su sva već izabrana – poništava. */
+  onTogglePaidMany: (picks: PaidPick[]) => void;
   /** Id oznake plaćanja koja počinje baš na ovom času deteta te vrste. */
   getPaketStart: (clientId: string | null | undefined, termTypeId: string | null | undefined, date: string, slot: number) => string | undefined;
   /** Mod „Otkaži“: klik na dete (ili zahtev) ga označi za otkazivanje; ključ "p:id" ili "z:id". */
@@ -227,6 +231,7 @@ const SwapContext = createContext<SwapContextValue>({
   getPaketBroj: () => undefined,
   paidSelectionState: () => null,
   onTogglePaid: () => {},
+  onTogglePaidMany: () => {},
   getPaketStart: () => undefined,
   cancelMode: false,
   isCancelSelected: () => false,
@@ -261,8 +266,56 @@ type PaidPick = {
   paketId?: string;
   /** Dete sa testiranja ("t:id") – plaćanje je na detetu, bez paketa; ukloni = već je plaćeno. */
   testiranje?: boolean;
+  /** Otkazan čas ("o:id") – oznaka „naplaćeno“ na otkazanom času; ukloni = već je naplaćen. */
+  otkazan?: boolean;
   ukloni?: boolean;
 };
+
+type TermPredavanje = NonNullable<AdminTerm['predavanja']>[number];
+
+/** Izbor za dete u času (oznaka „plaćeno od ovog časa“); null ako čas nema dete. */
+function paidPickPredavanje(
+  term: AdminTerm,
+  p: TermPredavanje,
+  getPaketStart: SwapContextValue['getPaketStart']
+): PaidPick | null {
+  const clientId = p.client_id ?? p.client?.id ?? null;
+  if (!clientId) return null;
+  const ime = p.client ? `${p.client.ime ?? ''} ${p.client.prezime ?? ''}`.trim() || '—' : '—';
+  const tt = p.term_type;
+  const vrsta = Array.isArray(tt) ? tt[0]?.naziv : tt?.naziv;
+  const termTypeId = p.term_type_id ?? null;
+  return {
+    key: `p:${p.id}`,
+    clientId,
+    termTypeId,
+    date: term.date,
+    slot: term.slot_index,
+    label: `${ime}${vrsta ? ` (${vrsta})` : ''}`,
+    paketId: getPaketStart(clientId, termTypeId, term.date, term.slot_index),
+  };
+}
+
+/** Izbor za dete na testiranju (plaćanje se pamti na detetu, migracija 054). */
+function paidPickTestiranje(term: AdminTerm, pc: PotentialClientCalendar): PaidPick {
+  const ime = `${pc.ime ?? ''}${pc.prezime ? ` ${pc.prezime}` : ''}`;
+  return {
+    key: `t:${pc.id}`,
+    clientId: pc.id,
+    termTypeId: null,
+    date: term.date,
+    slot: term.slot_index,
+    label: `${ime} (testiranje)`,
+    testiranje: true,
+    ukloni: !!pc.placeno,
+  };
+}
+
+/** Sve što se u terminu može označiti kao plaćeno – klik na termin (ili njegov nastavak) bira svu decu u njemu. */
+function paidPicksForTerm(term: AdminTerm, getPaketStart: SwapContextValue['getPaketStart']): PaidPick[] {
+  if (isTestingTerm(term)) return (term.potential_clients ?? []).map((pc) => paidPickTestiranje(term, pc));
+  return (term.predavanja ?? []).flatMap((p) => paidPickPredavanje(term, p, getPaketStart) ?? []);
+}
 
 type SwapFields = { termin: boolean; instruktor: boolean; ucionica: boolean; klijent: boolean };
 
@@ -686,6 +739,26 @@ export default function AdminCalendarView({
     if (inView && scrollToZahtev(d)) return;
     focusedForRef.current = null;
     router.push(`/admin/kalendar?view=nedelja&week=${getMonday(d)}&fokus=${d}${filterQuery}`);
+  };
+
+  // ✕ uz datum u žutoj traci: podsetnik nestaje odmah, a server ga trajno skriva (055).
+  const [skriveniPodsetnici, setSkriveniPodsetnici] = useState<Set<string>>(() => new Set());
+  const podsetnikDatumi = useMemo(
+    () => allPendingZahteviDates.filter((d) => !skriveniPodsetnici.has(d)),
+    [allPendingZahteviDates, skriveniPodsetnici]
+  );
+  const ukloniPodsetnik = async (d: string) => {
+    if (!confirm(`Ukloniti podsetnik za ${formatShortDate(d)}?\n\nČasovi bez instruktora tog dana ostaju na kalendaru – briše se samo podsetnik.`)) return;
+    setSkriveniPodsetnici((prev) => new Set(prev).add(d));
+    const res = await sakrijPodsetnikBezInstruktoraAsAdmin(d);
+    if (res.error) {
+      setSkriveniPodsetnici((prev) => {
+        const next = new Set(prev);
+        next.delete(d);
+        return next;
+      });
+      toast.error(res.error);
+    }
   };
 
   const handleDeleteOtkazani = async (id: string) => {
@@ -1228,16 +1301,33 @@ export default function AdminCalendarView({
     });
   };
 
+  const onTogglePaidMany = (picks: PaidPick[]) => {
+    if (picks.length === 0) {
+      toast('U ovom terminu nema deteta – nema koga da se označi kao plaćeno.');
+      return;
+    }
+    setPaidSelection((prev) => {
+      const next = new Map(prev);
+      const svaIzabrana = picks.every((p) => next.has(p.key));
+      for (const p of picks) {
+        if (svaIzabrana) next.delete(p.key);
+        else if (!next.has(p.key)) next.set(p.key, p);
+      }
+      return next;
+    });
+  };
+
   const confirmPaid = async () => {
     const sve = [...paidSelection.values()];
     if (sve.length === 0) return;
     const testiranja = sve.filter((p) => p.testiranje);
-    const izabrano = sve.filter((p) => !p.testiranje);
+    const otkazani = sve.filter((p) => p.otkazan);
+    const izabrano = sve.filter((p) => !p.testiranje && !p.otkazan);
     const dodaj = izabrano
       .filter((p) => !p.paketId)
       .map((p) => ({ clientId: p.clientId, termTypeId: p.termTypeId, date: p.date, slotIndex: p.slot, brojCasova: paidSamoJedan ? 1 : 6 }));
     const ukloni = izabrano.filter((p) => p.paketId).map((p) => p.paketId as string);
-    const skidaSe = ukloni.length + testiranja.filter((p) => p.ukloni).length;
+    const skidaSe = ukloni.length + testiranja.filter((p) => p.ukloni).length + otkazani.filter((p) => p.ukloni).length;
     if (skidaSe > 0 && !confirm(`Ukloniti ${skidaSe} oznaka „plaćeno“? Ti časovi/testiranja više neće biti plaćeni.`)) return;
     setPaidLoading(true);
     const res = dodaj.length + ukloni.length > 0 ? await postaviPlacenePakete(dodaj, ukloni) : { dodato: 0, uklonjeno: 0 };
@@ -1245,20 +1335,33 @@ export default function AdminCalendarView({
       testiranja.length > 0
         ? await postaviPlacenoTestiranjaAsAdmin(testiranja.map((p) => ({ id: p.key.slice(2), placeno: !p.ukloni })))
         : { promenjeno: 0 };
+    const resO =
+      otkazani.length > 0
+        ? await postaviPlacenoOtkazanihAsAdmin(otkazani.map((p) => ({ id: p.key.slice(2), placeno: !p.ukloni })))
+        : { promenjeno: 0 };
     setPaidLoading(false);
-    const greska = ('error' in res ? res.error : undefined) ?? ('error' in resT ? resT.error : undefined);
+    const greska =
+      ('error' in res ? res.error : undefined) ?? ('error' in resT ? resT.error : undefined) ?? ('error' in resO ? resO.error : undefined);
     if (greska) {
       toast.error(greska);
       return;
     }
     const testOznaceno = testiranja.filter((p) => !p.ukloni).length;
     const testSkinuto = testiranja.filter((p) => p.ukloni).length;
+    const otkOznaceno = otkazani.filter((p) => !p.ukloni).length;
+    const otkSkinuto = otkazani.filter((p) => p.ukloni).length;
+    if (otkazani.length > 0) {
+      const naplacen = new Map(otkazani.map((p) => [p.key.slice(2), !p.ukloni]));
+      setOtkazaniTermini((list) => list.map((ot) => (naplacen.has(ot.id) ? { ...ot, placeno: naplacen.get(ot.id) as boolean } : ot)));
+    }
     toast.success(
       [
         res.dodato ? `Plaćeno označeno za ${res.dodato} dete/časa (${paidSamoJedan ? 'samo taj čas' : 'po 6 časova'}).` : '',
         res.uklonjeno ? `Uklonjeno oznaka: ${res.uklonjeno}.` : '',
         testOznaceno ? `Plaćeno testiranje: ${testOznaceno}.` : '',
         testSkinuto ? `Skinuto plaćeno sa testiranja: ${testSkinuto}.` : '',
+        otkOznaceno ? `Naplaćeno otkazanih: ${otkOznaceno}.` : '',
+        otkSkinuto ? `Skinuto naplaćeno sa otkazanih: ${otkSkinuto}.` : '',
       ]
         .filter(Boolean)
         .join(' ') || 'Ništa novo – te oznake već postoje.'
@@ -1638,6 +1741,7 @@ export default function AdminCalendarView({
           return p ? (p.paketId || p.ukloni ? 'ukloni' : 'dodaj') : null;
         },
         onTogglePaid,
+        onTogglePaidMany,
         getPaketStart,
         cancelMode,
         isCancelSelected: (key: string) => cancelSelection.has(key),
@@ -1658,21 +1762,31 @@ export default function AdminCalendarView({
       }}
     >
       {headerContent}
-      {allPendingZahteviDates.length > 0 && (
+      {podsetnikDatumi.length > 0 && (
         <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-amber-400 bg-amber-50 px-4 py-2.5 text-sm text-amber-900">
           <span className="font-semibold">
-            ⚠ {allPendingZahteviDates.length} {allPendingZahteviDates.length === 1 ? 'termin' : 'termina'} bez instruktora/učionice:
+            ⚠ {podsetnikDatumi.length} {podsetnikDatumi.length === 1 ? 'termin' : 'termina'} bez instruktora/učionice:
           </span>
-          <span className="flex flex-wrap gap-1.5">
-            {allPendingZahteviDates.map((d) => (
-              <button
-                key={d}
-                type="button"
-                onClick={() => openZahtevDate(d)}
-                className="rounded-full bg-amber-200 px-2 py-0.5 font-medium text-amber-900 hover:bg-amber-300"
-              >
-                {formatShortDate(d)}
-              </button>
+          <span className="flex flex-wrap gap-2.5 pt-1">
+            {podsetnikDatumi.map((d) => (
+              <span key={d} className="relative inline-flex">
+                <button
+                  type="button"
+                  onClick={() => openZahtevDate(d)}
+                  className="rounded-full bg-amber-200 py-0.5 pl-2 pr-3.5 font-medium text-amber-900 hover:bg-amber-300"
+                >
+                  {formatShortDate(d)}
+                </button>
+                <button
+                  type="button"
+                  title="Ukloni podsetnik za ovaj dan (časovi ostaju na kalendaru)"
+                  aria-label={`Ukloni podsetnik za ${formatShortDate(d)}`}
+                  onClick={() => ukloniPodsetnik(d)}
+                  className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full border border-amber-400 bg-white text-[10px] font-bold leading-none text-amber-800 shadow-sm hover:border-red-500 hover:bg-red-500 hover:text-white"
+                >
+                  ✕
+                </button>
+              </span>
             ))}
           </span>
         </div>
@@ -1831,8 +1945,9 @@ export default function AdminCalendarView({
                   {paidSamoJedan
                     ? 'kliknite dete u terminu koji je plaćen – plaćen je samo taj jedan čas.'
                     : 'kliknite dete u terminu od kog je plaćeno – taj čas i sledećih 5 časova tog deteta iste vrste su plaćeni.'}{' '}
-                  Računaju se i časovi bez instruktora/učionice; čas bez vrste ide uz poslednju plaćenu vrstu. Dete sa „💰“: klik uklanja tu
-                  oznaku. Dete na <strong>testiranju</strong>: klik = to testiranje je plaćeno.
+                  Može se označiti sve što je na kalendaru: i časovi bez instruktora, učionice ili vrste (čas bez vrste ide uz poslednju
+                  plaćenu vrstu). Klik na sam termin ili na „Nastavak dužeg časa“ bira svu decu u njemu. Dete sa „💰“: klik uklanja tu
+                  oznaku. Dete na <strong>testiranju</strong>: klik = to testiranje je plaćeno. <strong>Otkazan</strong> čas: klik = naplaćen.
                   {view === 'mesec' && <strong className="text-stone-700"> Za izbor pređite na nedeljni ili dnevni prikaz.</strong>}
                 </span>
               </div>
@@ -1849,6 +1964,10 @@ export default function AdminCalendarView({
                         ? p.ukloni
                           ? '✕ nije plaćeno: '
                           : '✓ plaćeno testiranje: '
+                        : p.otkazan
+                        ? p.ukloni
+                          ? '✕ nije naplaćeno: '
+                          : '✓ naplaćen otkazan: '
                         : p.paketId
                         ? '✕ ukloni: '
                         : paidSamoJedan
@@ -2357,6 +2476,11 @@ const CHILD_ROW_COLORS = [
   { bg: '#ffedd5', bar: '#f97316' }, // narandžasta
 ];
 
+function childRowStyle(index: number) {
+  const c = CHILD_ROW_COLORS[index % CHILD_ROW_COLORS.length];
+  return { backgroundColor: c.bg, borderLeft: `4px solid ${c.bar}` };
+}
+
 /** Red deteta čiji čas nije plaćen (x > y) – jače crvena od roze reda, uz "!" oznaku. */
 const UNPAID_ROW_STYLE = { backgroundColor: '#fecaca', borderLeft: '4px solid #dc2626' };
 
@@ -2492,18 +2616,7 @@ function TermCardVisual({ term, rowOffset = 0 }: { term: AdminTerm; rowOffset?: 
                               e.stopPropagation();
                               const opis = `${formatShortDate(term.date)} ${TIME_SLOTS[term.slot_index] ?? ''} · ${ime} (testiranje)`;
                               if (swap.cancelMode) swap.onToggleCancel(otkaziKey, opis);
-                              else {
-                                swap.onTogglePaid({
-                                  key: otkaziKey,
-                                  clientId: pc.id,
-                                  termTypeId: null,
-                                  date: term.date,
-                                  slot: term.slot_index,
-                                  label: `${ime} (testiranje)`,
-                                  testiranje: true,
-                                  ukloni: !!pc.placeno,
-                                });
-                              }
+                              else swap.onTogglePaid(paidPickTestiranje(term, pc));
                             }
                           : undefined
                       }
@@ -2538,12 +2651,10 @@ function TermCardVisual({ term, rowOffset = 0 }: { term: AdminTerm; rowOffset?: 
               key: p.id,
               content: (() => {
                 const ime = p.client ? `${p.client.ime ?? ''} ${p.client.prezime ?? ''}`.trim() || '—' : '—';
-                const clientId = p.client_id ?? p.client?.id ?? null;
-                const termTypeId = p.term_type_id ?? null;
-                const paidKey = `p:${p.id}`;
-                const paidState = swap.paidMode ? swap.paidSelectionState(paidKey) : null;
-                const paketId = swap.paidMode ? swap.getPaketStart(clientId, termTypeId, term.date, term.slot_index) : undefined;
-                const klik = swap.paidMode && !!clientId;
+                const paidPick = swap.paidMode ? paidPickPredavanje(term, p, swap.getPaketStart) : null;
+                const paidState = paidPick ? swap.paidSelectionState(paidPick.key) : null;
+                const paketId = paidPick?.paketId;
+                const klik = !!paidPick;
                 const otkaziKey = `p:${p.id}`;
                 const otkazuje = swap.cancelMode && swap.isCancelSelected(otkaziKey);
                 return (
@@ -2558,19 +2669,11 @@ function TermCardVisual({ term, rowOffset = 0 }: { term: AdminTerm; rowOffset?: 
                             e.stopPropagation();
                             swap.onToggleCancel(otkaziKey, `${formatShortDate(term.date)} ${TIME_SLOTS[term.slot_index] ?? ''} · ${ime}`);
                           }
-                        : klik
+                        : paidPick
                         ? (e) => {
                             e.preventDefault();
                             e.stopPropagation();
-                            swap.onTogglePaid({
-                              key: paidKey,
-                              clientId: clientId as string,
-                              termTypeId,
-                              date: term.date,
-                              slot: term.slot_index,
-                              label: `${ime}${vrsta ? ` (${vrsta})` : ''}`,
-                              paketId,
-                            });
+                            swap.onTogglePaid(paidPick);
                           }
                         : undefined
                     }
@@ -2712,24 +2815,43 @@ function AdminCellContent({
     <div className="mt-1 space-y-1">
       {otkazaniInSlot.map((ot) => {
         const otkazaniSelected = swap.deleteMode && swap.isOtkazaniMarkedForDelete(ot.id);
+        // Označi plaćeno: otkazan čas može biti naplaćen (ili se ta oznaka skida).
+        const otkPaidKey = `o:${ot.id}`;
+        const otkPaidState = swap.paidMode ? swap.paidSelectionState(otkPaidKey) : null;
+        const otkIme = `${ot.client_ime}${ot.client_prezime ? ` ${ot.client_prezime}` : ''}`;
         return (
           <div
             key={ot.id}
-            role={swap.deleteMode ? 'button' : undefined}
+            role={swap.deleteMode || swap.paidMode ? 'button' : undefined}
+            title={swap.paidMode ? (ot.placeno ? 'Klik: skini oznaku naplaćeno' : 'Klik: otkazan čas je naplaćen') : undefined}
             onClick={() => {
               if (swap.deleteMode) swap.onToggleOtkazaniDeleteSelect(ot.id);
+              else if (swap.paidMode) {
+                swap.onTogglePaid({
+                  key: otkPaidKey,
+                  clientId: '',
+                  termTypeId: null,
+                  date: ot.term_date,
+                  slot: ot.slot_index,
+                  label: `${otkIme} (otkazan)`,
+                  otkazan: true,
+                  ukloni: ot.placeno,
+                });
+              }
             }}
-            className={`rounded-lg border p-1.5 text-xs text-stone-400 opacity-70${
-              swap.deleteMode ? ' cursor-pointer' : ''
+            className={`rounded-lg border p-1.5 text-xs text-stone-400${otkPaidState ? '' : ' opacity-70'}${
+              swap.deleteMode || swap.paidMode ? ' cursor-pointer' : ''
             }${
-              otkazaniSelected ? ' border-red-500 ring-2 ring-offset-1 ring-red-500 bg-red-50' : ' border-stone-200 bg-stone-50'
+              otkazaniSelected || otkPaidState === 'ukloni'
+                ? ' border-red-500 ring-2 ring-offset-1 ring-red-500 bg-red-50'
+                : otkPaidState === 'dodaj'
+                ? ' border-emerald-600 ring-2 ring-offset-1 ring-emerald-500 bg-emerald-50'
+                : ' border-stone-200 bg-stone-50'
             }`}
           >
             <div className="flex items-start justify-between gap-1">
-              <span className="line-through block">
-                {ot.client_ime}{ot.client_prezime ? ` ${ot.client_prezime}` : ''}
-              </span>
-              {!swap.deleteMode && (
+              <span className="line-through block">{otkIme}</span>
+              {!swap.deleteMode && !swap.paidMode && (
                 <button
                   type="button"
                   title="Trajno obriši"
@@ -2748,8 +2870,13 @@ function AdminCellContent({
             )}
             <span className="text-[10px] uppercase tracking-wide">
               otkazano{ot.term_type_naziv?.toLowerCase() === 'testiranje' ? ' · testiranje' : ''}
-              {ot.placeno ? ' · naplaćeno' : ''}
+              {ot.placeno ? ' · 💰 naplaćeno' : ''}
             </span>
+            {otkPaidState === 'dodaj' ? (
+              <span className="block text-[11px] font-bold text-emerald-700">✓ naplaćeno</span>
+            ) : otkPaidState === 'ukloni' ? (
+              <span className="block text-[11px] font-bold text-red-700">✕ skini naplaćeno</span>
+            ) : null}
           </div>
         );
       })}
@@ -2767,6 +2894,7 @@ function AdminCellContent({
     else if (swap.deleteMode) swap.onToggleDeleteSelect(term.id);
     else if (swap.assignMode) swap.onToggleAssignSelect(term.id);
     else if (swap.moveMode) swap.onSelectMoveSource(term);
+    else if (swap.paidMode) swap.onTogglePaidMany(paidPicksForTerm(term, swap.getPaketStart));
   };
   const terminIzabran = (id: string) =>
     swap.isSelected(id) !== null || swap.copySourceId === id || swap.moveSourceId === id || swap.isMarkedForDelete(id) || swap.isMarkedForAssign(id);
@@ -2820,9 +2948,11 @@ function AdminCellContent({
     (swap.assignMode && swap.isZahtevMarkedForAssign(id)) ||
     (swap.cancelMode && swap.isCancelSelected(`z:${id}`)) ||
     (swap.paidMode && !!swap.paidSelectionState(`z:${id}`));
+  // Boje redova dece nastavljaju se posle dece iz termina u istom vremenu.
+  const zahtevRedOd = termsInSlot.reduce((n, t) => n + childRowCount(t), 0);
   const PendingZahteviEntries = pendingZahteviInSlot.length > 0 || zahtevNastavci.length > 0 ? (
-    <div className="mt-1 space-y-1">
-      {pendingZahteviInSlot.map((z) => {
+    <div className="space-y-1.5">
+      {pendingZahteviInSlot.map((z, zi) => {
         const zahtevAssignSelected = zahtevAssignClickable && swap.isZahtevMarkedForAssign(z.id);
         const zahtevDeleteSelected = swap.deleteMode && swap.isZahtevMarkedForDelete(z.id);
         const zahtevUnpaid = isUnpaid(z.redni);
@@ -2844,44 +2974,62 @@ function AdminCellContent({
             onClick={(e) => klikNaZahtev(z, e)}
             data-zahtev-date={z.date}
             title={redniTitle(z.redni) ?? (zahtevDraggable ? 'Prevucite mišem u drugo vreme da ga premestite' : undefined)}
-            className={`rounded-lg border border-dashed p-1.5 text-xs text-amber-900${
+            // Izgleda kao običan termin (zaglavlje: instruktor · vrsta · učionica, pa red deteta) – samo
+            // umesto instruktora piše „bez instruktora“ i okvir je isprekidan.
+            className={`overflow-hidden rounded-lg border-2 border-dashed bg-white text-sm${
               zahtevClickable ? ' cursor-pointer' : zahtevDraggable ? ' cursor-grab' : ''
             }${
               zahtevIzabran
-                ? ' border-amber-600 ring-2 ring-offset-1 ring-amber-500 bg-amber-200'
+                ? ' border-amber-600 ring-2 ring-offset-1 ring-amber-500'
                 : zahtevOtkazuje
-                ? ' border-stone-700 ring-2 ring-offset-1 ring-stone-600 bg-stone-100 line-through'
+                ? ' border-stone-700 ring-2 ring-offset-1 ring-stone-600'
                 : zahtevDeleteSelected || zahtevPaidState === 'ukloni'
-                ? ' border-red-600 ring-2 ring-offset-1 ring-red-500 bg-red-50'
+                ? ' border-red-600 ring-2 ring-offset-1 ring-red-500'
                 : zahtevPaidState === 'dodaj'
-                ? ' border-emerald-600 ring-2 ring-offset-1 ring-emerald-500 bg-emerald-50'
+                ? ' border-emerald-600 ring-2 ring-offset-1 ring-emerald-500'
                 : zahtevAssignSelected
-                ? ' border-blue-600 ring-2 ring-offset-1 ring-blue-500 bg-blue-50'
+                ? ' border-blue-600 ring-2 ring-offset-1 ring-blue-500'
                 : zahtevUnpaid
-                ? ' border-red-600 bg-red-200'
-                : ' border-amber-500 bg-amber-100'
+                ? ' border-red-500'
+                : ' border-amber-400'
             }`}
           >
-            <span className="flex flex-wrap items-baseline gap-x-1 font-medium text-amber-950">
-              <span className="min-w-0 break-words">
+            <div
+              className="flex items-baseline justify-between gap-1 bg-amber-50 px-2 py-0.5 text-[11px] leading-tight"
+              title={`bez instruktora · ${z.classroom_naziv ? `učionica ${z.classroom_naziv}` : 'bez učionice'}${z.term_type_naziv ? '' : ' · bez vrste'}`}
+            >
+              <span className="truncate font-semibold text-amber-700">bez instruktora</span>
+              <span className="flex min-w-0 items-baseline gap-1">
+                {z.term_type_naziv && <span className="truncate text-stone-500">{z.term_type_naziv}</span>}
+                {z.classroom_naziv && (
+                  <span className="shrink-0 rounded bg-stone-100 px-1 font-medium text-stone-600">
+                    <span className="lg:hidden">uč. {shortClassroomLabel(z.classroom_naziv)}</span>
+                    <span className="hidden lg:inline">{z.classroom_naziv}</span>
+                  </span>
+                )}
+              </span>
+            </div>
+            <div
+              style={zahtevUnpaid ? UNPAID_ROW_STYLE : childRowStyle(zahtevRedOd + zi)}
+              className="flex flex-wrap items-baseline gap-x-1 px-2 py-1 text-[13px] font-semibold leading-snug text-stone-900 antialiased sm:text-sm"
+            >
+              <span className={`min-w-0 break-words${zahtevOtkazuje ? ' line-through' : ''}`}>
                 {z.client_ime}{z.client_prezime ? ` ${z.client_prezime}` : ''}
               </span>
               {z.redni && <RedniBroj redni={z.redni} />}
-            </span>
-            {z.term_type_naziv && <span className="block text-[11px]">{z.term_type_naziv}</span>}
-            {z.classroom_naziv && <span className="block text-[11px]">🏫 {z.classroom_naziv}</span>}
-            <span className="text-[10px] uppercase tracking-wide">zahtev · čeka predavača</span>
-            {zahtevPaidState === 'dodaj' ? (
-              <span className="block text-[11px] font-bold text-emerald-700">
-                {swap.paidSamoJedan ? '✓ plaćen samo ovaj čas' : '✓ plaćeno od ovde (6 časova)'}
-              </span>
-            ) : zahtevPaidState === 'ukloni' ? (
-              <span className="block text-[11px] font-bold text-red-700">✕ ukloni oznaku plaćeno</span>
-            ) : zahtevPaketId ? (
-              <span className="block text-[11px] font-semibold text-emerald-700">
-                {swap.getPaketBroj(zahtevPaketId) === 1 ? '💰 plaćen ovaj čas' : '💰 od ovde'}
-              </span>
-            ) : null}
+              {zahtevOtkazuje && <span className="w-full text-[11px] font-bold text-stone-700">✕ otkazuje se</span>}
+              {zahtevPaidState === 'dodaj' ? (
+                <span className="w-full text-[11px] font-bold text-emerald-700">
+                  {swap.paidSamoJedan ? '✓ plaćen samo ovaj čas' : '✓ plaćeno od ovde (6 časova)'}
+                </span>
+              ) : zahtevPaidState === 'ukloni' ? (
+                <span className="w-full text-[11px] font-bold text-red-700">✕ ukloni oznaku plaćeno</span>
+              ) : zahtevPaketId ? (
+                <span className="w-full text-[11px] font-semibold text-emerald-700">
+                  {swap.getPaketBroj(zahtevPaketId) === 1 ? '💰 plaćen ovaj čas' : '💰 od ovde'}
+                </span>
+              ) : null}
+            </div>
           </div>
         );
       })}
@@ -2891,13 +3039,14 @@ function AdminCellContent({
           role={zahtevClickable ? 'button' : undefined}
           onClick={(e) => klikNaZahtev(n.zahtev, e)}
           title={`Čas bez instruktora traje ${n.trajanje} min – zauzima i ovo vreme (za to dete i učionicu). Kad dobije instruktora, ovde ostaje „Nastavak dužeg časa“.`}
-          className={`rounded-lg border-2 border-dashed border-amber-400 bg-amber-50 p-1.5 text-xs text-amber-900${
+          className={`rounded-lg border-2 border-dashed border-amber-300 bg-stone-50 p-2 text-xs text-stone-500${
             zahtevClickable ? ' cursor-pointer' : ''
           }${zahtevNekakoIzabran(n.zahtevId) ? ' ring-2 ring-offset-1 ring-amber-500' : ''}`}
         >
           <span className="font-medium">↳ Nastavak dužeg časa</span>
-          <span className="block text-[11px]">{n.ime}</span>
-          <span className="text-[10px] uppercase tracking-wide">zahtev · čeka predavača</span>
+          <span className="mt-0.5 block text-[11px]">
+            {n.ime} · <span className="text-amber-700">bez instruktora</span>
+          </span>
         </div>
       ))}
     </div>
@@ -3035,7 +3184,9 @@ function AdminCellContent({
     );
   }
 
-  if (termsInSlot.length === 0) {
+  // Prazno vreme (veliko „+“) samo kad u njemu nema ni časa bez instruktora ni njegovog nastavka – inače
+  // se taj čas prikazuje kao pravi termin (niže), sa malim „+ Dodaj“ ispod.
+  if (termsInSlot.length === 0 && pendingZahteviInSlot.length === 0 && zahtevNastavci.length === 0) {
     return (
       <div className="space-y-1">
         {InstructorBlocksBadge}
@@ -3144,6 +3295,7 @@ function AdminCellContent({
           </Link>
         );
       })}
+      {PendingZahteviEntries}
       {canAddParallelTerm ? (
         <>
           <Link
@@ -3173,7 +3325,7 @@ function AdminCellContent({
               ? swap.isMoveTarget(emptyDate, emptySlot)
                 ? '✓ ovde'
                 : 'Premesti ovde'
-              : `+ Dodaj još termin u ovom slotu (${slotCount}/${maxTerminaPoSlotu})`}
+              : `+ Dodaj ${slotCount > 0 ? 'još ' : ''}termin u ovom slotu (${slotCount}/${maxTerminaPoSlotu})`}
           </Link>
           <Link
             href={newTestHref}
@@ -3209,7 +3361,6 @@ function AdminCellContent({
           </p>
         </>
       )}
-      {PendingZahteviEntries}
       {CancelledEntries}
     </div>
   );

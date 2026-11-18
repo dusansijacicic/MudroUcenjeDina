@@ -116,7 +116,8 @@ export default async function AdminKalendarPage({
     // Globalno (bez obzira na trenutno prikazanu nedelju/dan) – da admin ne propusti zahtev van
     // trenutnog prikaza. Samo datumi, radi lakog dugmeta "skoči na tu nedelju". U ISTOM Promise.all-u
     // (ne odvojen await posle) da ne doda dodatan sekvencijalni round-trip.
-    adminSupabase.from('zahtevi_za_cas').select('requested_date').eq('status', 'pending').order('requested_date'),
+    // select('*'): radi i pre migracije 055 (tada nema podsetnik_skriven → ništa nije skriveno).
+    adminSupabase.from('zahtevi_za_cas').select('*').eq('status', 'pending').order('requested_date'),
     // Ako migracija 044 još nije pokrenuta, upit vraća grešku → data je null → nema blokiranih.
     // select('*'): radi i pre migracije 048 (tada nema instructor_id → sve blokade su "za sve").
     adminSupabase.from('blokirani_termini').select('*').gte('date', dateFrom).lte('date', dateTo),
@@ -135,7 +136,14 @@ export default async function AdminKalendarPage({
     ...(blockedRaw ?? []).map(mapBlokada),
     ...nedeljneUDatume((nedeljneRaw ?? []).map(mapNedeljna), dateFrom, dateTo),
   ].map((b) => ({ ...b, instructor_naziv: b.instructor_id ? (imeInstruktora.get(b.instructor_id) ?? null) : null }));
-  const allPendingZahteviDates = [...new Set((allPendingZahteviRaw ?? []).map((z) => String(z.requested_date).slice(0, 10)))];
+  // Datumi u žutoj traci – bez onih čiji je podsetnik uklonjen (✕, migracija 055).
+  const allPendingZahteviDates = [
+    ...new Set(
+      ((allPendingZahteviRaw ?? []) as { requested_date: string; podsetnik_skriven?: boolean | null }[])
+        .filter((z) => z.podsetnik_skriven !== true)
+        .map((z) => String(z.requested_date).slice(0, 10))
+    ),
+  ];
 
   let terms: AdminTerm[] = (termsRaw ?? []).map((t) => {
     const instr = (t as {

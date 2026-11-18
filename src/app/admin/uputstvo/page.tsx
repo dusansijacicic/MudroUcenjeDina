@@ -151,7 +151,11 @@ export default async function AdminUputstvoPage({ searchParams }: { searchParams
             <li>Premeštanje: uhvatite termin mišem, prevucite ga u drugu ćeliju, pustite i potvrdite.</li>
             <li><Ui>+</Ui> u praznoj ćeliji = novi termin za taj dan i vreme; <Ui>+ Testiranje</Ui> = termin testiranja.</li>
             <li><Ui>+ Dodaj još termin u ovom slotu</Ui> ispod postojećih = još jedan paralelan termin u istom vremenu (drugi instruktor/učionica).</li>
-            <li>Žuta traka na vrhu „termini bez instruktora/učionice“: klik na datum vodi pravo do tog časa.</li>
+            <li>
+              Žuta traka na vrhu „termini bez instruktora/učionice“: klik na datum vodi pravo do tog časa. <Ui>✕</Ui> u ćošku datuma (uz
+              potvrdu) uklanja samo podsetnik za taj dan – časovi ostaju na kalendaru; nov čas bez instruktora tog dana ga vraća. Potrebna je
+              migracija 055.
+            </li>
             <li><Ui>🖨 Print / PDF</Ui> = raspored spreman za štampu ili čuvanje kao PDF.</li>
             <li>Kalendar se sam osvežava kad bilo ko nešto promeni (drugi admin, predavač, nova uplata) – ne treba F5.</li>
           </Lista>
@@ -173,8 +177,9 @@ export default async function AdminUputstvoPage({ searchParams }: { searchParams
             </li>
             <li><M n="F" /> Crveni red sa <Crveno>! nije plaćeno</Crveno> i crveni okvir termina = paket je potrošen, a ovaj čas nije plaćen.</li>
             <li>
-              <M n="G" /> Narandžasta kartica sa isprekidanim okvirom = čas zakazan bez instruktora; čeka da ga neki predavač preuzme. Ako je
-              vrsta duža od 45 min (npr. 55 min), u sledećem vremenu stoji narandžasti <strong>↳ Nastavak dužeg časa</strong> – to vreme je
+              <M n="G" /> Kartica sa isprekidanim narandžastim okvirom i „bez instruktora“ u zaglavlju = čas zakazan bez instruktora (izgleda
+              i radi kao svaki drugi čas, samo mu fale polja); čeka da ga neki predavač preuzme. Ako je
+              vrsta duža od 45 min (npr. 55 min), u sledećem vremenu stoji <strong>↳ Nastavak dužeg časa</strong> – to vreme je
               zauzeto i pre nego što čas dobije instruktora: to dete tada ne može dobiti drugi čas, njegova učionica se ne može dati drugom,
               a instruktor koji ga preuzme mora biti slobodan i u tom sledećem vremenu.
             </li>
@@ -322,8 +327,13 @@ export default async function AdminUputstvoPage({ searchParams }: { searchParams
               važi za sve što označite do potvrde.
             </li>
             <li>
-              Kliknite <strong>dete</strong> u terminu od kog je plaćeno (može i narandžasti čas bez instruktora) – red dobije zeleni okvir i
-              „✓ plaćeno od ovde (6 časova)“. Može više dece odjednom.
+              Kliknite <strong>dete</strong> u terminu od kog je plaćeno – red dobije zeleni okvir i „✓ plaćeno od ovde (6 časova)“. Može više
+              dece odjednom. Označiti se može <strong>sve što je na kalendaru</strong>, bez obzira da li su sva polja popunjena: i čas bez
+              instruktora, bez učionice ili bez vrste. Klik na sam termin (zaglavlje) ili na njegov „↳ Nastavak dužeg časa“ bira svu decu u
+              tom terminu.
+            </li>
+            <li>
+              <strong>Otkazan</strong> čas (sivi): klik znači da je naplaćen (posle potvrde piše „💰 naplaćeno“; ponovni klik skida oznaku).
             </li>
             <li>
               Dete na <strong>testiranju</strong>: klik znači da je to testiranje plaćeno (posle potvrde piše „💰 plaćeno“; ponovni klik
