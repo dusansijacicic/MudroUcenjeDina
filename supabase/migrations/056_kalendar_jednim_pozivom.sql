@@ -135,3 +135,7 @@ $$;
 -- Samo server (service role) – ne otvara se ka anon/ulogovanim korisnicima.
 REVOKE ALL ON FUNCTION public.kalendar_podaci(DATE, DATE) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.kalendar_podaci(DATE, DATE) TO service_role;
+
+-- API (PostgREST) odmah učitava novu funkciju – bez ovoga zna da javi
+-- "Could not find the function public.kalendar_podaci … in the schema cache".
+NOTIFY pgrst, 'reload schema';

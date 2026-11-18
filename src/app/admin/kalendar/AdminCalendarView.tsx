@@ -884,8 +884,24 @@ export default function AdminCalendarView({
   const getPaketStart = (clientId: string | null | undefined, termTypeId: string | null | undefined, date: string, slot: number) =>
     clientId ? paketStartByKey.get(`${clientId}|${termTypeId ?? ''}|${date}|${slot}`) : undefined;
 
+  // Operacija koja nešto promeni sama vrati osvežen kalendar (revalidatePath na serveru šalje novu
+  // stranicu u istom odgovoru). Ručno osvežavanje posle nje je samo još jedno učitavanje istog – ranije
+  // je zbog toga svaka operacija učitavala kalendar više puta. Ručno se osvežava samo kao rezerva, ako
+  // svež kalendar nije stigao (npr. operacija ništa nije promenila).
+  const verzijaPodataka = useRef(0);
+  useEffect(() => {
+    verzijaPodataka.current += 1;
+  }, [termsProp]);
+  const osveziAkoNijeStiglo = (verzijaPre: number) => {
+    window.setTimeout(() => {
+      if (verzijaPodataka.current === verzijaPre) router.refresh();
+    }, 1500);
+  };
+
   useKalendarRealtime(
-    swapMode || copyMode || deleteMode || bulkMode || assignMode || blockMode || paidMode || cancelMode || moveMode || draggedTermId !== null
+    swapMode || copyMode || deleteMode || bulkMode || assignMode || blockMode || paidMode || cancelMode || moveMode || draggedTermId !== null,
+    // Svež kalendar (posle operacije ili osvežavanja) – poruke primljene do tada su već uračunate.
+    termsProp
   );
 
   // Swap/Copy/Delete/Bulk/Assign/Block su međusobno isključivi – uključivanje jednog gasi ostale da
@@ -986,6 +1002,7 @@ export default function AdminCalendarView({
   };
 
   const confirmCancel = async () => {
+    const verzija = verzijaPodataka.current;
     const keys = [...cancelSelection.keys()];
     if (keys.length === 0) return;
     if (!confirm(`Otkazati ${keys.length} čas(ova)? Ostaju na kalendaru i na profilu deteta kao „otkazano“.`)) return;
@@ -1002,7 +1019,7 @@ export default function AdminCalendarView({
     }
     setCancelSelection(new Map());
     setCancelMode(false);
-    router.refresh();
+    osveziAkoNijeStiglo(verzija);
   };
 
   const toggleMoveMode = () => {
@@ -1028,6 +1045,7 @@ export default function AdminCalendarView({
 
   // Mod ostaje uključen posle premeštanja – na tabletu se obično premešta više termina zaredom.
   const confirmMove = async () => {
+    const verzija = verzijaPodataka.current;
     if (!moveSource || !moveTarget) return;
     setMoveLoading(true);
     const res =
@@ -1042,7 +1060,7 @@ export default function AdminCalendarView({
     toast.success(`Premešteno: ${formatShortDate(moveTarget.date)} ${TIME_SLOTS[moveTarget.slot] ?? ''}.`);
     setMoveSource(null);
     setMoveTarget(null);
-    router.refresh();
+    osveziAkoNijeStiglo(verzija);
   };
 
   const toggleBulkMode = () => {
@@ -1088,6 +1106,7 @@ export default function AdminCalendarView({
   };
 
   const confirmDelete = async () => {
+    const verzija = verzijaPodataka.current;
     const total = deleteSelection.size + deleteOtkazaniSelection.size + deleteZahteviSelection.size;
     if (total === 0) return;
     if (!confirm(`Trajno obrisati ${total} termin(a) BEZ TRAGA (ne otkazivanje – ništa neće ostati na kalendaru)?`)) return;
@@ -1109,7 +1128,7 @@ export default function AdminCalendarView({
     } else {
       toast.success(`Obrisano ${total}.`);
     }
-    router.refresh();
+    osveziAkoNijeStiglo(verzija);
   };
 
   const onToggleBulkSlot = (date: string, slot: number) => {
@@ -1123,6 +1142,7 @@ export default function AdminCalendarView({
   };
 
   const confirmBulk = async () => {
+    const verzija = verzijaPodataka.current;
     if (bulkGroupMode) {
       if (bulkGroupClientIds.length === 0 || !bulkInstructorChoice || !bulkTermCategoryId || bulkSlots.size === 0) return;
     } else if (!bulkClientId || bulkSlots.size === 0) {
@@ -1187,7 +1207,7 @@ export default function AdminCalendarView({
       bulkRefreshTimeoutRef.current = null;
       setBulkLoading(false);
     }, 4000);
-    router.refresh();
+    osveziAkoNijeStiglo(verzija);
   };
 
   const toggleBlockMode = () => {
@@ -1240,6 +1260,7 @@ export default function AdminCalendarView({
   }, [blockSlots, terms, pendingZahtevi, blockInstructorId]);
 
   const confirmBlock = async () => {
+    const verzija = verzijaPodataka.current;
     if (blockSlots.size === 0) return;
     if (blockConflicts.length > 0) {
       const ok = window.confirm(
@@ -1266,10 +1287,11 @@ export default function AdminCalendarView({
     setBlockNapomena('');
     setBlockInstructorId('');
     setBlockMode(false);
-    router.refresh();
+    osveziAkoNijeStiglo(verzija);
   };
 
   const handleUnblock = async (id: string) => {
+    const verzija = verzijaPodataka.current;
     if (!confirm('Odblokirati ovaj termin? Ponovo će moći da se zakazuje.')) return;
     const prev = blokirani;
     setBlokirani((list) => list.filter((b) => b.id !== id));
@@ -1279,7 +1301,7 @@ export default function AdminCalendarView({
       toast.error(res.error);
       return;
     }
-    router.refresh();
+    osveziAkoNijeStiglo(verzija);
   };
 
   const togglePaidMode = () => {
@@ -1318,6 +1340,7 @@ export default function AdminCalendarView({
   };
 
   const confirmPaid = async () => {
+    const verzija = verzijaPodataka.current;
     const sve = [...paidSelection.values()];
     if (sve.length === 0) return;
     const testiranja = sve.filter((p) => p.testiranje);
@@ -1369,7 +1392,7 @@ export default function AdminCalendarView({
     setPaidSelection(new Map());
     setPaidMode(false);
     setPaidSamoJedan(false);
-    router.refresh();
+    osveziAkoNijeStiglo(verzija);
   };
 
   const toggleAssignMode = () => {
@@ -1408,6 +1431,7 @@ export default function AdminCalendarView({
   // ovim potvrđuje u pravi termin (jer je instruktor izabran) – ta učionica stigne pre konverzije.
   // BEZ_INSTRUKTORA: učionica/vrsta se prvo dodele terminima, pa se termini vraćaju u zahteve (sa njima).
   const confirmAssign = async () => {
+    const verzija = verzijaPodataka.current;
     const total = assignSelection.size + assignZahteviSelection.size;
     const bezInstruktora = assignInstructorChoice === BEZ_INSTRUKTORA;
     const hasInstructor = !!assignInstructorChoice && !bezInstruktora;
@@ -1471,7 +1495,7 @@ export default function AdminCalendarView({
     } else {
       toast.success(bezInstruktora ? `Vraćeno bez instruktora: ${vraceno} čas(ova) – čekaju kao zahtevi.` : `Dodeljeno ${total}.`);
     }
-    router.refresh();
+    osveziAkoNijeStiglo(verzija);
   };
 
   const izaberiZaKopiranje = (stavka: IzabranaStavka) => {
@@ -1500,6 +1524,7 @@ export default function AdminCalendarView({
   const copyFieldsAnyChecked = copyIzZahteva || copyFields.instruktor || copyFields.ucionica || copyFields.klijent;
 
   const confirmCopy = async () => {
+    const verzija = verzijaPodataka.current;
     if (!copySource || copyTargets.size === 0 || !copyFieldsAnyChecked) return;
     const izvor = copySource;
     const targets = [...copyTargets].map((key) => {
@@ -1520,7 +1545,7 @@ export default function AdminCalendarView({
     } else {
       toast.success(`Kopirano ${targets.length}.`);
     }
-    router.refresh();
+    osveziAkoNijeStiglo(verzija);
   };
 
   const izaberiZaZamenu = (stavka: IzabranaStavka) => {
@@ -1545,6 +1570,7 @@ export default function AdminCalendarView({
   const anyFieldChecked = swapFields.termin || swapFields.instruktor || swapFields.ucionica || swapFields.klijent;
 
   const confirmSwap = async () => {
+    const verzija = verzijaPodataka.current;
     if (!swapFirst || !swapSecond || !anyFieldChecked) return;
 
     // Bar jedna strana je čas bez instruktora – bez optimističkog prikaza, server proverava sve.
@@ -1563,7 +1589,7 @@ export default function AdminCalendarView({
       toast.success('Zamenjeno.');
       resetSwapSelection();
       setSwapMode(false);
-      router.refresh();
+      osveziAkoNijeStiglo(verzija);
       return;
     }
 
@@ -1583,10 +1609,11 @@ export default function AdminCalendarView({
       toast.error(res.error);
       return;
     }
-    router.refresh();
+    osveziAkoNijeStiglo(verzija);
   };
 
   const handleDrop = async (date: string, slot: number) => {
+    const verzija = verzijaPodataka.current;
     if (!draggedTermId) return;
     const ok = window.confirm('Da li ste sigurni da želite da premestite ovaj termin na novi datum/vreme?');
     if (!ok) {
@@ -1602,7 +1629,7 @@ export default function AdminCalendarView({
       toast.error(res.error);
       return;
     }
-    router.refresh();
+    osveziAkoNijeStiglo(verzija);
   };
   const base = '/admin/kalendar';
   const linkSuffix = filterQuery;

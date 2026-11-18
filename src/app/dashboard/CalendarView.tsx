@@ -244,7 +244,8 @@ function CalendarViewInner({
 }) {
   const router = useRouter();
   const [draggedTermId, setDraggedTermId] = useState<string | null>(null);
-  useKalendarRealtime(draggedTermId !== null);
+  // terms: kad stigne svež kalendar, ranije primljene izmene su već u njemu – ne osvežava se još jednom.
+  useKalendarRealtime(draggedTermId !== null, terms);
 
   const handleDrop = async (date: string, slot: number) => {
     if (!draggedTermId) return;

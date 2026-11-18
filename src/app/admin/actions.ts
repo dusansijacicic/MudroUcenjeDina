@@ -343,6 +343,7 @@ export async function createBulkZahteviAsAdmin(
     return { failed: [...skipped, ...toInsert.map((s) => ({ ...s, error: error.message }))] };
   }
   revalidatePath('/dashboard/zahtevi');
+  revalidatePath('/admin/kalendar');
   if (actor) {
     logActivity(
       actor,
@@ -447,6 +448,7 @@ export async function createBulkTermsAsAdmin(
     })
   );
   const failed = results.filter((r): r is { date: string; slotIndex: number; error: string } => r.error !== null);
+  if (failed.length < slots.length) revalidatePath('/admin/kalendar');
   if (actor) {
     logActivity(
       actor,
@@ -1881,6 +1883,8 @@ export async function deleteTermsAsAdmin(
     ),
   ]);
   if (zahtevIds.length > 0) revalidatePath('/dashboard/zahtevi');
+  // Odgovor odmah nosi osvežen kalendar – bez posebnog učitavanja posle brisanja.
+  revalidatePath('/admin/kalendar');
   if (actor && zahtevIds.length > 0) {
     logActivity(actor, 'zahtev.bulk_delete', `Obrisano ${zahtevIds.length} zahtev(a) sa kalendara.`, { entityType: 'zahtev', metadata: { zahtevIds } });
   }
