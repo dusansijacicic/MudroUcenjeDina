@@ -40,6 +40,8 @@ export default function AdminTerminForm({
   initialCategoryIsTesting = false,
   completedProgramIdsByClient = {},
   initialBlocked = null,
+  calendarHref = '/admin/kalendar',
+  helpHref = '/admin/uputstvo?deo=zakazivanje-termina',
 }: {
   instructors: Instructor[];
   clients: Client[];
@@ -60,6 +62,8 @@ export default function AdminTerminForm({
   completedProgramIdsByClient?: Record<string, string[]>;
   /** Ako je početni slot blokiran (Admin → Blokiraj termin(e)). */
   initialBlocked?: { napomena: string | null } | null;
+  calendarHref?: '/admin/kalendar' | '/dashboard';
+  helpHref?: string;
 }) {
   const router = useRouter();
   const [date, setDate] = useState(defaultDate);
@@ -199,7 +203,7 @@ export default function AdminTerminForm({
         } else {
           toast.success(`Kreirano ${slots.length} zahtev(a) bez instruktora.`);
         }
-        router.push(`/admin/kalendar?view=nedelja&week=${monday}&fokus=${date}&slot=${slotIndex}`);
+        router.push(`${calendarHref}?view=nedelja&week=${monday}&fokus=${date}&slot=${slotIndex}`);
         router.refresh();
         return;
       }
@@ -262,7 +266,7 @@ export default function AdminTerminForm({
         }
       }
 
-      router.push(`/admin/kalendar?view=nedelja&week=${monday}&fokus=${date}&slot=${slotIndex}`);
+      router.push(`${calendarHref}?view=nedelja&week=${monday}&fokus=${date}&slot=${slotIndex}`);
       router.refresh();
     } finally {
       setLoading(false);
@@ -289,7 +293,7 @@ export default function AdminTerminForm({
     <form onSubmit={handleSubmit} className="space-y-4">
       <div className="flex justify-end">
         <a
-          href="/admin/uputstvo#zakazivanje-termina"
+          href={helpHref}
           target="_blank"
           rel="noreferrer"
           className="text-xs text-amber-700 hover:underline"

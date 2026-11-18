@@ -12,7 +12,7 @@ import DashboardDebugLog from './DashboardDebugLog';
 import { DEFAULT_INSTRUCTOR_COLOR } from '@/lib/constants';
 import type { RawTerm, OtherTerm } from './CalendarView';
 
-// Uvek sveži podaci po korisniku – instruktor mora da vidi i tuđe termine (samo pregled).
+// Svaki instruktor vidi ceo raspored, uključujući časove koji čekaju instruktora.
 export const dynamic = 'force-dynamic';
 
 export default async function DashboardPage({
@@ -92,25 +92,43 @@ export default async function DashboardPage({
   let allTermsRaw: TermRow[] | null = null;
   let classroomsRaw: { id: string; naziv: string | null; color: string | null }[] = [];
   let serviceRoleUsed = false;
+  let calendarSupabase;
   try {
-    const admin = createAdminClient();
+    calendarSupabase = createAdminClient();
     serviceRoleUsed = true;
-    const [termsRes, classRes] = await Promise.all([
-      admin.from('terms').select('id, instructor_id, date, slot_index, classroom_id, napomena, nastavak_of_term_id, instructor:instructors(id, ime, prezime, color), classroom:classrooms(id, naziv, color), term_category:term_categories(id, naziv, is_testing), predavanja(*, client:clients(id, ime, prezime), term_type:term_types(naziv)), potential_clients(id, ime, prezime, ime_roditelja, mobilni_roditelja, status)').gte('date', dateFrom).lte('date', dateTo).order('date').order('slot_index'),
-      admin.from('classrooms').select('id, naziv, color').order('naziv'),
-    ]);
-    allTermsRaw = (termsRes.data ?? []) as TermRow[];
-    classroomsRaw = (classRes.data ?? []);
   } catch (err) {
-    console.error('[dashboard] createAdminClient or terms fetch failed – using fallback (samo vaši termini). Postavite SUPABASE_SERVICE_ROLE_KEY na Vercel.', err);
-    const supabase = await createClient();
-    const [termsRes, classRes] = await Promise.all([
-      supabase.from('terms').select('id, instructor_id, date, slot_index, classroom_id, napomena, nastavak_of_term_id, instructor:instructors(id, ime, prezime, color), classroom:classrooms(id, naziv, color), term_category:term_categories(id, naziv, is_testing), predavanja(*, client:clients(id, ime, prezime), term_type:term_types(naziv)), potential_clients(id, ime, prezime, ime_roditelja, mobilni_roditelja, status)').eq('instructor_id', instructorId).gte('date', dateFrom).lte('date', dateTo).order('date').order('slot_index'),
-      supabase.from('classrooms').select('id, naziv, color').order('naziv'),
-    ]);
-    allTermsRaw = (termsRes.data ?? []) as TermRow[];
-    classroomsRaw = (classRes.data ?? []);
+    console.error('[dashboard] Service role unavailable; reading calendar through RLS.', err);
+    calendarSupabase = await createClient();
   }
+  const [termsRes, classRes, requestsRes] = await Promise.all([
+    calendarSupabase.from('terms').select('id, instructor_id, date, slot_index, classroom_id, napomena, nastavak_of_term_id, instructor:instructors(id, ime, prezime, color), classroom:classrooms(id, naziv, color), term_category:term_categories(id, naziv, is_testing), predavanja(*, client:clients(id, ime, prezime), term_type:term_types(naziv)), potential_clients(id, ime, prezime, ime_roditelja, mobilni_roditelja, status)').gte('date', dateFrom).lte('date', dateTo).order('date').order('slot_index'),
+    calendarSupabase.from('classrooms').select('id, naziv, color').order('naziv'),
+    calendarSupabase.from('zahtevi_za_cas').select('id, client_id, requested_date, requested_slot_index, client:clients(id, ime, prezime), term_type:term_types(naziv), classroom:classrooms(id, naziv, color)').eq('status', 'pending').gte('requested_date', dateFrom).lte('requested_date', dateTo),
+  ]);
+  if (termsRes.error) throw new Error(`Kalendar nije učitan: ${termsRes.error.message}`);
+  if (requestsRes.error) throw new Error(`Časovi na čekanju nisu učitani: ${requestsRes.error.message}`);
+  allTermsRaw = (termsRes.data ?? []) as TermRow[];
+  classroomsRaw = classRes.data ?? [];
+
+  const one = <T,>(value: T | T[] | null): T | null => Array.isArray(value) ? value[0] ?? null : value;
+  const pendingTerms: OtherTerm[] = (requestsRes.data ?? []).map((r) => ({
+    id: `zahtev-${r.id}`,
+    request_id: r.id,
+    instructor_id: '',
+    date: r.requested_date,
+    slot_index: r.requested_slot_index,
+    classroom: one(r.classroom) ?? null,
+    predavanja: [{
+      id: r.id,
+      term_id: '',
+      client_id: r.client_id,
+      odrzano: false,
+      placeno: false,
+      komentar: null,
+      client: one(r.client),
+      term_type: one(r.term_type),
+    }],
+  }));
 
   // Blokade – čitaju se sa korisnikovim klijentom (RLS dozvoljava svim ulogovanima). Predavač vidi
   // blokade za SVE i SVOJE (za datum i stalne nedeljne) – tuđe blokade instruktora ga se ne tiču.
@@ -128,6 +146,7 @@ export default async function DashboardPage({
     .map((b) => ({
       date: b.date,
       slot_index: b.slot_index,
+      ownOnly: b.instructor_id !== null,
       napomena: b.instructor_id ? `Vi ne radite${b.nedeljna ? ' (svake nedelje)' : ''}${b.napomena ? ` – ${b.napomena}` : ''}` : b.napomena,
     }));
 
@@ -154,7 +173,7 @@ export default async function DashboardPage({
   const myTerms = allTerms.filter((t) => t.instructor_id === instructorId);
   const otherTerms: OtherTerm[] = allTerms
     .filter((t) => t.instructor_id !== instructorId)
-    .map((t) => {
+    .map<OtherTerm>((t) => {
       const { instructor: inst, classroom: room } = norm(t);
       return {
         id: t.id,
@@ -162,12 +181,14 @@ export default async function DashboardPage({
         date: t.date,
         slot_index: t.slot_index,
         predavanja: t.predavanja,
+        term_category: one(t.term_category ?? null),
+        potential_clients: t.potential_clients,
         napomena: t.napomena ?? null,
         nastavak_of_term_id: t.nastavak_of_term_id ?? null,
         instructor: inst ? { ime: inst.ime, prezime: inst.prezime, color: inst.color ?? undefined } : null,
         classroom: room ? { id: room.id, naziv: room.naziv, color: room.color ?? undefined } : null,
       };
-    });
+    }).concat(pendingTerms);
 
   let terms: RawTerm[] = myTerms.map((t) => {
     const { classroom: room } = norm(t);
@@ -207,6 +228,10 @@ export default async function DashboardPage({
         clientMap.set(client.id, { id: client.id, ime: client.ime ?? '', prezime: client.prezime ?? '' });
       }
     }
+  }
+  for (const t of pendingTerms) {
+    const client = t.predavanja?.[0]?.client;
+    if (client) clientMap.set(client.id, client);
   }
   const clients = Array.from(clientMap.values()).sort(
     (a, b) => (a.prezime || '').localeCompare(b.prezime || '') || (a.ime || '').localeCompare(b.ime || '')
@@ -249,7 +274,7 @@ export default async function DashboardPage({
       <DashboardErrorToast />
       {!serviceRoleUsed && (
         <div className="mb-4 rounded-xl border-2 border-amber-300 bg-amber-50 p-4 text-amber-900 text-sm" role="alert">
-          <strong>Termini drugih predavača nisu učitani.</strong> Na Vercel-u u Environment Variables dodajte <code className="bg-amber-100 px-1 rounded">SUPABASE_SERVICE_ROLE_KEY</code> (Supabase → Project Settings → API → service_role secret), pa redeploy.
+          Neki podaci kalendara možda nisu dostupni. Obratite se administratoru da proveri pristup podacima.
         </div>
       )}
       <div className="flex items-center justify-between mb-4 flex-wrap gap-2 animate-in-delay-1">
@@ -261,7 +286,7 @@ export default async function DashboardPage({
             currentView={view}
             currentParams={params}
           />
-          <AddTermButton instructorId={instructorId} />
+          <AddTermButton />
         </div>
       </div>
       <div className="mb-4 rounded-xl border border-stone-200 bg-white p-4 text-sm animate-in-delay-1">

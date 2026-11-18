@@ -12,6 +12,7 @@ import { termMozeNovoPredavanje } from '@/lib/settings';
 import { normalizeClientPol } from '@/lib/client-pol';
 import { logActivity, type Actor } from '@/lib/audit';
 import { getAuthedUser, getIsAdmin } from '@/lib/auth';
+import { requireSchedulingAccess } from '@/lib/scheduling-access';
 import { beogradIso, danasBeograd, datumBeograd, jeIsoDatum } from '@/lib/datum';
 import { danUNedelji, mapBlokada, sacuvajNedeljneBlokade, upisiBlokade } from '@/lib/blokade';
 import {
@@ -144,19 +145,11 @@ export async function createTermAsAdmin(
   napomena: string | null = null,
   nastavakOfTermId: string | null = null
 ): Promise<{ termId?: string; instructorId?: string; error?: string }> {
-  const { supabase, user } = await getAuthedUser();
-  if (!user) return { error: 'Niste ulogovani.' };
-
-  const { data: admin } = await supabase
-    .from('admin_users')
-    .select('user_id')
-    .eq('user_id', user.id)
-    .single();
-  if (!admin) return { error: 'Samo admin može da zakazuje termine za instruktore.' };
+  const { admin: adminSupabase, error: authErr, actor } = await requireSchedulingAccess();
+  if (authErr || !adminSupabase) return { error: authErr ?? 'Niste ovlašćeni.' };
 
   const slot = Math.min(15, Math.max(0, slotIndex));
   const dateStr = date.slice(0, 10);
-  const adminSupabase = createAdminClient();
 
   // 1) Max broj termina u slotu
   const [{ count: termCount }, { data: maxSetting }] = await Promise.all([
@@ -220,8 +213,10 @@ export async function createTermAsAdmin(
 
   if (error) return { error: error.message };
   if (!inserted) return { error: 'Termin nije kreiran.' };
+  revalidatePath('/admin/kalendar');
+  revalidatePath('/dashboard');
   logActivity(
-    { id: user.id, email: user.email ?? null, name: null, role: 'admin' },
+    actor,
     'term.create',
     `Kreiran termin ${dateStr} ${TIME_SLOTS[slot] ?? `slot ${slot}`}.`,
     { entityType: 'term', entityId: inserted.id, metadata: { instructorId, classroomId, termCategoryId, dateStr, slot } }
@@ -248,7 +243,7 @@ export async function repeatTermAsAdmin(
   termTypeId: string | null,
   days: number
 ): Promise<{ failed: { date: string; error: string }[] }> {
-  const { error: authErr } = await requireAdmin();
+  const { error: authErr } = await requireSchedulingAccess();
   if (authErr) {
     return { failed: [{ date: baseDate, error: authErr }] };
   }
@@ -282,7 +277,7 @@ export async function createBulkZahteviAsAdmin(
   slots: { date: string; slotIndex: number }[],
   classroomId: string | null = null
 ): Promise<{ failed: { date: string; slotIndex: number; error: string }[] }> {
-  const { admin, error: authErr, actor } = await requireAdmin();
+  const { admin, error: authErr, actor } = await requireSchedulingAccess();
   if (authErr || !admin) return { failed: slots.map((s) => ({ ...s, error: authErr ?? 'Niste ovlašćeni.' })) };
   if (slots.length === 0) return { failed: [] };
 
@@ -344,6 +339,7 @@ export async function createBulkZahteviAsAdmin(
   }
   revalidatePath('/dashboard/zahtevi');
   revalidatePath('/admin/kalendar');
+  revalidatePath('/dashboard');
   if (actor) {
     logActivity(
       actor,
@@ -1061,7 +1057,7 @@ export async function createPredavanjeAsAdmin(
   komentar: string | null,
   termTypeId: string | null = null
 ): Promise<{ error?: string }> {
-  const { admin, error: authErr, actor } = await requireAdmin();
+  const { admin, error: authErr, actor } = await requireSchedulingAccess();
   if (authErr || !admin) return { error: authErr ?? 'Niste ovlašćeni.' };
   const { data: term } = await admin.from('terms').select('id, instructor_id, date, slot_index').eq('id', termId).single();
   if (!term) return { error: 'Termin nije pronađen.' };
@@ -1115,6 +1111,8 @@ export async function createPredavanjeAsAdmin(
   await syncSpilloverForTerm(admin, termId);
   revalidatePath('/admin/kalendar');
   revalidatePath(`/admin/termin/${termId}`);
+  revalidatePath('/dashboard');
+  revalidatePath(`/dashboard/termin/${termId}`);
   if (actor) {
     logActivity(actor, 'predavanje.create', `Dodata radionica (dete) u termin.`, {
       entityType: 'predavanje',
@@ -3086,12 +3084,14 @@ export async function addPotentialClientsAsAdmin(
   termId: string,
   list: { ime: string; prezime: string | null; ime_roditelja: string | null; mobilni_roditelja: string | null; razred: string | null }[]
 ): Promise<{ error?: string }> {
-  const { admin, error: authErr } = await requireAdmin();
-  if (authErr || !admin) return { error: authErr ?? 'Samo admin.' };
+  const { admin, error: authErr } = await requireSchedulingAccess();
+  if (authErr || !admin) return { error: authErr ?? 'Niste ovlašćeni.' };
   if (list.length === 0) return {};
   const { error } = await admin.from('potential_clients').insert(list.map((p) => ({ term_id: termId, ...p })));
   if (error) return { error: error.message };
   revalidatePath(`/admin/termin/${termId}`);
+  revalidatePath('/admin/kalendar');
+  revalidatePath('/dashboard');
   return {};
 }
 

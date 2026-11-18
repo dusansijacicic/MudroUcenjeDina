@@ -61,20 +61,25 @@ export default async function PredavacUputstvoPage({ searchParams }: { searchPar
 
         <Sekcija prikazi={prikazi} id="kalendar" naslov="Kalendar">
           <Koraci>
-            <li>Na kalendaru su samo VAŠI termini, za izabranu nedelju. Strelicama menjate nedelju.</li>
+            <li>Na kalendaru su termini SVIH instruktora, testiranja i časovi koji čekaju instruktora. Birajte dan, nedelju ili mesec; strelicama menjate period.</li>
             <li>Polje <Ui>Klijent:</Ui> gore – izaberite dete da vidite samo njegove časove (<Ui>Svi</Ui> = sva deca).</li>
-            <li><Ui>+</Ui> u praznoj ćeliji = novi termin za taj dan i vreme.</li>
-            <li>Klik na termin otvara ga – deca u terminu, održano, plaćeno, komentar.</li>
-            <li>Premeštanje: uhvatite termin mišem, prevucite u drugu ćeliju i potvrdite.</li>
+            <li><Ui>+ Zakaži termin</Ui> ili <Ui>Novi termin</Ui> otvara zakazivanje za bilo kog instruktora i klijenta.</li>
+            <li>Klik na vaš termin otvara ga – deca u terminu, održano, plaćeno, komentar. Tuđe termine vidite kao pregled.</li>
+            <li>Premeštanje svojih termina: uhvatite termin mišem, prevucite u drugu ćeliju i potvrdite.</li>
           </Koraci>
           <Lista>
             <li>„⛔ Blokirano“ = to vreme je zatvoreno za sve (npr. praznik).</li>
             <li>„⛔ Vi ne radite“ = vaša blokada iz <a href="#kada-ne-radim" className="text-amber-700 underline">Kada ne radim</a> – tu vam niko ne može zakazati čas.</li>
+            <li>Dok vi ne radite, možete zakazati drugom slobodnom instruktoru u istom vremenu.</li>
             <li>Kalendar se sam osvežava kad neko nešto promeni – ne treba F5.</li>
           </Lista>
         </Sekcija>
 
         <Sekcija prikazi={prikazi} id="termin" naslov="Termin i radionica">
+          <p className="text-sm text-stone-600">
+            Za novo zakazivanje kliknite <Ui>Novi termin</Ui>, izaberite datum, vreme, kategoriju, instruktora i dete ili grupu dece.
+            Dostupni su svi aktivni instruktori i svi klijenti. Bez izabranog instruktora pravi se čas na čekanju koji predavač kasnije preuzima.
+          </p>
           <Koraci>
             <li>Kliknite termin na kalendaru.</li>
             <li><Ui>+ Dodaj radionicu</Ui> = još jedno dete u ovom terminu (pretraga po imenu, bilo koje dete iz baze).</li>

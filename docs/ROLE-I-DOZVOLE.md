@@ -18,9 +18,12 @@ Aplikacija ima **3 osnovne uloge**. Dozvole su definisane ispod.
 
 - Može da **dodaje nove klijente** (klijenti su potencijalno dostupni svim predavačima za zakazivanje).
 - Pri zakazivanju termina:
-  - može da **zakaže termin samo za sebe** i da **upravlja samo svojim terminima**;
+  - može da **zakaže termin za bilo kog instruktora i bilo kog klijenta**, kroz istu formu kao admin;
+  - može da zakaže individualni ili grupni čas, testiranje, nastavak i ponavljanje, kao i čas bez instruktora;
+  - **upravlja samo svojim postojećim terminima**; izmena i brisanje tuđih termina ostaju pravo admina;
   - bira **time slot** pod uslovom da je **slobodan**.
-- U **kalendaru** vidi **sve zakazane časove** (uključujući od drugih predavača), ali **ne može** da ih menja niti da bilo kako operiše njima – samo pregled.
+- U **dnevnom, nedeljnom i mesečnom kalendaru** vidi **sve zakazane časove** (uključujući od drugih predavača), **testiranja sa prijavljenom decom** i **časove koji čekaju instruktora**. Tuđe termine vidi kao pregled.
+- Lična blokada sprečava zakazivanje tom instruktoru; u isto vreme može da zakaže drugom slobodnom instruktoru. Globalna blokada važi za sve.
 
 ---
 
@@ -39,7 +42,7 @@ Aplikacija ima **3 osnovne uloge**. Dozvole su definisane ispod.
 | Dodaj predavača | ✅ | ❌ | ❌ |
 | Dodaj klijenta | ✅ | ✅ | ❌ |
 | Obriši klijenta iz sistema (trajno) | ✅ | ❌ | ❌ |
-| Zakaži termin za bilo kog predavača | ✅ | ❌ | ❌ |
+| Zakaži termin za bilo kog predavača i klijenta | ✅ | ✅ | ❌ |
 | Zakaži termin za sebe (samo svoj) | ✅ | ✅ | ❌ |
 | Menja/briše bilo koji termin | ✅ | ❌ | ❌ |
 | Menja/briše samo svoje termine | — | ✅ | ❌ |

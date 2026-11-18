@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 
-export default function AddTermButton({ instructorId }: { instructorId: string }) {
+export default function AddTermButton() {
   const today = new Date().toISOString().slice(0, 10);
   return (
     <Link

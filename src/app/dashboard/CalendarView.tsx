@@ -48,6 +48,7 @@ function isAutoSpillover(term: RawTerm): boolean {
 
 /** Tuđi termin (samo prikaz, bez linka) – boja instruktora i učionice za color coding */
 export type OtherTerm = RawTerm & {
+  request_id?: string;
   instructor?: { ime: string; prezime: string; color?: string } | null;
   classroom?: { id: string; naziv: string; color?: string } | null;
 };
@@ -160,13 +161,6 @@ function getMonday(dateStr: string): string {
   return d.toISOString().slice(0, 10);
 }
 
-/** Skraćeno ime instruktora (inicijali) za tablet/telefon kartice. */
-function shortInstructorLabel(ime: string, prezime: string): string {
-  const a = (ime ?? '').trim().charAt(0).toUpperCase();
-  const b = (prezime ?? '').trim().charAt(0).toUpperCase();
-  return `${a}${b}` || '—';
-}
-
 /** Skraćeno ime učionice (npr. "1-Buzan" → "1") za tablet/telefon. */
 function shortClassroomLabel(naziv: string): string {
   const idx = naziv.indexOf('-');
@@ -195,11 +189,19 @@ export default function CalendarView({
   clientFilterId?: string | null;
   /** Tuđi termini (drugi instruktori) – samo prikaz, bez linka */
   otherTerms?: OtherTerm[];
-  /** Blokirani slotovi (Admin → Blokiraj termin(e)) – u njima se ne nudi "+" za zakazivanje. */
-  blockedSlots?: { date: string; slot_index: number; napomena: string | null }[];
+  /** Globalne blokade sprečavaju zakazivanje; lične važe samo za ovog instruktora. */
+  blockedSlots?: { date: string; slot_index: number; napomena: string | null; ownOnly?: boolean }[];
 }) {
   const blockedMap = useMemo(
-    () => new Map((blockedSlots ?? []).map((b) => [`${b.date}|${b.slot_index}`, { napomena: b.napomena }])),
+    () => {
+      const map = new Map<string, { napomena: string | null; ownOnly?: boolean }>();
+      for (const b of blockedSlots ?? []) {
+        const key = `${b.date}|${b.slot_index}`;
+        // Globalna blokada ima prednost nad ličnom blokadom u istom vremenu.
+        if (!map.has(key) || !b.ownOnly) map.set(key, { napomena: b.napomena, ownOnly: b.ownOnly });
+      }
+      return map;
+    },
     [blockedSlots]
   );
   return (
@@ -219,7 +221,7 @@ export default function CalendarView({
   );
 }
 
-const BlockedSlotsContext = createContext<Map<string, { napomena: string | null }>>(new Map());
+const BlockedSlotsContext = createContext<Map<string, { napomena: string | null; ownOnly?: boolean }>>(new Map());
 
 function CalendarViewInner({
   view,
@@ -305,10 +307,50 @@ function CalendarViewInner({
   );
 }
 
+function OtherTermCard({ term }: { term: OtherTerm }) {
+  const isTesting = term.term_category?.is_testing === true;
+  const textColor = term.instructor?.color ?? '#475569';
+  const names = isTesting
+    ? (term.potential_clients ?? []).map((pc) => ({ id: pc.id, name: `${pc.ime} ${pc.prezime ?? ''}`.trim() }))
+    : (term.predavanja ?? []).map((p) => ({ id: p.id, name: p.client ? `${p.client.ime} ${p.client.prezime}`.trim() : '—' }));
+  const tt = term.predavanja?.[0]?.term_type;
+  const termTypeName = Array.isArray(tt) ? tt[0]?.naziv : tt?.naziv;
+  return (
+    <div
+      className={`rounded-lg border-2 p-2 text-xs ${isAutoSpillover(term) ? 'border-dashed' : ''}`}
+      style={{
+        borderColor: term.classroom?.color ?? '#e5e7eb',
+        backgroundColor: term.classroom?.color ? hexWithAlpha(term.classroom.color, 0.08) : 'rgba(0,0,0,0.03)',
+        color: textColor,
+      }}
+    >
+      {term.classroom && <span className="block text-stone-500 font-medium">{term.classroom.naziv}</span>}
+      <span className="font-medium">
+        {term.instructor ? `${term.instructor.ime} ${term.instructor.prezime}` : 'Čeka instruktora'}
+      </span>
+      {isAutoSpillover(term) ? (
+        <span className="block text-stone-500">↳ Nastavak dužeg časa</span>
+      ) : (
+        <>
+          {isTesting && <span className="block font-bold text-red-600">Testiranje</span>}
+          {!isTesting && termTypeName && <span className="block font-semibold">{termTypeName}</span>}
+          <TruncatedNameList
+            items={sortByFullName(names, (item) => item.name)}
+            keyFn={(item) => item.id}
+            renderItem={(item) => <span className="block text-[13px] font-semibold text-stone-900 break-words">{item.name}</span>}
+          />
+          {isTesting && names.length === 0 && <span className="block text-stone-500">Nema prijavljenih</span>}
+          {term.napomena && <span className="block mt-1 text-stone-500 whitespace-pre-wrap">{term.napomena}</span>}
+          {term.request_id && <Link href="/dashboard/zahtevi" className="block mt-1 text-amber-700 hover:underline">Pregled zahteva →</Link>}
+        </>
+      )}
+    </div>
+  );
+}
+
 function CellContent({
   term,
   otherTermsInSlot,
-  instructorId,
   instructorColor,
   emptyDate,
   emptySlot,
@@ -332,69 +374,29 @@ function CellContent({
   const blocked = useContext(BlockedSlotsContext).get(`${emptyDate}|${emptySlot}`);
   const BlockedBadge = blocked ? (
     <div className="rounded-lg border-2 border-stone-400 bg-[repeating-linear-gradient(45deg,#e7e5e4,#e7e5e4_6px,#f5f5f4_6px,#f5f5f4_12px)] p-2 text-xs text-stone-700">
-      <span className="font-semibold">⛔ Blokirano</span>
+      <span className="font-semibold">{blocked.ownOnly ? "⛔ Vi ne radite" : "⛔ Blokirano"}</span>
       {blocked.napomena && <span className="block mt-0.5 break-words">{blocked.napomena}</span>}
     </div>
+  ) : null;
+  const NewTermLink = !blocked || blocked.ownOnly ? (
+    <Link
+      href={`/dashboard/termin/novi?date=${emptyDate}&slot=${emptySlot}`}
+      className="block rounded-lg border border-dashed border-stone-200 p-2 text-sm text-stone-500 hover:border-stone-400 hover:bg-stone-50/50"
+      onDragOver={(e) => { if (draggedTermId) e.preventDefault(); }}
+      onDrop={(e) => {
+        e.preventDefault();
+        if (draggedTermId) onDropCell(emptyDate, emptySlot);
+      }}
+    >
+      + Zakaži termin
+    </Link>
   ) : null;
   if (!term) {
     return (
       <div className="space-y-1.5 min-h-[52px]">
-        {blocked ? (
-          BlockedBadge
-        ) : (
-          <Link
-            href={`/dashboard/termin/novi?date=${emptyDate}&slot=${emptySlot}`}
-            className="block rounded-lg border border-dashed border-stone-200 p-2 text-stone-400 hover:border-stone-400 hover:bg-stone-50/50"
-            onDragOver={(e) => {
-              if (draggedTermId) e.preventDefault();
-            }}
-            onDrop={(e) => {
-              e.preventDefault();
-              if (draggedTermId) onDropCell(emptyDate, emptySlot);
-            }}
-          >
-            +
-          </Link>
-        )}
-        {otherTermsInSlot.map((ot) => {
-          if (isAutoSpillover(ot)) {
-            return (
-              <div key={ot.id} className="rounded-lg border-2 border-dashed p-2 text-xs text-stone-400 bg-stone-50">
-                <span className="font-medium">↳ Nastavak dužeg časa</span>
-                {ot.classroom && <span className="block text-[11px] mt-0.5">{ot.classroom.naziv}</span>}
-              </div>
-            );
-          }
-          const iname = ot.instructor ? `${ot.instructor.ime} ${ot.instructor.prezime}` : '—';
-          const preds = ot.predavanja ?? [];
-          const otBorder = ot.classroom?.color ?? '#e5e7eb';
-          const otTextColor = ot.instructor?.color ?? '#475569';
-          const otBg = ot.classroom?.color ? hexWithAlpha(ot.classroom.color, 0.08) : 'rgba(0,0,0,0.03)';
-          return (
-            <div
-              key={ot.id}
-              className="rounded-lg border-2 p-2 text-xs"
-              style={{ borderColor: otBorder, backgroundColor: otBg, color: otTextColor }}
-            >
-              {ot.classroom && (
-                <span className="block text-stone-500 font-medium">{ot.classroom.naziv}</span>
-              )}
-              <span className="font-medium">{iname}</span>
-              {preds.length > 0 && (
-                <ul className="mt-1 space-y-0.5 pl-0 list-none">
-                  {preds.map((p) => (
-                    <li
-                      key={p.id}
-                      className="text-[13px] leading-snug text-stone-900 font-medium break-words antialiased"
-                    >
-                      {p.client ? `${p.client.ime} ${p.client.prezime}`.trim() || '—' : '—'}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          );
-        })}
+        {BlockedBadge}
+        {NewTermLink}
+        {otherTermsInSlot.map((ot) => <OtherTermCard key={ot.id} term={ot} />)}
       </div>
     );
   }
@@ -409,6 +411,9 @@ function CellContent({
           <span className="font-medium">↳ Nastavak dužeg časa</span>
           {term.classroom && <span className="block text-[11px] mt-0.5">{term.classroom.naziv}</span>}
         </Link>
+        {BlockedBadge}
+        {otherTermsInSlot.map((ot) => <OtherTermCard key={ot.id} term={ot} />)}
+        {NewTermLink}
       </div>
     );
   }
@@ -497,43 +502,8 @@ function CellContent({
           )}
         </Link>
       )}
-      {otherTermsInSlot.map((ot) => {
-        const iname = ot.instructor ? `${ot.instructor.ime} ${ot.instructor.prezime}` : '—';
-        const preds = ot.predavanja ?? [];
-        const otBorder = ot.classroom?.color ?? '#e5e7eb';
-        const otTextColor = ot.instructor?.color ?? '#475569';
-        const otBg = ot.classroom?.color ? hexWithAlpha(ot.classroom.color, 0.08) : 'rgba(0,0,0,0.03)';
-        return (
-          <div
-            key={ot.id}
-            className="rounded-lg border-2 p-2 text-xs"
-            style={{ borderColor: otBorder, backgroundColor: otBg, color: otTextColor }}
-          >
-            {ot.classroom && (
-              <span className="block text-stone-500 font-medium">
-                <span className="lg:hidden">{shortClassroomLabel(ot.classroom.naziv)}</span>
-                <span className="hidden lg:inline">{ot.classroom.naziv}</span>
-              </span>
-            )}
-            <span className="font-medium">
-              <span className="lg:hidden">{ot.instructor ? shortInstructorLabel(ot.instructor.ime, ot.instructor.prezime) : '—'}</span>
-              <span className="hidden lg:inline">{iname}</span>
-            </span>
-            {preds.length > 0 && (
-              <ul className="mt-1 space-y-0.5 pl-0 list-none">
-                {preds.map((p) => (
-                  <li
-                    key={p.id}
-                    className="text-[13px] leading-snug text-stone-900 font-medium break-words antialiased"
-                  >
-                    {p.client ? `${p.client.ime} ${p.client.prezime}`.trim() || '—' : '—'}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        );
-      })}
+      {otherTermsInSlot.map((ot) => <OtherTermCard key={ot.id} term={ot} />)}
+      {NewTermLink}
     </div>
   );
 }
@@ -846,7 +816,6 @@ function CalendarMonth({
   monthStart,
   terms,
   otherTerms,
-  instructorId,
   instructorColor,
   linkSuffix,
 }: {
@@ -916,7 +885,7 @@ function CalendarMonth({
             if (!date) {
               return <div key={`e-${i}`} className="min-h-[80px] border-b border-r border-stone-100 bg-stone-50/50" />;
             }
-            const dayTerms = terms.filter((t) => t.date === date);
+            const dayTerms = [...terms, ...otherTerms].filter((t) => t.date === date);
             const slotCount = dayTerms.length;
             return (
               <div
