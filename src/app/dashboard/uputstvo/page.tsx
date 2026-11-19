@@ -109,7 +109,7 @@ export default async function PredavacUputstvoPage({ searchParams }: { searchPar
         <Sekcija prikazi={prikazi} id="klijenti" naslov="Klijenti">
           <Koraci>
             <li>
-              Lista sve dece (ne samo vaše) sa stanjem po vrsti časa: održano, a kad admin označi plaćanje i plaćeno / preostalo (crveno „nije
+              Lista sve dece (ne samo vaše) sa stanjem časova (sve vrste zajedno): održano, a kad admin označi plaćanje i plaćeno / preostalo (crveno „nije
               plaćeno N“ = paket od 6 časova je potrošen).
             </li>
             <li>Klik na dete → statistika časova, pregled po vrstama, istorija časova kod vas, izmena podataka.</li>

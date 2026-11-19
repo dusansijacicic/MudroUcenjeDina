@@ -1,6 +1,6 @@
 /**
  * Koji je ovo čas po redu od plaćenih i koliko plaćenih ostaje posle njega.
- * redni = [x, y] iz rpc redni_broj_casova (x = redni broj časa te vrste, y = plaćeno časova te vrste).
+ * redni = [x, y] iz rpc redni_broj_casova (x = redni broj časa deteta, y = plaćeno časova u tom paketu – sve vrste zajedno, migracija 057).
  */
 export default function PlacenoStanje({ redni }: { redni: [number, number] }) {
   const [x, y] = redni;

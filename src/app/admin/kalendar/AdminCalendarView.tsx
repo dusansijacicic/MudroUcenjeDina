@@ -2018,7 +2018,7 @@ export default function AdminCalendarView({
                 <span className="text-sm text-stone-500">
                   {paidSamoJedan
                     ? 'kliknite dete u terminu koji je plaćen – plaćen je samo taj jedan čas.'
-                    : 'kliknite dete u terminu od kog je plaćeno – taj čas i sledećih 5 časova tog deteta iste vrste su plaćeni.'}{' '}
+                    : 'kliknite dete u terminu od kog je plaćeno – taj čas i sledećih 5 časova tog deteta su plaćeni, bez obzira na vrstu časa.'}{' '}
                   Može se označiti sve što je na kalendaru: i časovi bez instruktora, učionice ili vrste (čas bez vrste ide uz poslednju
                   plaćenu vrstu). Klik na sam termin ili na „Nastavak dužeg časa“ bira svu decu u njemu. Dete sa „💰“: klik uklanja tu
                   oznaku. Dete na <strong>testiranju</strong>: klik = to testiranje je plaćeno. <strong>Otkazan</strong> čas: klik = naplaćen.

@@ -115,7 +115,8 @@ export default async function AdminUputstvoPage({ searchParams }: { searchParams
             <li>Novo dete ili novi čas: <Ui>+ Zakaži termin</Ui> (ili <Ui>+</Ui> u praznoj ćeliji kalendara – datum i vreme se sami popune).</li>
             <li>
               Roditelj je platio: na kalendaru <Ui>Označi plaćeno</Ui> → kliknite dete u terminu od kog je plaćeno → <Ui>✓ Potvrdi plaćeno</Ui>.
-              Taj čas i sledećih 5 časova te vrste su plaćeni (ili, uz čekiran „samo ovaj čas“, samo taj jedan). Novac se po želji upisuje u{' '}
+              Taj čas i sledećih 5 časova tog deteta su plaćeni, bez obzira na vrstu časa (ili, uz čekiran „samo ovaj čas“, samo taj jedan).
+              Novac se po želji upisuje u{' '}
               <Ui>+ Unesi uplatu</Ui> (samo evidencija).
             </li>
             <li>
@@ -171,7 +172,7 @@ export default async function AdminUputstvoPage({ searchParams }: { searchParams
             </li>
             <li>
               <M n="E" /> Desno od imena <strong>x/6 · još N</strong> (samo ako je za dete označeno plaćanje): ovo je x-ti od 6 plaćenih
-              časova te vrste; posle njega ostaje još N. <span className="font-bold text-amber-700">6/6 · poslednji</span> = poslednji plaćeni
+              časova tog deteta (sve vrste zajedno); posle njega ostaje još N. <span className="font-bold text-amber-700">6/6 · poslednji</span> = poslednji plaćeni
               čas – vreme za naplatu. Dete bez oznake nema natpis.
             </li>
             <li><M n="F" /> Crveni red sa <Crveno>! nije plaćeno</Crveno> i crveni okvir termina = paket je potrošen, a ovaj čas nije plaćen.</li>
@@ -340,7 +341,8 @@ export default async function AdminUputstvoPage({ searchParams }: { searchParams
             </li>
             <li>Kliknite <Ui>✓ Potvrdi plaćeno (N)</Ui>.</li>
             <li>
-              Od tog časa, taj i sledećih 5 časova tog deteta <strong>iste vrste</strong> su plaćeni: na kalendaru piše „1/6 · još 5“,
+              Od tog časa, taj i sledećih 5 časova tog deteta su plaćeni, <strong>bez obzira na vrstu</strong> (matematika, reedukacija,
+              čitanje… broje se zajedno, redom po datumu): na kalendaru piše „1/6 · još 5“,
               „2/6 · još 4“ … „6/6 · poslednji“ (za jedan čas: „1/1 · poslednji“). Sledeći časovi su crveni <Crveno>! nije plaćeno</Crveno>
               dok se opet ne označi.
             </li>
@@ -352,8 +354,8 @@ export default async function AdminUputstvoPage({ searchParams }: { searchParams
           <Napomena>
             Ovo je jedini pokazatelj da je plaćeno – uplate ne utiču. Časovi pre prve oznake se ne računaju. Ako se označi novi paket dok
             stari još traje, 6 časova se dodaje na kraj (ništa se ne gubi). Brisanje ili otkazivanje časa pomera brojanje, jer se broje
-            samo časovi koji postoje. Časovi bez instruktora/učionice (narandžasti) se broje isto kao ostali, a čas <strong>bez vrste</strong>{' '}
-            računa se u vrstu poslednje oznake „plaćeno“ tog deteta.
+            samo časovi koji postoje. Časovi bez instruktora, bez učionice ili bez vrste se broje isto kao ostali. Potrebna je migracija
+            057 (do nje se brojalo posebno za svaku vrstu).
           </Napomena>
         </Sekcija>
 
@@ -421,7 +423,7 @@ export default async function AdminUputstvoPage({ searchParams }: { searchParams
           <Koraci>
             <li>Pretraga: kucajte ime, prezime, školu ili telefon – lista se filtrira odmah, bez čekanja.</li>
             <li>
-              Kolona „Održano do danas, po vrsti časa“: „održano“ broji sve časove čije je vreme prošlo. Kad je na kalendaru označeno
+              Kolona „Održano do danas“: „održano“ broji sve časove deteta čije je vreme prošlo (sve vrste zajedno). Kad je na kalendaru označeno
               plaćanje, pored piše i „plaćeno / preostalo“, a crveno „nije plaćeno N“ = održani časovi posle potrošenog paketa.
             </li>
             <li>Klik na ime ili <Ui>Profil, uplate i održani časovi →</Ui> otvara profil deteta.</li>

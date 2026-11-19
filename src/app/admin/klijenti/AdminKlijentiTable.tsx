@@ -79,7 +79,7 @@ export default function AdminKlijentiTable({ rows }: { rows: AdminKlijentRow[] }
               <th className="text-left p-3 font-medium text-stone-600">Godište / Razred</th>
               <th className="text-left p-3 font-medium text-stone-600">Škola</th>
               <th className="text-left p-3 font-medium text-stone-600">Kontakt telefon</th>
-              <th className="text-left p-3 font-medium text-stone-600">Održano do danas, po vrsti časa (plaćeno – od oznake na kalendaru)</th>
+              <th className="text-left p-3 font-medium text-stone-600">Održano do danas (plaćeno – od oznake na kalendaru, sve vrste zajedno)</th>
               <th className="text-left p-3 font-medium text-stone-600">Instruktori</th>
               <th className="text-right p-3 font-medium text-stone-600">Akcija</th>
             </tr>

@@ -504,7 +504,7 @@ export function SemaKlijenti() {
       <div className="overflow-hidden rounded-lg border border-stone-200 bg-white">
         <div className="grid grid-cols-[1.2fr_2.4fr_0.8fr] gap-2 border-b border-stone-200 bg-stone-50 p-1.5 font-medium text-stone-600">
           <span>Ime i prezime</span>
-          <span>Održano do danas, po vrsti časa (plaćeno – od oznake na kalendaru)</span>
+          <span>Održano do danas (plaćeno – od oznake na kalendaru, sve vrste zajedno)</span>
           <span>Akcija</span>
         </div>
         <div className="grid grid-cols-[1.2fr_2.4fr_0.8fr] items-start gap-2 p-1.5">

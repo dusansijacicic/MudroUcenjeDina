@@ -62,7 +62,8 @@ export function buildStanjeIzPlacanja(
     const lista = out.get(cid) ?? [];
     lista.push({
       term_type_id: tid,
-      term_type_naziv: tid ? (naziv.get(tid) ?? '') : 'Bez vrste',
+      // Od migracije 057 baza vraća jedan red po detetu (term_type_id = NULL = sve vrste zajedno).
+      term_type_naziv: tid ? (naziv.get(tid) ?? '') : 'Svi časovi',
       uplaceno: placeno,
       odrzano,
       ostalo: preostalo,
