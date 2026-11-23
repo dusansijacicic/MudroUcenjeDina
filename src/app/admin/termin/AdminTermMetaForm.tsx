@@ -11,11 +11,14 @@ export default function AdminTermMetaForm({
   termCategories,
   initialTermCategoryId,
   initialNapomena,
+  initialDozvoliPreklapanje = false,
 }: {
   termId: string;
   termCategories: TermCategoryRow[];
   initialTermCategoryId: string;
   initialNapomena: string | null;
+  /** Izuzetak „dupliranje predavača“ (migracija 062). */
+  initialDozvoliPreklapanje?: boolean;
 }) {
   const router = useRouter();
   const [termCategoryId, setTermCategoryId] = useState(() => {
@@ -25,6 +28,7 @@ export default function AdminTermMetaForm({
     return termCategories[0]?.id ?? '';
   });
   const [napomena, setNapomena] = useState(initialNapomena ?? '');
+  const [dozvoliPreklapanje, setDozvoliPreklapanje] = useState(initialDozvoliPreklapanje);
   const [loading, setLoading] = useState(false);
 
   const handleSave = async () => {
@@ -37,6 +41,8 @@ export default function AdminTermMetaForm({
       const res = await updateTermMetaAsAdmin(termId, {
         term_category_id: termCategoryId,
         napomena: napomena.trim() || null,
+        // Šalje se samo kad je promenjeno – stranica radi i pre migracije 062.
+        ...(dozvoliPreklapanje !== initialDozvoliPreklapanje ? { dozvoli_preklapanje: dozvoliPreklapanje } : {}),
       });
       if (res.error) {
         toast.error(res.error);
@@ -83,6 +89,19 @@ export default function AdminTermMetaForm({
           className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm text-stone-800"
         />
       </div>
+      <label htmlFor="termin-izuzetak" className="flex items-start gap-2 text-sm text-stone-700">
+        <input
+          id="termin-izuzetak"
+          type="checkbox"
+          className="mt-0.5"
+          checked={dozvoliPreklapanje}
+          onChange={(e) => setDozvoliPreklapanje(e.target.checked)}
+        />
+        <span>
+          <span className="font-medium">Izuzetak: dupliranje predavača</span> – predavač ovog termina sme u istom bloku da ima još
+          jedan čas (npr. nastavak časa od 55 min i ovaj čas u isto vreme). Na kalendaru termin ima oznaku ⇄.
+        </span>
+      </label>
       <button
         type="button"
         onClick={handleSave}

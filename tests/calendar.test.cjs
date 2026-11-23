@@ -42,6 +42,7 @@ function database(respond) {
         gte() { return chain; }, lte() { return chain; }, order() { return chain; },
         in() { return chain; },
         range(from, to) { q.range = [from, to]; return chain; },
+        limit(n) { q.limit = n; return chain; },
         single() { return chain; }, maybeSingle() { return chain; },
         then(onFulfilled, onRejected) { return Promise.resolve(respond(q)).then(onFulfilled, onRejected); },
       };
@@ -86,6 +87,7 @@ function actionsFor(role, db, events = [], refreshed = []) {
       instruktorSlobodanZaNastavak: async () => null,
       trajanjeVrste: async () => 45,
       proveriMestoZahteva: async () => null,
+      ucionicaRezervisana: async () => null,
     },
     'next/cache': { revalidatePath: (path) => refreshed.push(path) },
     'next/navigation': { redirect: (path) => { throw new Error(`redirect:${path}`); } },
@@ -114,7 +116,7 @@ for (const role of ['admin', 'instructor']) {
     const term = { id: 'new-term', instructor_id: 'teacher-b', date: '2026-11-23', slot_index: 0 };
     const lessonDb = database((q) => {
       if (q.operation === 'insert') return { error: null };
-      if (q.table === 'terms') return { data: q.fields.startsWith('id, instructor_id') ? term : null };
+      if (q.table === 'terms') return { data: q.fields.startsWith('id, instructor_id') || q.fields === '*' ? term : null };
       return { data: q.fields === 'id' ? null : [] };
     });
     const lesson = await actionsFor(role, lessonDb).createPredavanjeAsAdmin('new-term', 'unlinked-child', false, false, null, 'reading');
@@ -647,4 +649,28 @@ test('full lists are read in pages so children past the first 1000 rows are not 
   const redovi = await sviRedovi(async (od, doReda) => { pozivi.push([od, doReda]); return { data: svi.slice(od, doReda + 1), error: null }; });
   assert.equal(redovi.length, 1234);
   assert.deepEqual(pozivi, [[0, 499], [500, 999], [1000, 1499]]);
+});
+
+test('instructor double-booking is refused unless the exception is checked', async () => {
+  const napravi = (uUcionici) => database((q) => {
+    if (q.operation === 'insert') return { data: { id: 'novi' }, error: null };
+    if (q.table === 'app_settings') return { data: { value: '4' } };
+    if (q.table === 'term_categories') return { data: { id: 'individual' } };
+    if (q.table === 'terms' && q.fields === 'id') return { data: [{ id: 'nastavak-55' }], error: null };
+    if (q.table === 'terms' && q.fields === 'id, instructor_id') return { data: uUcionici, error: null };
+    return { data: null, count: 0 };
+  });
+  const bez = napravi([]);
+  const r1 = await actionsFor('admin', bez).createTermAsAdmin('teacher-a', '2026-12-01', 7, null, 'individual');
+  assert.match(r1.error, /već ima termin/);
+  assert.equal(bez.queries.some((q) => q.operation === 'insert'), false);
+
+  const sa = napravi([{ id: 'nastavak-55', instructor_id: 'teacher-a' }]);
+  const r2 = await actionsFor('admin', sa).createTermAsAdmin('teacher-a', '2026-12-01', 7, 'room-1', 'individual', null, null, null, true);
+  assert.equal(r2.termId, 'novi');
+  assert.equal(sa.queries.find((q) => q.operation === 'insert').values.dozvoli_preklapanje, true);
+
+  const tudja = napravi([{ id: 'drugi-cas', instructor_id: 'teacher-b' }]);
+  const r3 = await actionsFor('admin', tudja).createTermAsAdmin('teacher-a', '2026-12-01', 7, 'room-1', 'individual', null, null, null, true);
+  assert.match(r3.error, /učionica je već zauzeta/i);
 });

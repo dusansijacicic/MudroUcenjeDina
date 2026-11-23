@@ -145,6 +145,7 @@ export default async function AdminTerminDetailPage({
         termCategories={termCategories}
         initialTermCategoryId={initialTermCategoryId}
         initialNapomena={(term as { napomena?: string | null }).napomena ?? null}
+        initialDozvoliPreklapanje={(term as { dozvoli_preklapanje?: boolean }).dozvoli_preklapanje === true}
       />
 
       {isTesting ? (

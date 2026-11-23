@@ -260,6 +260,7 @@ export default async function AdminKalendarPage({
       potential_clients,
       napomena: (t as { napomena?: string | null }).napomena ?? null,
       nastavak_of_term_id: (t as { nastavak_of_term_id?: string | null }).nastavak_of_term_id ?? null,
+      dozvoli_preklapanje: (t as { dozvoli_preklapanje?: boolean }).dozvoli_preklapanje === true,
     };
   });
 

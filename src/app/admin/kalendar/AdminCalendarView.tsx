@@ -123,6 +123,8 @@ export type AdminTerm = {
   napomena?: string | null;
   /** Ako je setovan, ovo je nastavak (ručni ili automatski blok) roditeljskog termina. */
   nastavak_of_term_id?: string | null;
+  /** Izuzetak „dupliranje predavača“ (062): predavač u ovom bloku ima još jedan čas. */
+  dozvoli_preklapanje?: boolean;
 };
 
 /** Automatski kreiran "blokirajući" termin za dvočas – prazan, samo zauzima sledeći slot. */
@@ -2763,6 +2765,14 @@ function TermCardVisual({ term, rowOffset = 0 }: { term: AdminTerm; rowOffset?: 
           <span className="hidden lg:inline">{instructorName}</span>
         </span>
         <span className="flex min-w-0 items-baseline gap-1">
+          {term.dozvoli_preklapanje && (
+            <span
+              title="Izuzetak: dupliranje predavača – predavač u ovom bloku ima još jedan čas"
+              className="shrink-0 rounded bg-violet-100 px-1 text-[10px] font-bold leading-tight text-violet-800"
+            >
+              ⇄
+            </span>
+          )}
           {napomena && (
             <span aria-label="Ima napomenu – pređite mišem" className="shrink-0 text-[12px] leading-none">
               💬

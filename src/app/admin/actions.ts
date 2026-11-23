@@ -146,7 +146,9 @@ export async function createTermAsAdmin(
   termCategoryId: string,
   napomena: string | null = null,
   nastavakOfTermId: string | null = null,
-  bookingId: string | null = null
+  bookingId: string | null = null,
+  /** Izuzetak „dupliranje predavača“ (migracija 062): sme još jedan čas istog predavača u ovom bloku. */
+  dozvoliPreklapanje = false
 ): Promise<{ termId?: string; instructorId?: string; error?: string }> {
   const { admin: adminSupabase, error: authErr, actor } = await requireSchedulingAccess();
   if (authErr || !adminSupabase) return { error: authErr ?? 'Niste ovlašćeni.' };
@@ -182,19 +184,23 @@ export async function createTermAsAdmin(
     .eq('instructor_id', instructorId)
     .eq('date', dateStr)
     .eq('slot_index', slot)
-    .maybeSingle();
-  if (existingSameInstructor) {
-    return { error: 'Ovaj instruktor već ima termin u ovom slotu. Dodajte radionicu u taj postojeći termin umesto novog.' };
+    .limit(1);
+  if (!dozvoliPreklapanje && (existingSameInstructor ?? []).length > 0) {
+    return {
+      error:
+        'Ovaj instruktor već ima termin u ovom slotu. Dodajte radionicu u taj postojeći termin, ili čekirajte „Izuzetak: dupliranje predavača“.',
+    };
   }
   if (classroomId) {
-    const { data: existingSameClassroom } = await adminSupabase
+    // Izuzetak sme da deli učionicu samo sa časom (ili nastavkom) istog predavača.
+    const { data: uUcionici } = await adminSupabase
       .from('terms')
-      .select('id')
+      .select('id, instructor_id')
       .eq('date', dateStr)
       .eq('slot_index', slot)
-      .eq('classroom_id', classroomId)
-      .maybeSingle();
-    if (existingSameClassroom) {
+      .eq('classroom_id', classroomId);
+    const zauzima = (uUcionici ?? []).filter((t) => !dozvoliPreklapanje || t.instructor_id !== instructorId);
+    if (zauzima.length > 0) {
       return { error: 'Ova učionica je već zauzeta u ovom slotu. Zamena mesta je moguća samo kod izmene postojećeg termina, ne pri kreiranju novog.' };
     }
     const rezervisana = await ucionicaRezervisana(adminSupabase, dateStr, slot, classroomId);
@@ -219,11 +225,18 @@ export async function createTermAsAdmin(
       term_category_id: termCategoryId.trim(),
       napomena: napomena?.trim() || null,
       nastavak_of_term_id: nastavakOfTermId ?? null,
+      ...(dozvoliPreklapanje ? { dozvoli_preklapanje: true } : {}),
     })
     .select('id')
     .single();
 
-  if (error) return { error: error.message };
+  if (error) {
+    if (error.code === '23P01') return { error: 'Ovaj instruktor već ima termin u ovom slotu.' };
+    if (dozvoliPreklapanje && /dozvoli_preklapanje/i.test(error.message)) {
+      return { error: 'Prvo pokrenite migraciju 062_izuzetak_dupliranje_predavaca.sql u Supabase SQL Editoru.' };
+    }
+    return { error: error.message };
+  }
   if (!inserted) return { error: 'Termin nije kreiran.' };
   revalidatePath('/admin/kalendar');
   revalidatePath('/dashboard');
@@ -250,6 +263,8 @@ export async function bookTermWithLessons(payload: {
   termTypeId: string | null;
   potentialClients: { ime: string; prezime: string | null; ime_roditelja: string | null; mobilni_roditelja: string | null; razred: string | null }[];
   repeatDays: number;
+  /** Izuzetak „dupliranje predavača“ (062). */
+  dozvoliPreklapanje?: boolean;
 }): Promise<{ termId?: string; error?: string; failed?: { date: string; error: string }[] }> {
   const { admin, error } = await requireSchedulingAccess();
   if (error || !admin) return { error: error ?? 'Niste ovlašćeni.' };
@@ -259,7 +274,17 @@ export async function bookTermWithLessons(payload: {
   const clientIds = [...new Set(payload.clientIds.filter(Boolean))];
   if (!category.is_testing && clientIds.length === 0) return { error: 'Izaberite bar jedno dete.' };
   if (!category.is_testing && category.jedan_klijent_po_terminu && clientIds.length > 1) return { error: 'Ovaj termin dozvoljava samo jedno dete.' };
-  const result = await createTermAsAdmin(payload.instructorId, payload.date, payload.slotIndex, payload.classroomId, payload.termCategoryId, payload.napomena, payload.nastavakOfTermId, payload.bookingId);
+  const result = await createTermAsAdmin(
+    payload.instructorId,
+    payload.date,
+    payload.slotIndex,
+    payload.classroomId,
+    payload.termCategoryId,
+    payload.napomena,
+    payload.nastavakOfTermId,
+    payload.bookingId,
+    payload.dozvoliPreklapanje === true
+  );
   if (result.error || !result.termId) return result;
   const termId = result.termId;
   if (category.is_testing) {
@@ -447,13 +472,17 @@ export async function createBulkTermsAsAdmin(
       const slot = Math.min(15, Math.max(0, s.slotIndex));
       const dateStr = s.date.slice(0, 10);
 
-      const { data: existing } = await admin
+      // Običan termin predavača u tom bloku; termin-izuzetak (dupliranje predavača, 062) se preskače.
+      const { data: existingSvi } = await admin
         .from('terms')
-        .select('id, classroom_id, napomena')
+        .select('*')
         .eq('instructor_id', instructorId)
         .eq('date', dateStr)
         .eq('slot_index', slot)
-        .maybeSingle();
+        .limit(5);
+      const existing = ((existingSvi ?? []) as { id: string; classroom_id: string | null; napomena: string | null; dozvoli_preklapanje?: boolean }[]).find(
+        (t) => !t.dozvoli_preklapanje
+      ) ?? null;
       // Automatski nastavak tuđeg dužeg časa nije mesto za drugo dete (posle bi se obrisao sa njim).
       if (existing?.napomena === AUTO_SPILLOVER_NAPOMENA) return { ...s, error: NASTAVAK_ZAUZET_PORUKA };
 
@@ -646,13 +675,17 @@ export async function assignInstructorToZahtevAsAdmin(zahtevId: string, instruct
   const slot = Math.min(15, Math.max(0, zahtev.requested_slot_index));
 
   let termId: string;
-  const { data: existing } = await admin
+  // Običan termin predavača u tom bloku; termin-izuzetak (dupliranje predavača, 062) se preskače.
+  const { data: existingSvi } = await admin
     .from('terms')
-    .select('id, napomena')
+    .select('*')
     .eq('instructor_id', instructorId)
     .eq('date', dateStr)
     .eq('slot_index', slot)
-    .maybeSingle();
+    .limit(5);
+  const existing = ((existingSvi ?? []) as { id: string; classroom_id: string | null; napomena: string | null; dozvoli_preklapanje?: boolean }[]).find(
+    (t) => !t.dozvoli_preklapanje
+  ) ?? null;
   // Automatski nastavak tuđeg dužeg časa nije mesto za drugo dete (posle bi se obrisao sa njim).
   if (existing?.napomena === AUTO_SPILLOVER_NAPOMENA) return { error: NASTAVAK_ZAUZET_PORUKA };
   // Duži čas bez instruktora zauzima i sledeće vreme – instruktor tada mora biti slobodan, inače bi
@@ -1049,7 +1082,8 @@ export async function syncSpilloverSlots(
   const [{ data: origin }, { data: existing }] = await Promise.all([
     admin
       .from('terms')
-      .select('instructor_id, classroom_id, date, slot_index, term_category_id')
+      // '*': i dozvoli_preklapanje (062) – nastavak termina-izuzetka je takođe izuzetak.
+      .select('*')
       .eq('id', originTermId)
       .single(),
     admin
@@ -1097,6 +1131,7 @@ export async function syncSpilloverSlots(
         term_category_id: origin.term_category_id,
         nastavak_of_term_id: originTermId,
         napomena: AUTO_SPILLOVER_NAPOMENA,
+        ...((origin as { dozvoli_preklapanje?: boolean }).dozvoli_preklapanje ? { dozvoli_preklapanje: true } : {}),
       });
       if (spilloverErr) {
         // Instruktor ili učionica su već genuinely zauzeti u tom slotu nečim drugim – ne rušimo
@@ -1152,9 +1187,11 @@ export async function createPredavanjeAsAdmin(
 ): Promise<{ error?: string }> {
   const { admin, error: authErr, actor } = await requireSchedulingAccess();
   if (authErr || !admin) return { error: authErr ?? 'Niste ovlašćeni.' };
-  const { data: term } = await admin.from('terms').select('id, instructor_id, date, slot_index').eq('id', termId).single();
+  // '*': i dozvoli_preklapanje (062), a radi i pre te migracije.
+  const { data: term } = await admin.from('terms').select('*').eq('id', termId).single();
   if (!term) return { error: 'Termin nije pronađen.' };
   const termDatum = String(term.date).slice(0, 10);
+  const izuzetak = (term as { dozvoli_preklapanje?: boolean }).dozvoli_preklapanje === true;
   // Dete u to vreme već ima čas bez instruktora (ili nastavak dužeg) – ne pravi se drugi čas preko njega.
   const [zahtevPoruka, { data: ostali }, trajanje, check, { data: dup }] = await Promise.all([
     deteImaZahtev(admin, clientId, termDatum, term.slot_index),
@@ -1172,7 +1209,8 @@ export async function createPredavanjeAsAdmin(
       return slotsNeeded(Array.isArray(tt) ? tt[0]?.trajanje_minuta : tt?.trajanje_minuta);
     })
   );
-  const nastavakGreska = await instruktorSlobodanZaNastavak(admin, term.instructor_id, termDatum, term.slot_index, slotova, [termId]);
+  // Termin-izuzetak (dupliranje predavača) sme da se preklopi i svojim nastavkom.
+  const nastavakGreska = izuzetak ? null : await instruktorSlobodanZaNastavak(admin, term.instructor_id, termDatum, term.slot_index, slotova, [termId]);
   if (nastavakGreska) return { error: nastavakGreska };
   if (!check.ok) {
     return {
@@ -1215,7 +1253,7 @@ export async function createPredavanjeAsAdmin(
 /** Kategorija i napomena termina (admin). */
 export async function updateTermMetaAsAdmin(
   termId: string,
-  payload: { term_category_id: string; napomena: string | null }
+  payload: { term_category_id: string; napomena: string | null; dozvoli_preklapanje?: boolean }
 ): Promise<{ error?: string }> {
   const { admin, error: authErr, actor } = await requireAdmin();
   if (authErr || !admin) return { error: authErr ?? 'Niste ovlašćeni.' };
@@ -1233,11 +1271,35 @@ export async function updateTermMetaAsAdmin(
       return { error: 'Ova kategorija dozvoljava samo jedno dete u terminu. Prvo uklonite višak radionica.' };
     }
   }
+  const izuzetak = payload.dozvoli_preklapanje;
   const { error } = await admin
     .from('terms')
-    .update({ term_category_id: cid, napomena: payload.napomena?.trim() || null })
+    .update({
+      term_category_id: cid,
+      napomena: payload.napomena?.trim() || null,
+      ...(izuzetak !== undefined ? { dozvoli_preklapanje: izuzetak } : {}),
+    })
     .eq('id', termId);
-  if (error) return { error: error.message };
+  if (error) {
+    if (error.code === '23P01' || error.code === '23505') {
+      return {
+        error: 'Izuzetak ne može da se isključi: predavač (ili učionica) u tom bloku ima još jedan čas. Prvo premestite jedan od njih.',
+      };
+    }
+    if (izuzetak !== undefined && /dozvoli_preklapanje/i.test(error.message)) {
+      return { error: 'Prvo pokrenite migraciju 062_izuzetak_dupliranje_predavaca.sql u Supabase SQL Editoru.' };
+    }
+    return { error: error.message };
+  }
+  if (izuzetak !== undefined) {
+    // Nastavci dužeg časa nose isti izuzetak kao čas.
+    await admin
+      .from('terms')
+      .update({ dozvoli_preklapanje: izuzetak })
+      .eq('nastavak_of_term_id', termId)
+      .eq('napomena', AUTO_SPILLOVER_NAPOMENA);
+    if (izuzetak) await syncSpilloverForTerm(admin, termId);
+  }
   revalidatePath('/admin/kalendar');
   revalidatePath(`/admin/termin/${termId}`);
   revalidatePath('/dashboard');
@@ -1632,13 +1694,17 @@ export async function reassignPredavanjeInstructorAsAdmin(
   if (!pred) return { error: 'Radionica nije pronađena.' };
 
   // Tražimo postojeći termin novog instruktora u istom slotu
-  const { data: existingTerm } = await admin
+  // Običan termin predavača u tom bloku; termin-izuzetak (dupliranje predavača, 062) se preskače.
+  const { data: existingTermSvi } = await admin
     .from('terms')
-    .select('id, napomena')
+    .select('*')
     .eq('instructor_id', newInstructorId)
     .eq('date', termDate.slice(0, 10))
     .eq('slot_index', slotIndex)
-    .maybeSingle();
+    .limit(5);
+  const existingTerm = ((existingTermSvi ?? []) as { id: string; classroom_id: string | null; napomena: string | null; dozvoli_preklapanje?: boolean }[]).find(
+    (t) => !t.dozvoli_preklapanje
+  ) ?? null;
   // Automatski nastavak tuđeg dužeg časa nije mesto za drugo dete (posle bi se obrisao sa njim).
   if (existingTerm?.napomena === AUTO_SPILLOVER_NAPOMENA) return { error: NASTAVAK_ZAUZET_PORUKA };
 

@@ -115,13 +115,17 @@ export async function potvrdiZahtev(zahtevId: string): Promise<{ error?: string 
   const slot = Math.min(15, Math.max(0, zahtev.requested_slot_index));
 
   let termId: string;
-  const { data: existing } = await admin
+  // Običan termin predavača u tom bloku; termin-izuzetak (dupliranje predavača, 062) se preskače.
+  const { data: existingSvi } = await admin
     .from('terms')
-    .select('id, napomena')
+    .select('*')
     .eq('instructor_id', targetInstructorId)
     .eq('date', dateStr)
     .eq('slot_index', slot)
-    .single();
+    .limit(5);
+  const existing = ((existingSvi ?? []) as { id: string; classroom_id: string | null; napomena: string | null; dozvoli_preklapanje?: boolean }[]).find(
+    (t) => !t.dozvoli_preklapanje
+  ) ?? null;
   // Automatski nastavak tuđeg dužeg časa nije mesto za drugo dete (posle bi se obrisao sa njim).
   if (existing?.napomena === AUTO_SPILLOVER_NAPOMENA) return { error: NASTAVAK_ZAUZET_PORUKA };
   // Duži čas zauzima i sledeće vreme – instruktor tada mora biti slobodan (inače bi se preklopio).
@@ -230,13 +234,17 @@ export async function promeniTerminZahtev(
   const slot = Math.min(15, Math.max(0, newSlotIndex));
 
   let termId: string;
-  const { data: existing } = await admin
+  // Običan termin predavača u tom bloku; termin-izuzetak (dupliranje predavača, 062) se preskače.
+  const { data: existingSvi } = await admin
     .from('terms')
-    .select('id, napomena')
+    .select('*')
     .eq('instructor_id', targetInstructorId)
     .eq('date', dateStr)
     .eq('slot_index', slot)
-    .single();
+    .limit(5);
+  const existing = ((existingSvi ?? []) as { id: string; classroom_id: string | null; napomena: string | null; dozvoli_preklapanje?: boolean }[]).find(
+    (t) => !t.dozvoli_preklapanje
+  ) ?? null;
   // Automatski nastavak tuđeg dužeg časa nije mesto za drugo dete (posle bi se obrisao sa njim).
   if (existing?.napomena === AUTO_SPILLOVER_NAPOMENA) return { error: NASTAVAK_ZAUZET_PORUKA };
   // Duži čas zauzima i sledeće vreme – instruktor tada mora biti slobodan (inače bi se preklopio).

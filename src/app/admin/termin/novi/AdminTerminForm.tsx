@@ -97,6 +97,8 @@ export default function AdminTerminForm({
   const [termTypeId, setTermTypeId] = useState(() => findDefaultCitanjeTermTypeId(termTypes) ?? termTypes[0]?.id ?? '');
   /** 0 = samo za danas (default). Ponavlja se svaki naredni kalendarski dan (ne isti dan u nedelji). */
   const [repeatDays, setRepeatDays] = useState(0);
+  // Izuzetak „dupliranje predavača“: izabrani predavač sme da ima još jedan čas u ovom bloku (062).
+  const [izuzetak, setIzuzetak] = useState(false);
   /** Za kategoriju Testiranje: deca za upis direktno pri kreiranju termina (umesto naknadno). */
   const [potentialRows, setPotentialRows] = useState<PotentialClientDraft[]>([emptyPotentialClientDraft()]);
   const selectedProgramId = termTypes.find((tt) => tt.id === termTypeId)?.program_id ?? null;
@@ -225,6 +227,7 @@ export default function AdminTerminForm({
         termTypeId: !isNastavakCat && termTypeId ? termTypeId : null,
         potentialClients: isTestingCat ? draftsToPayload(potentialRows) : [],
         repeatDays: !isTestingCat && !isNastavakCat ? repeatDays : 0,
+        dozvoliPreklapanje: !isNastavakCat && !!instructorId && izuzetak,
       };
       const signature = JSON.stringify(payload);
       if (booking.current?.signature !== signature) booking.current = { signature, id: crypto.randomUUID() };
@@ -486,9 +489,19 @@ export default function AdminTerminForm({
                 >
                   <option value="">Bez instruktora</option>
                   {instructors.map((i) => (
-                    <option key={i.id} value={i.id} disabled={takenInstructorIds.includes(i.id) || blockedInstructorIds.includes(i.id)}>
+                    <option
+                      key={i.id}
+                      value={i.id}
+                      disabled={(takenInstructorIds.includes(i.id) && !izuzetak) || blockedInstructorIds.includes(i.id)}
+                    >
                       {i.ime} {i.prezime}
-                      {takenInstructorIds.includes(i.id) ? ' (zauzeto)' : blockedInstructorIds.includes(i.id) ? ' (blokiran – ne radi tada)' : ''}
+                      {takenInstructorIds.includes(i.id)
+                        ? izuzetak
+                          ? ' (ima čas – izuzetak)'
+                          : ' (zauzeto)'
+                        : blockedInstructorIds.includes(i.id)
+                        ? ' (blokiran – ne radi tada)'
+                        : ''}
                     </option>
                   ))}
                 </select>
@@ -503,12 +516,25 @@ export default function AdminTerminForm({
                 >
                   <option value="">Bez učionice</option>
                   {classrooms.map((c) => (
-                    <option key={c.id} value={c.id} disabled={takenClassroomIds.includes(c.id)}>
-                      {c.naziv}{takenClassroomIds.includes(c.id) ? ' (zauzeto)' : ''}
+                    <option key={c.id} value={c.id} disabled={takenClassroomIds.includes(c.id) && !izuzetak}>
+                      {c.naziv}{takenClassroomIds.includes(c.id) ? (izuzetak ? ' (zauzeto – samo ako je istog predavača)' : ' (zauzeto)') : ''}
                     </option>
                   ))}
                 </select>
               </div>
+              <label htmlFor="izuzetak-dupliranje" className="flex items-start gap-2 text-sm text-stone-700 sm:col-span-2">
+                <input
+                  id="izuzetak-dupliranje"
+                  type="checkbox"
+                  className="mt-0.5"
+                  checked={izuzetak}
+                  onChange={(e) => setIzuzetak(e.target.checked)}
+                />
+                <span>
+                  <span className="font-medium">Izuzetak: dupliranje predavača</span> – izabrani predavač sme u ovom bloku da ima još
+                  jedan čas (npr. nastavak časa od 55 min i nov čas u isto vreme). Na kalendaru termin dobija oznaku ⇄.
+                </span>
+              </label>
             </div>
           ) : null}
 

@@ -562,13 +562,17 @@ export async function createBulkTermsAsInstructor(
   const results = await Promise.all(
     slots.map(async (s) => {
       let termId: string;
-      const { data: existingTerm } = await admin
+      // Običan termin predavača u tom bloku; termin-izuzetak (dupliranje predavača, 062) se preskače.
+      const { data: existingTermSvi } = await admin
         .from('terms')
-        .select('id, napomena')
+        .select('*')
         .eq('instructor_id', instructor.id)
         .eq('date', s.date)
         .eq('slot_index', s.slotIndex)
-        .maybeSingle();
+        .limit(5);
+      const existingTerm = ((existingTermSvi ?? []) as { id: string; classroom_id: string | null; napomena: string | null; dozvoli_preklapanje?: boolean }[]).find(
+        (t) => !t.dozvoli_preklapanje
+      ) ?? null;
       // Automatski nastavak tuđeg dužeg časa nije mesto za drugo dete (posle bi se obrisao sa njim).
       if (existingTerm?.napomena === AUTO_SPILLOVER_NAPOMENA) return { ...s, error: NASTAVAK_ZAUZET_PORUKA };
       // Pre pravljenja termina: dete tada nema čas bez instruktora, a za duži čas ste slobodni i posle.

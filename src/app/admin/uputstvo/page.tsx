@@ -151,6 +151,12 @@ export default async function AdminUputstvoPage({ searchParams }: { searchParams
             <li>Klik na termin otvara <a href="#termin" className="text-amber-700 underline">stranicu termina</a>.</li>
             <li>Premeštanje: uhvatite termin mišem, prevucite ga u drugu ćeliju, pustite i potvrdite.</li>
             <li><Ui>+</Ui> u praznoj ćeliji = novi termin za taj dan i vreme; <Ui>+ Testiranje</Ui> = termin testiranja.</li>
+            <li>
+              <strong>Izuzetak: dupliranje predavača</strong> – u formi novog termina (i na stranici termina) čekirajte ga kada isti predavač
+              u istom bloku treba da ima još jedan čas, npr. čas od 55 min u 14:00 (nastavak u 14:45) i nov čas u 14:45. Bez izuzetka
+              aplikacija ne dozvoljava dva časa istog predavača u bloku. Učionicu izuzetak sme da deli samo sa časom istog predavača.
+              Takav termin na kalendaru ima ljubičastu oznaku <strong>⇄</strong>. Potrebna je migracija 062.
+            </li>
             <li><Ui>+ Dodaj još termin u ovom slotu</Ui> ispod postojećih = još jedan paralelan termin u istom vremenu (drugi instruktor/učionica).</li>
             <li>
               Žuta traka na vrhu „termini bez instruktora/učionice“: klik na datum vodi pravo do tog časa. <Ui>✕</Ui> u ćošku datuma (uz
