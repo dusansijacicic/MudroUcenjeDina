@@ -2766,10 +2766,25 @@ function TermCardVisual({ term, rowOffset = 0 }: { term: AdminTerm; rowOffset?: 
   const napomena = term.napomena && term.napomena !== AUTO_SPILLOVER_NAPOMENA ? term.napomena : null;
 
   return (
-    <Oblacic sadrzaj={napomena ? <OblacicRed naslov="Napomena">{napomena}</OblacicRed> : null}>
+    <Oblacic
+      naslov={napomena ? 'Napomena' : 'Izuzetak: dupliranje predavača'}
+      ton={napomena ? 'napomena' : 'izuzetak'}
+      sadrzaj={
+        napomena || term.dozvoli_preklapanje ? (
+          <>
+            {napomena && <OblacicRed>{napomena}</OblacicRed>}
+            {term.dozvoli_preklapanje && (
+              <OblacicRed naslov={napomena ? 'Izuzetak ⇄' : undefined}>
+                Predavač u ovom bloku ima još jedan čas (dupliranje predavača).
+              </OblacicRed>
+            )}
+          </>
+        ) : null
+      }
+    >
     <div
       className={`rounded-lg border bg-white overflow-hidden text-sm ${anyUnpaid ? 'border-red-500 ring-1 ring-red-500' : 'border-stone-200'}`}
-      title={napomena ? undefined : `${instructorName} · ${classroomName ? `učionica ${classroomName}` : 'bez učionice'}`}
+      title={napomena || term.dozvoli_preklapanje ? undefined : `${instructorName} · ${classroomName ? `učionica ${classroomName}` : 'bez učionice'}`}
     >
       <div className="flex items-baseline justify-between gap-1 px-2 py-0.5 text-[11px] leading-tight">
         <span className="font-semibold truncate" style={{ color: instructorColor }}>
@@ -2781,7 +2796,7 @@ function TermCardVisual({ term, rowOffset = 0 }: { term: AdminTerm; rowOffset?: 
         <span className="flex min-w-0 items-baseline gap-1">
           {term.dozvoli_preklapanje && (
             <span
-              title="Izuzetak: dupliranje predavača – predavač u ovom bloku ima još jedan čas"
+              aria-label="Izuzetak: dupliranje predavača – pređite mišem"
               className="shrink-0 rounded bg-violet-100 px-1 text-[10px] font-bold leading-tight text-violet-800"
             >
               ⇄
@@ -3040,15 +3055,26 @@ function AdminCellContent({
         // Status, razlog i instruktor se ne ispisuju u rasporedu – vide se u oblačiću.
         const otkOblacic = (
           <>
-            <OblacicRed naslov="Otkazan čas">{ot.placeno ? 'naplaćen – računa se u plaćene časove' : 'nije naplaćen'}</OblacicRed>
-            <OblacicRed naslov="Razlog">{ot.razlog || 'nije upisan'}</OblacicRed>
+            <OblacicRed naslov="Razlog">
+              {ot.razlog || <span className="italic text-stone-400">nije upisan</span>}
+            </OblacicRed>
+            {ot.placeno && (
+              <OblacicRed naslov="Plaćeni časovi">
+                {ot.redni ? `${ot.redni[0]}. od ${ot.redni[1]} – ` : ''}računa se u plaćene časove deteta
+              </OblacicRed>
+            )}
             {ot.instructor_ime && (
               <OblacicRed naslov="Instruktor">{`${ot.instructor_ime} ${ot.instructor_prezime ?? ''}`.trim()}</OblacicRed>
             )}
           </>
         );
         return (
-          <Oblacic key={ot.id} sadrzaj={otkOblacic}>
+          <Oblacic
+            key={ot.id}
+            naslov={ot.placeno ? 'Otkazan čas · naplaćen' : 'Otkazan čas · nije naplaćen'}
+            ton={ot.placeno ? 'naplacen' : 'otkazan'}
+            sadrzaj={otkOblacic}
+          >
           <div
             role={swap.deleteMode || swap.paidMode ? 'button' : undefined}
             title={swap.paidMode ? (ot.placeno ? 'Klik: skini oznaku naplaćeno' : 'Klik: otkazan čas je naplaćen') : undefined}
@@ -3214,7 +3240,7 @@ function AdminCellContent({
           (swap.copyMode && swap.copySourceZahtevId === z.id) ||
           (swap.moveMode && swap.moveSourceZahtevId === z.id);
         return (
-          <Oblacic key={z.id} sadrzaj={z.napomena ? <OblacicRed naslov="Napomena">{z.napomena}</OblacicRed> : null}>
+          <Oblacic key={z.id} naslov="Napomena" ton="napomena" sadrzaj={z.napomena ? <OblacicRed>{z.napomena}</OblacicRed> : null}>
           <div
             role={zahtevClickable ? 'button' : undefined}
             draggable={zahtevDraggable}

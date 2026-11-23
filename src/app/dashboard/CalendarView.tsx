@@ -337,7 +337,7 @@ function OtherTermCard({ term, own = false }: { term: OtherTerm; own?: boolean }
   // Napomena se ne ispisuje u rasporedu – 💬 i oblačić kad se mišem pređe preko termina.
   const napomena = !isAutoSpillover(term) && term.napomena && term.napomena !== AUTO_SPILLOVER_NAPOMENA ? term.napomena : null;
   return (
-    <Oblacic sadrzaj={napomena ? <OblacicRed naslov="Napomena">{napomena}</OblacicRed> : null}>
+    <Oblacic naslov="Napomena" ton="napomena" sadrzaj={napomena ? <OblacicRed>{napomena}</OblacicRed> : null}>
     <div
       className={`rounded-lg border-2 p-2 text-xs ${isAutoSpillover(term) || term.request_id ? 'border-dashed' : ''} ${term.cancelled ? 'opacity-60' : ''}`}
       style={{
