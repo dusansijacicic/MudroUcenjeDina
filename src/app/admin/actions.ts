@@ -1262,10 +1262,34 @@ export async function updatePredavanjeAsAdmin(
   return {};
 }
 
+/** Razlog otkazivanja: prazno → null, najviše 300 znakova. */
+function ocistiRazlog(razlog: string | null | undefined): string | null {
+  const r = (razlog ?? '').replace(/\s+/g, ' ').trim().slice(0, 300);
+  return r || null;
+}
+
+/** Upis otkazanog časa; pre migracije 059 (nema kolone razlog) upisuje se bez razloga. */
+async function upisiOtkazan(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  admin: any,
+  red: Record<string, unknown>
+): Promise<{ error?: string }> {
+  const { error } = await admin.from('otkazani_termini').insert(red);
+  if (error && 'razlog' in red && /razlog/i.test(error.message)) {
+    const bezRazloga = { ...red };
+    delete bezRazloga.razlog;
+    const { error: e2 } = await admin.from('otkazani_termini').insert(bezRazloga);
+    return e2 ? { error: e2.message } : {};
+  }
+  return error ? { error: error.message } : {};
+}
+
 async function savePredavanjeToHistory(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   admin: any,
-  predavanjeId: string
+  predavanjeId: string,
+  /** Pri otkazivanju na kalendaru: da li je otkazan čas naplaćen (računa se u plaćene) i zašto je otkazan. */
+  dodatno: { placeno?: boolean; razlog?: string | null } = {}
 ) {
   const { data: pred } = await admin
     .from('predavanja')
@@ -1278,7 +1302,8 @@ async function savePredavanjeToHistory(
   const classroom = term?.classroom && Array.isArray(term.classroom) ? term.classroom[0] : term?.classroom;
   const termType = Array.isArray(pred.term_type) ? pred.term_type[0] : pred.term_type;
   const client = Array.isArray(pred.client) ? pred.client[0] : pred.client;
-  await admin.from('otkazani_termini').insert({
+  const razlog = ocistiRazlog(dodatno.razlog);
+  await upisiOtkazan(admin, {
     client_id: pred.client_id,
     client_ime: (client as { ime?: string } | null)?.ime ?? '',
     client_prezime: (client as { prezime?: string } | null)?.prezime ?? null,
@@ -1289,7 +1314,8 @@ async function savePredavanjeToHistory(
     term_date: term?.date,
     slot_index: term?.slot_index,
     term_type_naziv: (termType as { naziv?: string } | null)?.naziv ?? null,
-    placeno: pred.placeno ?? false,
+    placeno: dodatno.placeno ?? pred.placeno ?? false,
+    ...(razlog ? { razlog } : {}),
   });
 }
 
@@ -1428,8 +1454,11 @@ async function srediDecuTestiranjaPreBrisanja(admin: AdminDb, termId: string, na
 export async function otkaziCasoveAsAdmin(
   predavanjeIds: string[],
   zahtevIds: string[] = [],
-  testiranjeIds: string[] = []
+  testiranjeIds: string[] = [],
+  /** naplaceno: otkazani časovi dece su naplaćeni (računaju se u plaćene časove, migracija 059); razlog: zašto. */
+  opcije: { naplaceno?: boolean; razlog?: string | null } = {}
 ): Promise<{ failed: { id: string; error: string }[]; otkazano: number; obrisaniTermini: string[] }> {
+  const dodatno = { placeno: opcije.naplaceno === true, razlog: ocistiRazlog(opcije.razlog) };
   const { admin, error: authErr, actor } = await requireAdmin();
   if (authErr || !admin) {
     return {
@@ -1450,7 +1479,7 @@ export async function otkaziCasoveAsAdmin(
       failed.push({ id: predavanjeId, error: 'Čas nije pronađen.' });
       continue;
     }
-    await savePredavanjeToHistory(admin, predavanjeId);
+    await savePredavanjeToHistory(admin, predavanjeId, dodatno);
     const { error } = await admin.from('predavanja').delete().eq('id', predavanjeId);
     if (error) {
       failed.push({ id: predavanjeId, error: error.message });
@@ -1507,7 +1536,7 @@ export async function otkaziCasoveAsAdmin(
     }
     const one = jedan;
     const client = one(z.client as { ime?: string; prezime?: string | null } | { ime?: string; prezime?: string | null }[] | null);
-    const { error: insErr } = await admin.from('otkazani_termini').insert({
+    const { error: insGreska } = await upisiOtkazan(admin, {
       client_id: z.client_id,
       client_ime: client?.ime ?? '',
       client_prezime: client?.prezime ?? null,
@@ -1518,10 +1547,11 @@ export async function otkaziCasoveAsAdmin(
       term_date: String(z.requested_date).slice(0, 10),
       slot_index: z.requested_slot_index,
       term_type_naziv: one(z.term_type as { naziv?: string } | { naziv?: string }[] | null)?.naziv ?? null,
-      placeno: false,
+      placeno: dodatno.placeno,
+      ...(dodatno.razlog ? { razlog: dodatno.razlog } : {}),
     });
-    if (insErr) {
-      failed.push({ id: zahtevId, error: insErr.message });
+    if (insGreska) {
+      failed.push({ id: zahtevId, error: insGreska });
       continue;
     }
     const { error: delErr } = await admin.from('zahtevi_za_cas').delete().eq('id', zahtevId);
@@ -3241,6 +3271,8 @@ export type OtkazaniTerminRow = {
   term_type_naziv: string | null;
   placeno: boolean;
   napomena: string | null;
+  /** Zašto je čas otkazan (migracija 059). */
+  razlog?: string | null;
   otkazano_at: string;
 };
 
@@ -3261,7 +3293,23 @@ export async function updateOtkazaniTerminPlaceno(id: string, placeno: boolean, 
   const { error } = await admin.from('otkazani_termini').update({ placeno }).eq('id', id);
   if (error) return { error: error.message };
   revalidatePath(`/admin/klijenti/${clientId}`);
+  // Naplaćen otkazan čas se računa u plaćene časove (059) – menja i „x/6“ na kalendaru.
+  revalidatePath('/admin/kalendar');
   return {};
+}
+
+/** Razlog otkazivanja (profil deteta). Prazno briše razlog. */
+export async function postaviRazlogOtkazivanjaAsAdmin(id: string, razlog: string | null, clientId?: string | null): Promise<{ error?: string; razlog?: string | null }> {
+  const { admin, error: authErr } = await requireAdmin();
+  if (authErr || !admin) return { error: authErr ?? 'Niste ovlašćeni.' };
+  const cist = ocistiRazlog(razlog);
+  const { error } = await admin.from('otkazani_termini').update({ razlog: cist }).eq('id', id);
+  if (error) {
+    return { error: /razlog/i.test(error.message) ? 'Prvo pokrenite migraciju 059_otkazani_razlog_i_naplata.sql u Supabase SQL Editoru.' : error.message };
+  }
+  if (clientId) revalidatePath(`/admin/klijenti/${clientId}`);
+  revalidatePath('/admin/kalendar');
+  return { razlog: cist };
 }
 
 /** ✕ uz datum u žutoj traci „termini bez instruktora“: uklanja podsetnik za taj dan (časovi ostaju). */

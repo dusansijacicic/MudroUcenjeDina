@@ -3,6 +3,7 @@
 import { createContext, useContext, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useKalendarRealtime } from '@/lib/use-kalendar-realtime';
+import KalendarVeza from '@/components/KalendarVeza';
 import { TIME_SLOTS, AUTO_SPILLOVER_NAPOMENA } from '@/lib/constants';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
@@ -249,7 +250,13 @@ function CalendarViewInner({
   const router = useRouter();
   const [draggedTermId, setDraggedTermId] = useState<string | null>(null);
   // terms: kad stigne svež kalendar, ranije primljene izmene su već u njemu – ne osvežava se još jednom.
-  useKalendarRealtime(draggedTermId !== null, terms);
+  const osveziKalendar = useKalendarRealtime(draggedTermId !== null, terms);
+  // Da li ovaj računar uživo prima izmene sa drugih računara + ručno osvežavanje.
+  const vezaTraka = (
+    <div className="mb-2 flex justify-end">
+      <KalendarVeza onOsvezi={osveziKalendar} />
+    </div>
+  );
 
   const handleDrop = async (date: string, slot: number) => {
     if (!draggedTermId) return;
@@ -270,6 +277,8 @@ function CalendarViewInner({
   const linkSuffix = clientFilterId ? `&client=${clientFilterId}` : '';
   if (view === 'dan' && singleDay) {
     return (
+      <>
+      {vezaTraka}
       <CalendarDay
         date={singleDay}
         terms={terms}
@@ -280,10 +289,13 @@ function CalendarViewInner({
         draggedTermId={draggedTermId}
         onDropCell={handleDrop}
       />
+    </>
     );
   }
   if (view === 'mesec' && monthStart) {
     return (
+      <>
+      {vezaTraka}
       <CalendarMonth
         monthStart={monthStart}
         terms={terms}
@@ -292,9 +304,12 @@ function CalendarViewInner({
         instructorColor={instructorColor}
         linkSuffix={linkSuffix}
       />
+    </>
     );
   }
   return (
+    <>
+    {vezaTraka}
     <CalendarWeek
       startOfWeek={startOfWeek}
       terms={terms}
@@ -306,6 +321,7 @@ function CalendarViewInner({
       setDraggedTermId={setDraggedTermId}
       onDropCell={handleDrop}
     />
+  </>
   );
 }
 

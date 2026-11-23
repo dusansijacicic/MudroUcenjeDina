@@ -152,11 +152,36 @@ test('instructor can book testing and a class awaiting an instructor', async () 
   assert.equal(db.queries.find((q) => q.table === 'zahtevi_za_cas' && q.operation === 'insert').values[0].instructor_id, null);
 });
 
+test('cancelling a class can mark it charged and keep the reason', async () => {
+  const db = database((q) => {
+    if (q.table === 'zahtevi_za_cas' && q.operation === 'select') {
+      return { data: { client_id: 'child', requested_date: '2026-11-24', requested_slot_index: 3, client: { ime: 'Vukašin', prezime: 'V' }, term_type: null, classroom: null }, error: null };
+    }
+    return { data: null, error: null };
+  });
+  const actions = actionsFor('admin', db);
+  const res = await actions.otkaziCasoveAsAdmin([], ['request-1'], [], { naplaceno: true, razlog: '  Bolest,   javili kasno ' });
+  assert.equal(res.otkazano, 1);
+  const upis = db.queries.find((q) => q.table === 'otkazani_termini' && q.operation === 'insert').values;
+  assert.equal(upis.placeno, true);
+  assert.equal(upis.razlog, 'Bolest, javili kasno');
+  assert.equal(upis.instructor_id, null);
+
+  const db2 = database((q) => (q.table === 'zahtevi_za_cas' && q.operation === 'select'
+    ? { data: { client_id: 'child', requested_date: '2026-11-24', requested_slot_index: 3, client: { ime: 'V' } }, error: null }
+    : { data: null, error: null }));
+  await actionsFor('admin', db2).otkaziCasoveAsAdmin([], ['request-2']);
+  const bez = db2.queries.find((q) => q.table === 'otkazani_termini' && q.operation === 'insert').values;
+  assert.equal(bez.placeno, false);
+  assert.equal('razlog' in bez, false);
+});
+
 const calendarLinks = [];
 const Calendar = loadSource('src/app/dashboard/CalendarView.tsx', {
   'next/navigation': { useRouter: () => ({ refresh() {} }) },
   'next/link': ({ children, ...props }) => { calendarLinks.push({ ...props }); delete props.prefetch; return React.createElement('a', props, children); },
   '@/lib/use-kalendar-realtime': { useKalendarRealtime() {} },
+  '@/components/KalendarVeza': () => null,
   '@/lib/constants': constants,
   '@/app/dashboard/termin/actions': { moveTermAsInstructor() {} },
 }).default;
@@ -443,6 +468,7 @@ function realtimeHarness(t) {
   global.window = {
     setTimeout: (fn) => { const id = nextTimer++; timers.set(id, fn); return id; },
     clearTimeout: (id) => timers.delete(id), setInterval: () => 0, clearInterval() {},
+    addEventListener() {}, removeEventListener() {},
   };
   global.document = { visibilityState: 'visible', addEventListener() {}, removeEventListener() {} };
   t.after(() => { global.window = oldWindow; global.document = oldDocument; });

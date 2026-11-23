@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useTransition } from 'react';
+import { useCallback, useEffect, useRef, useSyncExternalStore, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 
@@ -10,8 +10,35 @@ const DEBOUNCE_MS = 1500;
 const POSLE_MODA_MS = 400;
 /** Posle ovoliko vremena u pozadini (tab/telefon zaspao, veza možda pukla) uvek se osveži pri povratku. */
 const AWAY_MS = 60_000;
-/** Rezerva ako Realtime veza ne radi (npr. migracija 045 još nije pokrenuta). */
+/** Rezerva i kad Realtime radi: svež kalendar najkasnije ovoliko često. */
 const FALLBACK_POLL_MS = 5 * 60_000;
+/** Bez žive veze (mreža blokira WebSocket, laptop se probudio, Realtime pao): osvežavaj češće. */
+const BEZ_VEZE_POLL_MS = 30_000;
+/** Povratak na prozor (klik u prozor, prebacivanje sa drugog programa): osveži ako su podaci stariji od ovoga. */
+const FOKUS_MS = 30_000;
+
+export type KalendarVezaStatus = 'povezivanje' | 'uzivo' | 'prekinuto';
+type KalendarVeza = { status: KalendarVezaStatus; svezeU: number };
+
+/** Stanje žive veze i vreme poslednjih svežih podataka – za oznaku na kalendaru (KalendarVeza). */
+let veza: KalendarVeza = { status: 'povezivanje', svezeU: 0 };
+const slusaoci = new Set<() => void>();
+function postaviVezu(izmena: Partial<KalendarVeza>) {
+  veza = { ...veza, ...izmena };
+  slusaoci.forEach((f) => f());
+}
+function pretplati(f: () => void) {
+  slusaoci.add(f);
+  return () => {
+    slusaoci.delete(f);
+  };
+}
+const SERVER_VEZA: KalendarVeza = { status: 'povezivanje', svezeU: 0 };
+
+/** Da li je kalendar uživo povezan i kad su stigli poslednji sveži podaci. */
+export function useKalendarVeza(): KalendarVeza {
+  return useSyncExternalStore(pretplati, () => veza, () => SERVER_VEZA);
+}
 
 /**
  * Automatsko osvežavanje kalendara kad se bilo šta na njemu promeni u bazi – bilo ko, bilo gde
@@ -67,6 +94,7 @@ export function useKalendarRealtime(paused: boolean, svezPodatak?: unknown) {
     const changedDuringRefresh = s.refreshing && s.revision > s.requestedRevision;
     s.refreshing = false;
     s.pending = changedDuringRefresh;
+    postaviVezu({ svezeU: Date.now() });
     window.clearTimeout(s.timer);
     s.timer = undefined;
     if (s.pending && !s.paused) zakazi(POSLE_MODA_MS);
@@ -94,7 +122,20 @@ export function useKalendarRealtime(paused: boolean, svezPodatak?: unknown) {
     };
 
     const supabase = createClient();
-    const channel = supabase.channel('kalendar').on('broadcast', { event: 'promena' }, markDirty).subscribe();
+    // Status veze: dok nije „uživo“, izmene sa drugih računara ne stižu odmah – tada se osvežava češće,
+    // a po ponovnom povezivanju odmah, jer su poruke iz vremena prekida izgubljene.
+    const channel = supabase
+      .channel('kalendar')
+      .on('broadcast', { event: 'promena' }, markDirty)
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          const bioPrekid = veza.status === 'prekinuto';
+          postaviVezu({ status: 'uzivo' });
+          if (bioPrekid) markDirty();
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+          postaviVezu({ status: 'prekinuto' });
+        }
+      });
 
     const onVisibility = () => {
       if (document.visibilityState === 'hidden') {
@@ -105,13 +146,32 @@ export function useKalendarRealtime(paused: boolean, svezPodatak?: unknown) {
       if (s.pending) flush();
     };
     document.addEventListener('visibilitychange', onVisibility);
-    const poll = window.setInterval(() => { s.refreshing = false; markDirty(); }, FALLBACK_POLL_MS);
+    // Klik u prozor posle rada u drugom programu (prozor je sve vreme „vidljiv“, pa visibilitychange ne
+    // stiže) i povratak mreže: osveži ako podaci nisu sveži.
+    const onFokus = () => {
+      if (Date.now() - veza.svezeU > FOKUS_MS) {
+        s.pending = true;
+        flush();
+      }
+    };
+    window.addEventListener('focus', onFokus);
+    window.addEventListener('online', onFokus);
+    // Rezerva: bez žive veze na 30 s, sa vezom na 5 min.
+    const poll = window.setInterval(() => {
+      const granica = veza.status === 'uzivo' ? FALLBACK_POLL_MS : BEZ_VEZE_POLL_MS;
+      if (Date.now() - veza.svezeU < granica) return;
+      s.refreshing = false;
+      markDirty();
+    }, BEZ_VEZE_POLL_MS);
 
     return () => {
       window.clearTimeout(s.timer);
       window.clearInterval(poll);
       document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('focus', onFokus);
+      window.removeEventListener('online', onFokus);
       supabase.removeChannel(channel);
+      postaviVezu({ status: 'povezivanje' });
     };
   }, [flush, zakazi]);
   return refresh;

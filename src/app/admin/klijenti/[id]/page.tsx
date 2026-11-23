@@ -424,10 +424,13 @@ export default async function AdminKlijentEditPage({
       <section className="rounded-2xl border border-stone-200 bg-white shadow-sm overflow-hidden animate-in-delay-4">
         <div className="border-b border-stone-100 bg-stone-50/80 px-5 py-3">
           <h2 className="text-base font-semibold text-stone-800">Otkazani termini</h2>
-          <p className="text-xs text-stone-500 mt-0.5">Istorijat otkazanih termina. Može se označiti kao naplaćen ili obrisati iz istorije.</p>
+          <p className="text-xs text-stone-500 mt-0.5">
+            Svaki otkazan čas je naplaćen ili nije. Naplaćen se računa u plaćene časove deteta (troši čas iz paketa). Razlog otkazivanja
+            se može upisati ili izmeniti ovde.
+          </p>
         </div>
         <div className="p-5">
-          <OtkazaniTerminiSection otkazani={otkazani} clientId={clientId} />
+          <OtkazaniTerminiSection otkazani={otkazani} clientId={clientId} redni={redni} />
         </div>
       </section>
 

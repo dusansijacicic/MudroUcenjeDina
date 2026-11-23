@@ -37,6 +37,7 @@ import { moveZahtevAsAdmin, copyZahtevToSlotsAsAdmin, swapSaZahtevomAsAdmin } fr
 import SingleKlijentPicker from '@/components/SingleKlijentPicker';
 import GrupniKlijentiPicker from '@/components/GrupniKlijentiPicker';
 import StickyBar from '@/components/StickyBar';
+import KalendarVeza from '@/components/KalendarVeza';
 import useStickyThead from '@/components/useStickyThead';
 import { NAREDNIH_NEDELJA_COOKIE, NAREDNIH_NEDELJA_DEFAULT, NAREDNIH_NEDELJA_MAX, nazivNedelje } from '@/lib/kalendar-nedelje';
 
@@ -52,6 +53,10 @@ export type OtkazaniTerminCalendar = {
   slot_index: number;
   term_type_naziv?: string | null;
   placeno: boolean;
+  /** Zašto je čas otkazan (migracija 059). */
+  razlog?: string | null;
+  /** [x, y] – naplaćen otkazan čas se računa u plaćene časove deteta (059); null ako se ne broji. */
+  redni?: [number, number] | null;
 };
 
 /** Zahtev (zahtevi_za_cas) na čekanju, bez instruktora – prikazan na kalendaru samo informativno
@@ -805,6 +810,9 @@ export default function AdminCalendarView({
   const [cancelMode, setCancelMode] = useState(false);
   const [cancelSelection, setCancelSelection] = useState<Map<string, string>>(new Map());
   const [cancelLoading, setCancelLoading] = useState(false);
+  // Otkaži: razlog i da li je otkazano naplaćeno (računa se u plaćene časove) – za sve izabrane.
+  const [cancelRazlog, setCancelRazlog] = useState('');
+  const [cancelNaplaceno, setCancelNaplaceno] = useState(false);
   // Premesti: termin koji se premešta i novo mesto.
   const [moveMode, setMoveMode] = useState(false);
   const [moveSource, setMoveSource] = useState<IzabranaStavka | null>(null);
@@ -1025,6 +1033,8 @@ export default function AdminCalendarView({
       return next;
     });
     setCancelSelection(new Map());
+    setCancelRazlog('');
+    setCancelNaplaceno(false);
   };
 
   const onToggleCancel = (key: string, label: string) => {
@@ -1040,19 +1050,25 @@ export default function AdminCalendarView({
     const verzija = verzijaPodataka.current;
     const keys = [...cancelSelection.keys()];
     if (keys.length === 0) return;
-    if (!confirm(`Otkazati ${keys.length} čas(ova)? Ostaju na kalendaru i na profilu deteta kao „otkazano“.`)) return;
+    const naplata = cancelNaplaceno ? ' NAPLAĆENO – računa se u plaćene časove.' : ' Nije naplaćeno.';
+    if (!confirm(`Otkazati ${keys.length} čas(ova)?${naplata} Ostaju na kalendaru i na profilu deteta kao „otkazano“.`)) return;
     const predavanjeIds = keys.filter((k) => k.startsWith('p:')).map((k) => k.slice(2));
     const zahtevIds = keys.filter((k) => k.startsWith('z:')).map((k) => k.slice(2));
     const testiranjeIds = keys.filter((k) => k.startsWith('t:')).map((k) => k.slice(2));
     setCancelLoading(true);
-    const res = await otkaziCasoveAsAdmin(predavanjeIds, zahtevIds, testiranjeIds);
+    const res = await otkaziCasoveAsAdmin(predavanjeIds, zahtevIds, testiranjeIds, {
+      naplaceno: cancelNaplaceno,
+      razlog: cancelRazlog.trim() || null,
+    });
     setCancelLoading(false);
     if (res.failed.length > 0) {
       toast.error(`Nije otkazano ${res.failed.length}/${keys.length}: ${[...new Set(res.failed.map((f) => f.error))].join(' ')}`);
     } else {
-      toast.success(`Otkazano ${res.otkazano}.`);
+      toast.success(`Otkazano ${res.otkazano}${cancelNaplaceno ? ' (naplaćeno)' : ''}.`);
     }
     setCancelSelection(new Map());
+    setCancelRazlog('');
+    setCancelNaplaceno(false);
     setCancelMode(false);
     osveziAkoNijeStiglo(verzija);
   };
@@ -1983,6 +1999,8 @@ export default function AdminCalendarView({
                 ✓ {activeConfirm.label}
               </button>
             )}
+            {/* Da li ovaj računar uživo prima izmene sa drugih + ručno osvežavanje. */}
+            <KalendarVeza onOsvezi={refreshCalendar} />
             <Link prefetch={false}
               href={`/admin/kalendar/print?week=${startOfWeek}`}
               className="hidden md:inline-flex px-3 py-1.5 rounded-lg text-sm font-medium bg-stone-100 text-stone-600 hover:bg-stone-200"
@@ -2134,6 +2152,24 @@ export default function AdminCalendarView({
                   kliknite dete u terminu, dete na testiranju ili narandžasti čas bez instruktora koje otkazuje – ostaje sivo
                   „otkazano“ na kalendaru i na profilu deteta (testiranje: u Istoriji testiranja). Za brisanje bez traga koristite Delete.
                 </span>
+              </div>
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                <label htmlFor="otkazi-razlog" className="flex min-w-0 flex-1 items-center gap-2 font-medium text-stone-700 sm:max-w-md">
+                  Razlog
+                  <input
+                    id="otkazi-razlog"
+                    type="text"
+                    value={cancelRazlog}
+                    maxLength={300}
+                    onChange={(e) => setCancelRazlog(e.target.value)}
+                    placeholder="npr. bolest, javili kasno (nije obavezno)"
+                    className="min-w-0 flex-1 rounded-md border border-stone-300 px-2 py-1 text-sm font-normal"
+                  />
+                </label>
+                <label htmlFor="otkazi-naplaceno" className="flex items-center gap-1.5 font-medium text-stone-700">
+                  <input id="otkazi-naplaceno" type="checkbox" checked={cancelNaplaceno} onChange={(e) => setCancelNaplaceno(e.target.checked)} />
+                  naplaćeno (računa se u plaćene časove deteta)
+                </label>
               </div>
               {cancelSelection.size > 0 && (
                 <div className="flex flex-wrap gap-1.5">
@@ -2913,18 +2949,30 @@ function AdminCellContent({
                 });
               }
             }}
-            className={`rounded-lg border p-1.5 text-xs text-stone-400${otkPaidState ? '' : ' opacity-70'}${
-              swap.deleteMode || swap.paidMode ? ' cursor-pointer' : ''
-            }${
+            // Naplaćen otkazan čas: svoja (indigo) boja, samo dete – bez instruktora i učionice; računa se u
+            // plaćene časove pa ima i „x/y“. Nenaplaćen: sivo, kao do sada.
+            className={`rounded-lg border p-1.5 text-xs${
+              ot.placeno ? ' border-indigo-300 bg-indigo-50 text-indigo-900' : ` text-stone-400${otkPaidState ? '' : ' opacity-70'}`
+            }${swap.deleteMode || swap.paidMode ? ' cursor-pointer' : ''}${
               otkazaniSelected || otkPaidState === 'ukloni'
                 ? ' border-red-500 ring-2 ring-offset-1 ring-red-500 bg-red-50'
                 : otkPaidState === 'dodaj'
                 ? ' border-emerald-600 ring-2 ring-offset-1 ring-emerald-500 bg-emerald-50'
+                : ot.placeno
+                ? ''
                 : ' border-stone-200 bg-stone-50'
             }`}
+            style={ot.placeno && !otkazaniSelected && !otkPaidState ? { borderLeft: '4px solid #6366f1' } : undefined}
           >
             <div className="flex items-start justify-between gap-1">
-              <span className="line-through block">{otkIme}</span>
+              {ot.placeno ? (
+                <span className="flex min-w-0 flex-wrap items-baseline gap-x-1">
+                  <span className="min-w-0 break-words text-[13px] font-semibold text-indigo-950">{otkIme}</span>
+                  {ot.redni && <RedniBroj redni={ot.redni} />}
+                </span>
+              ) : (
+                <span className="line-through block">{otkIme}</span>
+              )}
               {!swap.deleteMode && !swap.paidMode && (
                 <button
                   type="button"
@@ -2939,13 +2987,21 @@ function AdminCellContent({
                 </button>
               )}
             </div>
-            {ot.instructor_ime && (
+            {!ot.placeno && ot.instructor_ime && (
               <span className="block text-[11px]">{ot.instructor_ime} {ot.instructor_prezime ?? ''}</span>
             )}
-            <span className="text-[10px] uppercase tracking-wide">
-              otkazano{ot.term_type_naziv?.toLowerCase() === 'testiranje' ? ' · testiranje' : ''}
-              {ot.placeno ? ' · 💰 naplaćeno' : ''}
-            </span>
+            {ot.placeno ? (
+              <span className="text-[10px] font-semibold uppercase tracking-wide text-indigo-700">otkazan · naplaćen</span>
+            ) : (
+              <span className="text-[10px] uppercase tracking-wide">
+                otkazano{ot.term_type_naziv?.toLowerCase() === 'testiranje' ? ' · testiranje' : ''} · nije naplaćeno
+              </span>
+            )}
+            {ot.razlog && (
+              <span className={`block truncate text-[11px] italic${ot.placeno ? ' text-indigo-800' : ''}`} title={`Razlog: ${ot.razlog}`}>
+                {ot.razlog}
+              </span>
+            )}
             {otkPaidState === 'dodaj' ? (
               <span className="block text-[11px] font-bold text-emerald-700">✓ naplaćeno</span>
             ) : otkPaidState === 'ukloni' ? (

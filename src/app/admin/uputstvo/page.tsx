@@ -158,6 +158,12 @@ export default async function AdminUputstvoPage({ searchParams }: { searchParams
             </li>
             <li><Ui>🖨 Print / PDF</Ui> = raspored spreman za štampu ili čuvanje kao PDF.</li>
             <li>Kalendar se sam osvežava kad bilo ko nešto promeni (drugi admin, predavač, nova uplata) – ne treba F5.</li>
+            <li>
+              Desno u traci: <strong>● Uživo</strong> (zeleno) = ovaj računar odmah dobija izmene sa drugih računara.{' '}
+              <strong>● Bez žive veze</strong> (narandžasto) = mreža ili veza ne propušta izmene uživo; tada se kalendar sam osvežava na
+              30 s, a <Ui>⟳</Ui> ga osvežava odmah. Pored piše kad su podaci poslednji put osveženi. Ako dva računara pokazuju različito,
+              pogledajte ovu oznaku na oba i kliknite <Ui>⟳</Ui>. Kalendar se osveži i čim se vratite u prozor posle rada u drugom programu.
+            </li>
           </Lista>
         </Sekcija>
 
@@ -183,7 +189,12 @@ export default async function AdminUputstvoPage({ searchParams }: { searchParams
               zauzeto i pre nego što čas dobije instruktora: to dete tada ne može dobiti drugi čas, njegova učionica se ne može dati drugom,
               a instruktor koji ga preuzme mora biti slobodan i u tom sledećem vremenu.
             </li>
-            <li><M n="H" /> Siva = otkazan čas (istorija). Prugasto „⛔ Blokirano“ = u tom vremenu niko ne može da zakaže.</li>
+            <li>
+              <M n="H" /> Siva, precrtana = otkazan čas koji <strong>nije naplaćen</strong> (istorija). Indigo (plavo-ljubičasta) sa trakom
+              levo = otkazan čas koji <strong>je naplaćen</strong>: samo dete, bez instruktora i učionice, „otkazan · naplaćen“ i redni broj
+              „x/6“ – računa se u plaćene časove. Ispod može da stoji razlog otkazivanja. Prugasto „⛔ Blokirano“ = u tom vremenu niko ne
+              može da zakaže.
+            </li>
             <li>
               U jednom vremenu (npr. 9:00) može biti više paralelnih termina – svaki ima svog instruktora i svoju učionicu. Koliko najviše,
               podešava se u <Ui>Podešavanja</Ui>.
@@ -265,6 +276,10 @@ export default async function AdminUputstvoPage({ searchParams }: { searchParams
             <li>
               Kliknite <strong>dete</strong> u terminu koje otkazuje (može i dete na testiranju, ili narandžasti čas bez instruktora) – ime
               postane precrtano.
+            </li>
+            <li>
+              Po želji upišite <Ui>Razlog</Ui> (npr. bolest) i čekirajte <Ui>naplaćeno</Ui> ako se otkazani čas ipak naplaćuje – važi za sve
+              izabrane. Naplaćen otkazan čas troši čas iz plaćenog paketa deteta i na kalendaru je indigo boje.
             </li>
             <li>Kliknite <Ui>✓ Potvrdi otkazivanje (N)</Ui>.</li>
             <li>
@@ -447,7 +462,11 @@ export default async function AdminUputstvoPage({ searchParams }: { searchParams
               <Ui>Pregled termina</Ui>: levo zakazani (isprekidano = još bez instruktora), desno održani – sa vrstom časa, instruktorom i
               cenom časa, i (ako je označeno plaćanje) koji je to čas od plaćenih. Klik na termin ga otvara.
             </li>
-            <li><Ui>Otkazani termini</Ui>: istorija otkazanih časova; može se označiti naplaćeno ili obrisati iz istorije.</li>
+            <li>
+              <Ui>Otkazani termini</Ui>: svaki otkazan čas sa oznakom „Otkazan · naplaćen“ (računa se u plaćene, uz redni broj x/6) ili
+              „Otkazan · nije naplaćen“, i razlogom. <Ui>Označi kao naplaćen</Ui> / <Ui>Označi kao nenaplaćen</Ui> menja to,{' '}
+              <Ui>Upiši razlog</Ui> / <Ui>Izmeni</Ui> upisuje razlog, <Ui>Obriši</Ui> briše iz istorije. Potrebna je migracija 059.
+            </li>
             <li><Ui>Izmena podataka klijenta</Ui>: ime, kontakt, škola, popust %, programi… → sačuvajte dugmetom na dnu forme.</li>
           </Koraci>
         </Sekcija>

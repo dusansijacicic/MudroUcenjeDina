@@ -114,7 +114,8 @@ export default async function AdminKalendarPage({
       m.meri('klijenti', adminSupabase.from('clients').select('id, ime, prezime, godiste, datum_testiranja').order('ime').order('prezime')),
       m.meri(
         'otkazani',
-        adminSupabase.from('otkazani_termini').select('id, client_id, client_ime, client_prezime, instructor_id, instructor_ime, instructor_prezime, term_date, slot_index, term_type_naziv, placeno').gte('term_date', dateFrom).lte('term_date', dateTo)
+        // select('*'): radi i pre i posle migracije 059 (razlog otkazivanja).
+        adminSupabase.from('otkazani_termini').select('*').gte('term_date', dateFrom).lte('term_date', dateTo)
       ),
       m.meri(
         'zahtevi',
@@ -308,9 +309,10 @@ export default async function AdminKalendarPage({
   const otkazaniVrstaOk = (naziv: string | null | undefined) =>
     !filterVrsta ||
     (filterVrsta === VRSTA_TESTIRANJE ? naziv?.toLowerCase() === 'testiranje' : filterVrsta === VRSTA_BEZ ? !naziv : naziv === nazivFilterVrste);
-  const otkazaniTermini = ((otkazaniRaw ?? []) as (OtkazaniTerminCalendar & { client_id?: string | null })[]).filter(
-    (ot) => (!filterClientId || ot.client_id === filterClientId) && otkazaniVrstaOk(ot.term_type_naziv)
-  );
+  const otkazaniTermini = ((otkazaniRaw ?? []) as (OtkazaniTerminCalendar & { client_id?: string | null })[])
+    .filter((ot) => (!filterClientId || ot.client_id === filterClientId) && otkazaniVrstaOk(ot.term_type_naziv))
+    // Naplaćen otkazan čas ima svoj „x/y“ (računa se u plaćene časove, migracija 059).
+    .map((ot) => ({ ...ot, redni: redniPoPredavanju[ot.id] ?? null }));
 
   const base = '/admin/kalendar';
   // Aktivni filteri idu uz svaki link kalendara (Prethodna/Sledeća, dan, mesec…), da ne nestanu pri promeni perioda.
