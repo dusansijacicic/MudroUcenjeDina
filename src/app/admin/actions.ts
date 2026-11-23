@@ -566,7 +566,9 @@ export async function createBulkTermsAsAdmin(
  */
 export async function assignInstructorToTermsAsAdmin(
   instructorId: string,
-  termIds: string[]
+  termIds: string[],
+  /** Izuzetak „dupliranje predavača“ (062): sme i kad instruktor u tom bloku već ima čas. */
+  dozvoliPreklapanje = false
 ): Promise<{ failed: { termId: string; error: string }[] }> {
   const { admin, error: authErr, actor } = await requireAdmin();
   if (authErr || !admin) return { failed: termIds.map((termId) => ({ termId, error: authErr ?? 'Niste ovlašćeni.' })) };
@@ -575,29 +577,41 @@ export async function assignInstructorToTermsAsAdmin(
     termIds.map(async (termId) => {
       const { data: term } = await admin.from('terms').select('date, slot_index, instructor_id').eq('id', termId).maybeSingle();
       if (!term) return { termId, error: 'Termin nije pronađen.' };
-      if (term.instructor_id === instructorId) return { termId, error: null as string | null };
-      const { data: conflict } = await admin
-        .from('terms')
-        .select('id')
-        .eq('instructor_id', instructorId)
-        .eq('date', term.date)
-        .eq('slot_index', term.slot_index)
-        .neq('id', termId)
-        .maybeSingle();
-      if (conflict) return { termId, error: 'Instruktor je već zauzet u tom terminu.' };
-      const nastavakGreska = await instruktorSlobodanZaNastavak(
-        admin,
-        instructorId,
-        String(term.date).slice(0, 10),
-        term.slot_index,
-        await slotovaTermina(admin, termId),
-        [termId]
-      );
-      if (nastavakGreska) return { termId, error: nastavakGreska };
-      const { error } = await admin.from('terms').update({ instructor_id: instructorId }).eq('id', termId);
-      if (error) return { termId, error: error.message };
-      // Automatski "blokirajući" slotovi dužeg časa prate instruktora roditeljskog termina.
-      await admin.from('terms').update({ instructor_id: instructorId }).eq('nastavak_of_term_id', termId).eq('napomena', AUTO_SPILLOVER_NAPOMENA);
+      if (term.instructor_id === instructorId && !dozvoliPreklapanje) return { termId, error: null as string | null };
+      if (!dozvoliPreklapanje) {
+        const { data: conflict } = await admin
+          .from('terms')
+          .select('id')
+          .eq('instructor_id', instructorId)
+          .eq('date', term.date)
+          .eq('slot_index', term.slot_index)
+          .neq('id', termId)
+          .limit(1);
+        if ((conflict ?? []).length > 0) {
+          return { termId, error: 'Instruktor je već zauzet u tom terminu (za dva časa u istom bloku čekirajte „Izuzetak: dupliranje predavača“).' };
+        }
+        const nastavakGreska = await instruktorSlobodanZaNastavak(
+          admin,
+          instructorId,
+          String(term.date).slice(0, 10),
+          term.slot_index,
+          await slotovaTermina(admin, termId),
+          [termId]
+        );
+        if (nastavakGreska) return { termId, error: nastavakGreska };
+      }
+      const izmena = { instructor_id: instructorId, ...(dozvoliPreklapanje ? { dozvoli_preklapanje: true } : {}) };
+      const { error } = await admin.from('terms').update(izmena).eq('id', termId);
+      if (error) {
+        if (error.code === '23P01') return { termId, error: 'Instruktor je već zauzet u tom terminu.' };
+        if (dozvoliPreklapanje && /dozvoli_preklapanje/i.test(error.message)) {
+          return { termId, error: 'Prvo pokrenite migraciju 062_izuzetak_dupliranje_predavaca.sql u Supabase SQL Editoru.' };
+        }
+        return { termId, error: error.message };
+      }
+      // Automatski "blokirajući" slotovi dužeg časa prate instruktora (i izuzetak) roditeljskog termina.
+      await admin.from('terms').update(izmena).eq('nastavak_of_term_id', termId).eq('napomena', AUTO_SPILLOVER_NAPOMENA);
+      if (dozvoliPreklapanje) await syncSpilloverForTerm(admin, termId);
       return { termId, error: null as string | null };
     })
   );
@@ -663,7 +677,12 @@ export async function assignClassroomToTermsAsAdmin(
  * potvrđuje svoj sopstveni zahtev. Pretvara zahtev u pravi termin+radionicu (bez učionice – to se
  * dodeljuje posebno, "Dodeli učionicu").
  */
-export async function assignInstructorToZahtevAsAdmin(zahtevId: string, instructorId: string): Promise<{ error?: string }> {
+export async function assignInstructorToZahtevAsAdmin(
+  zahtevId: string,
+  instructorId: string,
+  /** Izuzetak „dupliranje predavača“ (062): nov, zaseban termin i kad instruktor u tom bloku već ima čas. */
+  dozvoliPreklapanje = false
+): Promise<{ error?: string }> {
   const { admin, error: authErr, actor } = await requireAdmin();
   if (authErr || !admin) return { error: authErr ?? 'Niste ovlašćeni.' };
 
@@ -687,27 +706,44 @@ export async function assignInstructorToZahtevAsAdmin(zahtevId: string, instruct
     (t) => !t.dozvoli_preklapanje
   ) ?? null;
   // Automatski nastavak tuđeg dužeg časa nije mesto za drugo dete (posle bi se obrisao sa njim).
-  if (existing?.napomena === AUTO_SPILLOVER_NAPOMENA) return { error: NASTAVAK_ZAUZET_PORUKA };
+  if (!dozvoliPreklapanje && existing?.napomena === AUTO_SPILLOVER_NAPOMENA) {
+    return { error: `${NASTAVAK_ZAUZET_PORUKA} (Ili čekirajte „Izuzetak: dupliranje predavača“.)` };
+  }
   // Duži čas bez instruktora zauzima i sledeće vreme – instruktor tada mora biti slobodan, inače bi
-  // nastavak nestao a čas se preklopio sa drugim.
-  const nastavakGreska = await instruktorSlobodanZaNastavak(
-    admin,
-    instructorId,
-    dateStr,
-    slot,
-    slotsNeeded(await trajanjeVrste(admin, zahtev.term_type_id)),
-    existing ? [existing.id] : []
-  );
+  // nastavak nestao a čas se preklopio sa drugim. Izuzetak sme da se preklopi.
+  const nastavakGreska = dozvoliPreklapanje
+    ? null
+    : await instruktorSlobodanZaNastavak(
+        admin,
+        instructorId,
+        dateStr,
+        slot,
+        slotsNeeded(await trajanjeVrste(admin, zahtev.term_type_id)),
+        existing ? [existing.id] : []
+      );
   if (nastavakGreska) return { error: nastavakGreska };
-  if (existing) {
+  if (existing && !dozvoliPreklapanje) {
     termId = existing.id;
   } else {
+    // Izuzetak: uvek zaseban termin (pored časa ili nastavka koji instruktor već ima u tom bloku).
     const { data: inserted, error: insErr } = await admin
       .from('terms')
-      .insert({ instructor_id: instructorId, date: dateStr, slot_index: slot, term_category_id: SEEDED_TERM_CATEGORY_INDIVIDUAL_ID })
+      .insert({
+        instructor_id: instructorId,
+        date: dateStr,
+        slot_index: slot,
+        term_category_id: SEEDED_TERM_CATEGORY_INDIVIDUAL_ID,
+        ...(dozvoliPreklapanje ? { dozvoli_preklapanje: true } : {}),
+      })
       .select('id')
       .single();
-    if (insErr || !inserted) return { error: insErr?.message ?? 'Termin nije kreiran.' };
+    if (insErr || !inserted) {
+      if (insErr?.code === '23P01') return { error: 'Instruktor je već zauzet u tom terminu.' };
+      if (dozvoliPreklapanje && insErr && /dozvoli_preklapanje/i.test(insErr.message)) {
+        return { error: 'Prvo pokrenite migraciju 062_izuzetak_dupliranje_predavaca.sql u Supabase SQL Editoru.' };
+      }
+      return { error: insErr?.message ?? 'Termin nije kreiran.' };
+    }
     termId = inserted.id;
   }
 
@@ -716,15 +752,16 @@ export async function assignInstructorToZahtevAsAdmin(zahtevId: string, instruct
   if (zahtev.classroom_id) {
     const { data: termNow } = await admin.from('terms').select('classroom_id').eq('id', termId).single();
     if (termNow && !termNow.classroom_id) {
-      const { data: roomConflict } = await admin
+      const { data: uSobi } = await admin
         .from('terms')
-        .select('id')
+        .select('id, instructor_id')
         .eq('classroom_id', zahtev.classroom_id)
         .eq('date', dateStr)
         .eq('slot_index', slot)
-        .neq('id', termId)
-        .maybeSingle();
-      if (!roomConflict) {
+        .neq('id', termId);
+      // Izuzetak sme da deli učionicu samo sa časom istog instruktora.
+      const zauzeta = (uSobi ?? []).some((t) => !dozvoliPreklapanje || t.instructor_id !== instructorId);
+      if (!zauzeta) {
         await admin.from('terms').update({ classroom_id: zahtev.classroom_id }).eq('id', termId);
       }
     }
@@ -766,7 +803,8 @@ export async function assignInstructorToZahtevAsAdmin(zahtevId: string, instruct
 /** Batch verzija gornje – jedan poziv serveru za sve selektovane zahteve. */
 export async function assignInstructorToZahteviAsAdmin(
   instructorId: string,
-  zahtevIds: string[]
+  zahtevIds: string[],
+  dozvoliPreklapanje = false
 ): Promise<{ failed: { zahtevId: string; error: string }[] }> {
   const { admin, error: authErr } = await requireAdmin();
   if (authErr || !admin) return { failed: zahtevIds.map((zahtevId) => ({ zahtevId, error: authErr ?? 'Niste ovlašćeni.' })) };
@@ -783,7 +821,7 @@ export async function assignInstructorToZahteviAsAdmin(
   const ids = [...poVremenu, ...zahtevIds.filter((id) => !poVremenu.includes(id))];
   const failed: { zahtevId: string; error: string }[] = [];
   for (const zahtevId of ids) {
-    const res = await assignInstructorToZahtevAsAdmin(zahtevId, instructorId);
+    const res = await assignInstructorToZahtevAsAdmin(zahtevId, instructorId, dozvoliPreklapanje);
     if (res.error) failed.push({ zahtevId, error: res.error });
   }
   return { failed };

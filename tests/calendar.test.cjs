@@ -674,3 +674,28 @@ test('instructor double-booking is refused unless the exception is checked', asy
   const r3 = await actionsFor('admin', tudja).createTermAsAdmin('teacher-a', '2026-12-01', 7, 'room-1', 'individual', null, null, null, true);
   assert.match(r3.error, /učionica je već zauzeta/i);
 });
+
+test('assigning an instructor over their own 55-min continuation needs the exception', async () => {
+  const napravi = () => database((q) => {
+    if (q.table === 'zahtevi_za_cas' && q.operation === 'select') {
+      return { data: { id: 'z1', status: 'pending', client_id: 'child', requested_date: '2026-12-01', requested_slot_index: 7, term_type_id: null, classroom_id: null }, error: null };
+    }
+    if (q.table === 'terms' && q.operation === 'select' && q.fields === '*') {
+      return { data: [{ id: 'nastavak', classroom_id: null, napomena: 'Automatski zauzeto (nastavak dužeg časa)', dozvoli_preklapanje: false }], error: null };
+    }
+    if (q.table === 'terms' && q.operation === 'insert') return { data: { id: 'novi-termin' }, error: null };
+    if (q.table === 'predavanja' && q.operation === 'insert') return { data: { id: 'novi-cas' }, error: null };
+    return { data: [], error: null };
+  });
+  const bez = napravi();
+  const r1 = await actionsFor('admin', bez).assignInstructorToZahtevAsAdmin('z1', 'teacher-a');
+  assert.match(r1.error, /nastavak svog dužeg časa/);
+  assert.equal(bez.queries.some((q) => q.operation === 'insert'), false);
+
+  const sa = napravi();
+  const r2 = await actionsFor('admin', sa).assignInstructorToZahtevAsAdmin('z1', 'teacher-a', true);
+  assert.deepEqual(r2, {});
+  const termin = sa.queries.find((q) => q.table === 'terms' && q.operation === 'insert').values;
+  assert.equal(termin.dozvoli_preklapanje, true);
+  assert.equal(sa.queries.find((q) => q.table === 'predavanja' && q.operation === 'insert').values.term_id, 'novi-termin');
+});

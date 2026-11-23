@@ -152,7 +152,8 @@ export default async function AdminUputstvoPage({ searchParams }: { searchParams
             <li>Premeštanje: uhvatite termin mišem, prevucite ga u drugu ćeliju, pustite i potvrdite.</li>
             <li><Ui>+</Ui> u praznoj ćeliji = novi termin za taj dan i vreme; <Ui>+ Testiranje</Ui> = termin testiranja.</li>
             <li>
-              <strong>Izuzetak: dupliranje predavača</strong> – u formi novog termina (i na stranici termina) čekirajte ga kada isti predavač
+              <strong>Izuzetak: dupliranje predavača</strong> – u formi novog termina, na stranici termina i u modu <Ui>Dodeli</Ui> (pored
+              izbora instruktora) čekirajte ga kada isti predavač
               u istom bloku treba da ima još jedan čas, npr. čas od 55 min u 14:00 (nastavak u 14:45) i nov čas u 14:45. Bez izuzetka
               aplikacija ne dozvoljava dva časa istog predavača u bloku. Učionicu izuzetak sme da deli samo sa časom istog predavača.
               Takav termin na kalendaru ima ljubičastu oznaku <strong>⇄</strong>. Potrebna je migracija 062.

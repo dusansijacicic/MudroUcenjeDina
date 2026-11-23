@@ -878,6 +878,8 @@ export default function AdminCalendarView({
   // Napomena za izabrane termine/časove (u rasporedu samo 💬 + oblačić); zameni = umesto dopisivanja.
   const [assignNapomena, setAssignNapomena] = useState('');
   const [assignNapomenaZameni, setAssignNapomenaZameni] = useState(false);
+  // Izuzetak „dupliranje predavača“ pri dodeli instruktora (062).
+  const [assignIzuzetak, setAssignIzuzetak] = useState(false);
   const [assignLoading, setAssignLoading] = useState(false);
 
   // Blokiranje termina: izabrani slotovi (date|slot) + zajednička napomena ZAŠTO.
@@ -1483,6 +1485,7 @@ export default function AdminCalendarView({
     setAssignTermTypeChoice('');
     setAssignNapomena('');
     setAssignNapomenaZameni(false);
+    setAssignIzuzetak(false);
   };
 
   const onToggleAssignSelect = (termId: string) => {
@@ -1517,6 +1520,7 @@ export default function AdminCalendarView({
     const napomena = assignNapomena.trim();
     const hasNapomena = napomena !== '' || assignNapomenaZameni;
     const napomenaZameni = assignNapomenaZameni;
+    const izuzetak = hasInstructor && assignIzuzetak;
     if (total === 0 || (!hasInstructor && !bezInstruktora && !hasClassroom && !hasTermType && !hasNapomena)) return;
     if (hasNapomena && napomenaZameni && napomena === '' && !confirm(`Obrisati napomenu sa ${total} izabranih časova?`)) return;
     if (
@@ -1538,6 +1542,7 @@ export default function AdminCalendarView({
     setAssignTermTypeChoice('');
     setAssignNapomena('');
     setAssignNapomenaZameni(false);
+    setAssignIzuzetak(false);
     setAssignLoading(true);
 
     // Napomena prva: čas bez instruktora koji ovde dobija instruktora tako je nosi na termin.
@@ -1555,7 +1560,7 @@ export default function AdminCalendarView({
     // izmene istog termina mogu da obrišu nastavak (ili dete upisano u njega).
     const termCalls: (() => Promise<{ failed: { termId: string; error: string }[] }>)[] = [];
     if (termIds.length > 0) {
-      if (hasInstructor) termCalls.push(() => assignInstructorToTermsAsAdmin(instructorId, termIds));
+      if (hasInstructor) termCalls.push(() => assignInstructorToTermsAsAdmin(instructorId, termIds, izuzetak));
       if (hasClassroom) termCalls.push(() => assignClassroomToTermsAsAdmin(classroomId, termIds));
       if (hasTermType) termCalls.push(() => assignTermTypeToTermsAsAdmin(termTypeId, termIds));
     }
@@ -1571,7 +1576,7 @@ export default function AdminCalendarView({
         zahtevFailed = zahtevFailed.concat(res.failed);
       }
       if (hasInstructor) {
-        const res = await assignInstructorToZahteviAsAdmin(instructorId, zahtevIds);
+        const res = await assignInstructorToZahteviAsAdmin(instructorId, zahtevIds, izuzetak);
         zahtevFailed = zahtevFailed.concat(res.failed);
       }
     }
@@ -1588,7 +1593,8 @@ export default function AdminCalendarView({
     setAssignLoading(false);
     const failedCount = termResults.reduce((sum, r) => sum + r.failed.length, 0) + zahtevFailed.length + bezInstruktoraFailed;
     if (failedCount > 0) {
-      toast.error(`Nije dodeljeno ${failedCount}/${total}.`);
+      const razlozi = [...new Set([...termResults.flatMap((r) => r.failed.map((f) => f.error)), ...zahtevFailed.map((f) => f.error)])];
+      toast.error(`Nije dodeljeno ${failedCount}/${total}: ${razlozi.join(' ')}`, { duration: 12000 });
     } else if (samoNapomena) {
       if (!napomenaGreska) toast.success(napomena ? `Napomena ${napomenaZameni ? 'postavljena' : 'dodata'} za ${total} čas(ova).` : `Napomena obrisana sa ${total} čas(ova).`);
     } else {
@@ -2306,6 +2312,14 @@ export default function AdminCalendarView({
                   />
                   zameni postojeću napomenu (prazno = obriši)
                 </label>
+                {assignInstructorChoice && assignInstructorChoice !== BEZ_INSTRUKTORA && (
+                  <label htmlFor="dodeli-izuzetak" className="flex items-center gap-1.5 text-stone-700" title="Izabrani instruktor sme da ima još jedan čas u istom bloku (npr. nastavak časa od 55 min i nov čas u isto vreme). Termin dobija oznaku ⇄.">
+                    <input id="dodeli-izuzetak" type="checkbox" checked={assignIzuzetak} onChange={(e) => setAssignIzuzetak(e.target.checked)} />
+                    <span>
+                      <span className="font-medium">Izuzetak:</span> dupliranje predavača
+                    </span>
+                  </label>
+                )}
                 <button
                   type="button"
                   onClick={() => runMutation(confirmAssign)}
