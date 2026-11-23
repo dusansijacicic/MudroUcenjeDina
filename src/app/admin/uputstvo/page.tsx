@@ -553,7 +553,13 @@ export default async function AdminUputstvoPage({ searchParams }: { searchParams
           <SemaInstruktori />
           <Koraci>
             <li><Ui>+ Novi instruktor</Ui> → email i lozinka za prijavu, ime, prezime → <Ui>Kreiraj instruktora</Ui>.</li>
-            <li><Ui>Uredi</Ui> → ime, telefon i boja u kalendaru → <Ui>Sačuvaj</Ui>.</li>
+            <li>
+              <Ui>Profil i statistika</Ui>: za izabrani period (<Ui>Ovaj mesec</Ui>, <Ui>Prošli mesec</Ui>, <Ui>Poslednjih 30 dana</Ui>,{' '}
+              <Ui>Ova godina</Ui>, <Ui>Sve</Ui> ili sopstveni datumi <Ui>Od</Ui>–<Ui>Do</Ui> → <Ui>Prikaži</Ui>): održani i zakazani časovi,
+              otkazani (naplaćeni / nisu), testiranja, broj različite dece, vrednost održanih časova (cena vrste sa popustom deteta) i
+              primljene uplate; tabele po vrstama časova i po mesecima; spisak uplata i istorija časova (klik otvara termin). Dole je izmena
+              imena, telefona i boje → <Ui>Sačuvaj</Ui>.
+            </li>
             <li>
               <Ui>Suspenduj</Ui>: instruktor se više ne nudi u listama za izbor, a već zakazani termini ostaju. <Ui>Aktiviraj</Ui> ga vraća.
             </li>

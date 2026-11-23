@@ -699,3 +699,49 @@ test('assigning an instructor over their own 55-min continuation needs the excep
   assert.equal(termin.dozvoli_preklapanje, true);
   assert.equal(sa.queries.find((q) => q.table === 'predavanja' && q.operation === 'insert').values.term_id, 'novi-termin');
 });
+
+test('instructor statistics: held, scheduled, cancelled, by type, value and payments', () => {
+  const { statistikaInstruktora, periodi } = loadSource('src/lib/statistika-instruktora.ts');
+  const mata = { naziv: 'Matematika', cena_po_casu: 1000 };
+  const reed = { naziv: 'Reedukacija', cena_po_casu: 2000 };
+  const st = statistikaInstruktora({
+    termini: [
+      { id: 't1', date: '2026-11-02', slot_index: 2, predavanja: [{ id: 'p1', client_id: 'a', client: { ime: 'Ana', prezime: 'A', popust_percent: 10 }, term_type: mata }] },
+      { id: 't2', date: '2026-11-03', slot_index: 2, predavanja: [
+        { id: 'p2', client_id: 'a', client: { ime: 'Ana', prezime: 'A', popust_percent: 10 }, term_type: reed },
+        { id: 'p3', client_id: 'b', client: { ime: 'Bora', prezime: 'B', popust_percent: 0 }, term_type: reed },
+      ] },
+      { id: 't3', date: '2026-12-20', slot_index: 2, predavanja: [{ id: 'p4', client_id: 'b', client: { ime: 'Bora' }, term_type: mata }] },
+      { id: 'nastavak', date: '2026-11-03', slot_index: 3, predavanja: [] },
+      { id: 'test', date: '2026-11-04', slot_index: 1, term_category: { is_testing: true }, potential_clients: [{ id: 'x' }, { id: 'y' }] },
+    ],
+    otkazani: [
+      { id: 'o1', term_date: '2026-11-05', slot_index: 1, client_ime: 'Ana', term_type_naziv: 'Matematika', placeno: true },
+      { id: 'o2', term_date: '2026-11-06', slot_index: 1, client_ime: 'Bora', term_type_naziv: 'Matematika', placeno: false },
+    ],
+    uplate: [{ id: 'u1', created_at: '2026-11-10T10:00:00Z', iznos: 5400, broj_casova: 6 }],
+    cenePoNazivu: new Map([['Matematika', 1000]]),
+    jeProslo: (datum) => datum < '2026-12-01',
+    mesecUplate: (c) => c.slice(0, 7),
+  });
+  assert.equal(st.odrzanoCasova, 2);
+  assert.equal(st.odrzanoDeceCasova, 3);
+  assert.equal(st.zakazanoCasova, 1);
+  assert.equal(st.razliciteDece, 2);
+  assert.equal(st.testiranja, 1);
+  assert.equal(st.testiranoDece, 2);
+  assert.equal(st.otkazanoNaplaceno, 1);
+  assert.equal(st.otkazanoNenaplaceno, 1);
+  assert.equal(st.vrednostOdrzanih, 900 + 1800 + 2000);
+  assert.equal(st.vrednostNaplacenihOtkazanih, 1000);
+  assert.equal(st.uplateIznos, 5400);
+  assert.deepEqual(st.poVrstama.map((v) => [v.naziv, v.odrzano, v.zakazano, v.vrednost]), [['Reedukacija', 2, 0, 3800], ['Matematika', 1, 1, 900]]);
+  assert.deepEqual(st.poMesecima.map((m) => [m.mesec, m.odrzano, m.vrednost, m.uplate]), [['2026-11', 2, 5700, 5400]]);
+  assert.equal(st.istorija[0].kljuc, 'p-t3');
+  assert.equal(st.istorija.length, 6);
+
+  const p = Object.fromEntries(periodi('2026-01-15').map((x) => [x.kljuc, [x.od, x.do]]));
+  assert.deepEqual(p['ovaj-mesec'], ['2026-01-01', '2026-01-31']);
+  assert.deepEqual(p['prosli-mesec'], ['2025-12-01', '2025-12-31']);
+  assert.deepEqual(p['30-dana'], ['2025-12-17', '2026-01-15']);
+});

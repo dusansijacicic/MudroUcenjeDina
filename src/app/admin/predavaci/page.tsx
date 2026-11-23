@@ -74,7 +74,7 @@ export default async function AdminPredavaciPage() {
                     href={`/admin/predavaci/${inst.id}`}
                     className="text-sm text-stone-500 hover:text-amber-700 shrink-0 ui-transition"
                   >
-                    Uredi
+                    Profil i statistika
                   </Link>
                   <Link
                     href={`/admin/view/${inst.id}`}
