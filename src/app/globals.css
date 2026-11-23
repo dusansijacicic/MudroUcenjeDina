@@ -251,3 +251,18 @@ input:focus, select:focus, textarea:focus {
 .kalendar-mreza .kalendar-nova-nedelja {
   border-left: 3px solid var(--mreza-nedelja);
 }
+
+/* ── Veličina slova (Podešavanja → Veličina slova, po uređaju) ────────────────────────────────────
+   --skala postavlja koreni layout na <html>. Sve rem veličine (text-sm, text-xs, razmaci) rastu same;
+   fiksne veličine u pikselima (kalendar) se ovde množe istom skalom. */
+html {
+  font-size: calc(100% * var(--skala, 1));
+}
+:root[data-velicina] .text-\[8px\] { font-size: calc(8px * var(--skala, 1)); }
+:root[data-velicina] .text-\[9px\] { font-size: calc(9px * var(--skala, 1)); }
+:root[data-velicina] .text-\[10px\] { font-size: calc(10px * var(--skala, 1)); }
+:root[data-velicina] .text-\[11px\] { font-size: calc(11px * var(--skala, 1)); }
+:root[data-velicina] .text-\[12px\] { font-size: calc(12px * var(--skala, 1)); }
+:root[data-velicina] .text-\[13px\] { font-size: calc(13px * var(--skala, 1)); }
+:root[data-velicina] .text-\[14px\] { font-size: calc(14px * var(--skala, 1)); }
+:root[data-velicina] .text-\[15px\] { font-size: calc(15px * var(--skala, 1)); }

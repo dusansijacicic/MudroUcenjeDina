@@ -3,6 +3,9 @@ import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { getAppSettings } from '@/app/admin/actions';
 import PodesavanjaForm from './PodesavanjaForm';
+import VelicinaSlovaIzbor from '@/components/VelicinaSlovaIzbor';
+import { VELICINA_SLOVA_COOKIE, velicinaSlova } from '@/lib/velicina-slova';
+import { cookies } from 'next/headers';
 import SacuvajBekapDugme from './SacuvajBekapDugme';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { BEKAP_CUVA_DANA, listaBekapa } from '@/lib/bekap';
@@ -38,6 +41,12 @@ export default async function AdminPodesavanjaPage() {
         maxCasovaPoTerminu={maxCasovaPoTerminu}
         maxTerminaPoSlotu={maxTerminaPoSlotu}
       />
+
+      <section className="mt-10 rounded-xl border border-stone-200 bg-white p-4">
+        <h2 className="text-base font-semibold text-stone-800">Veličina slova</h2>
+        <p className="text-sm text-stone-500 mt-1 mb-3">Za ovaj uređaj – npr. veća slova na tabletu, normalna na računaru.</p>
+        <VelicinaSlovaIzbor pocetna={velicinaSlova((await cookies()).get(VELICINA_SLOVA_COOKIE)?.value).kljuc} />
+      </section>
 
       <section className="mt-10 rounded-xl border border-stone-200 bg-white p-4">
         <h2 className="text-base font-semibold text-stone-800">Bekap baze</h2>

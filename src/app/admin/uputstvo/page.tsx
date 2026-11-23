@@ -652,6 +652,11 @@ export default async function AdminUputstvoPage({ searchParams }: { searchParams
             </li>
             <li>Kliknite <Ui>Sačuvaj podešavanja</Ui>.</li>
             <li>
+              <Ui>Veličina slova</Ui>: <Ui>Manja</Ui>, <Ui>Normalna</Ui>, <Ui>Veća</Ui> ili <Ui>Najveća</Ui> – menja se odmah, na svim stranicama
+              (i kalendar). Važi za uređaj na kom je izabrana (npr. veća slova na tabletu, normalna na računaru). Instruktori isto biraju u
+              svojim Podešavanjima.
+            </li>
+            <li>
               <Ui>⬇ Preuzmi bekap baze (JSON)</Ui> – odmah preuzima kompletnu kopiju podataka na vaš računar. Fajl čuvajte na sigurnom
               mestu jer sadrži lične podatke dece i roditelja.
             </li>

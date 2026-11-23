@@ -3,6 +3,9 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getDashboardInstructor } from '@/lib/dashboard';
 import PodesavanjaForm from './PodesavanjaForm';
+import VelicinaSlovaIzbor from '@/components/VelicinaSlovaIzbor';
+import { VELICINA_SLOVA_COOKIE, velicinaSlova } from '@/lib/velicina-slova';
+import { cookies } from 'next/headers';
 import type { Instructor } from '@/types/database';
 
 const DAY_NAMES: Record<number, string> = {
@@ -52,6 +55,12 @@ export default async function PodesavanjaPage() {
         dayNames={DAY_NAMES}
         initialAvailability={initialAvailability}
       />
+
+      <section className="mt-8 rounded-xl border border-stone-200 bg-white p-4">
+        <h2 className="text-base font-semibold text-stone-800">Veličina slova</h2>
+        <p className="text-sm text-stone-500 mt-1 mb-3">Za ovaj uređaj – npr. veća slova na tabletu, normalna na računaru.</p>
+        <VelicinaSlovaIzbor pocetna={velicinaSlova((await cookies()).get(VELICINA_SLOVA_COOKIE)?.value).kljuc} />
+      </section>
     </div>
   );
 }

@@ -2,6 +2,8 @@ import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Toaster } from "react-hot-toast";
 import MerenjeBrzine from "@/components/MerenjeBrzine";
+import { cookies } from "next/headers";
+import { VELICINA_SLOVA_COOKIE, velicinaSlova } from "@/lib/velicina-slova";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -59,13 +61,20 @@ export const viewport: Viewport = {
   initialScale: 1,
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // Veličina slova izabrana u Podešavanjima (kolačić, po uređaju) – vidi globals.css (--skala).
+  const velicina = velicinaSlova((await cookies()).get(VELICINA_SLOVA_COOKIE)?.value);
   return (
-    <html lang="sr" suppressHydrationWarning>
+    <html
+      lang="sr"
+      suppressHydrationWarning
+      data-velicina={velicina.kljuc}
+      style={{ ["--skala" as string]: String(velicina.skala) }}
+    >
       <body
         className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased`}
       >
