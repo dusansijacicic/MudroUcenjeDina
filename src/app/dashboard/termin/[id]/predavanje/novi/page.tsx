@@ -6,6 +6,7 @@ import { getTermTypes, getClassrooms, getStanjePoVrstamaZaKlijenteBatch, getTerm
 import PredavanjeForm from '../../../PredavanjeForm';
 import { TIME_SLOTS } from '@/lib/constants';
 import { jedanKlijentIzJoina, SEEDED_TERM_CATEGORY_INDIVIDUAL_ID } from '@/lib/term-categories';
+import { sviRedovi } from '@/lib/svi-redovi';
 
 export default async function NoviPredavanjePage({
   params,
@@ -48,11 +49,15 @@ export default async function NoviPredavanjePage({
   const takenClassroomIds = termsInSlot.map((t: { classroom_id: string | null }) => t.classroom_id).filter((id: string | null): id is string => id != null);
 
   // Svi klijenti – instruktor vidi sve, isto kao na stranici Klijenti (ne samo one iz instructor_clients).
-  const { data: allClients } = await admin
-    .from('clients')
-    .select('id, ime, prezime, godiste, datum_testiranja')
-    .order('ime')
-    .order('prezime');
+  const allClients = await sviRedovi((od, doReda) =>
+    admin
+      .from('clients')
+      .select('id, ime, prezime, godiste, datum_testiranja')
+      .order('ime')
+      .order('prezime')
+      .order('id')
+      .range(od, doReda)
+  );
   const clients = (allClients ?? []).map((c) => ({
     id: c.id,
     ime: c.ime ?? '',

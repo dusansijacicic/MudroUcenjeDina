@@ -62,7 +62,8 @@ export default function TermTypeEditForm({
       toast.error(result.error);
       return;
     }
-    toast.success('Vrsta termina sačuvana.');
+    if (result.upozorenje) toast(result.upozorenje, { icon: '⚠️', duration: 15000 });
+    else toast.success('Vrsta termina sačuvana. Već zakazani časovi ove vrste su usklađeni sa trajanjem.');
     router.push('/admin/vrste-termina');
     router.refresh();
   };

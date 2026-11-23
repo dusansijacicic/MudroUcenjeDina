@@ -7,6 +7,7 @@ import { termMozeNovoPredavanje } from '@/lib/settings';
 import PredavanjeForm from '@/app/dashboard/termin/PredavanjeForm';
 import { TIME_SLOTS } from '@/lib/constants';
 import { SEEDED_TERM_CATEGORY_INDIVIDUAL_ID } from '@/lib/term-categories';
+import { sviRedovi } from '@/lib/svi-redovi';
 
 function getMonday(d: Date): string {
   const x = new Date(d);
@@ -133,11 +134,15 @@ export default async function EditPredavanjePage({
   const slotLabel = TIME_SLOTS[term.slot_index] ?? '—';
 
   // Svi klijenti – instruktor vidi sve, isto kao na stranici Klijenti (ne samo one iz instructor_clients).
-  const { data: allClients } = await admin
-    .from('clients')
-    .select('id, ime, prezime, godiste, datum_testiranja')
-    .order('ime')
-    .order('prezime');
+  const allClients = await sviRedovi((od, doReda) =>
+    admin
+      .from('clients')
+      .select('id, ime, prezime, godiste, datum_testiranja')
+      .order('ime')
+      .order('prezime')
+      .order('id')
+      .range(od, doReda)
+  );
   const clients = (allClients ?? []).map((c) => ({
     id: c.id,
     ime: c.ime ?? '',

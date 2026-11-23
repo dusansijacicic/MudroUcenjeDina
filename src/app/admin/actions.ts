@@ -7,7 +7,7 @@ import type { TermCategoryRow } from '@/lib/term-categories';
 import { SEEDED_TERM_CATEGORY_INDIVIDUAL_ID, SEEDED_TERM_CATEGORY_GRUPNI_ID } from '@/lib/term-categories';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
-import { INSTRUCTOR_COLORS, isTermInPast, slotsNeeded, AUTO_SPILLOVER_NAPOMENA, TIME_SLOTS } from '@/lib/constants';
+import { INSTRUCTOR_COLORS, isTermInPast, slotsNeeded, AUTO_SPILLOVER_NAPOMENA, TIME_SLOTS, NASTAVAK_ZAUZET_PORUKA } from '@/lib/constants';
 import { termMozeNovoPredavanje } from '@/lib/settings';
 import { normalizeClientPol } from '@/lib/client-pol';
 import { logActivity, type Actor } from '@/lib/audit';
@@ -24,6 +24,7 @@ import {
   trajanjeVrste,
   ucionicaRezervisana,
 } from '@/lib/zauzetost-zahteva';
+import { ocistiNapomenu, dodajNapomenuTerminu, spojiNapomene } from '@/lib/napomena-termina';
 
 export async function createInstructorAsAdmin(formData: FormData): Promise<{ error?: string; success?: boolean }> {
   const { supabase, user } = await getAuthedUser();
@@ -334,8 +335,11 @@ export async function createBulkZahteviAsAdmin(
   clientId: string,
   termTypeId: string | null,
   slots: { date: string; slotIndex: number }[],
-  classroomId: string | null = null
+  classroomId: string | null = null,
+  /** Napomena za sve ove časove – na kalendaru se vidi tek u oblačiću (prelaz mišem). */
+  napomena: string | null = null
 ): Promise<{ failed: { date: string; slotIndex: number; error: string }[] }> {
+  const cistaNapomena = ocistiNapomenu(napomena);
   const { admin, error: authErr, actor } = await requireSchedulingAccess();
   if (authErr || !admin) return { failed: slots.map((s) => ({ ...s, error: authErr ?? 'Niste ovlašćeni.' })) };
   if (slots.length === 0) return { failed: [] };
@@ -382,17 +386,21 @@ export async function createBulkZahteviAsAdmin(
 
   if (toInsert.length === 0) return { failed: skipped };
 
-  const { error } = await admin.from('zahtevi_za_cas').insert(
-    toInsert.map((s) => ({
-      client_id: clientId,
-      instructor_id: null,
-      classroom_id: classroomId,
-      requested_date: s.date,
-      requested_slot_index: s.slotIndex,
-      term_type_id: termTypeId,
-      status: 'pending',
-    }))
-  );
+  const redovi = toInsert.map((s) => ({
+    client_id: clientId,
+    instructor_id: null,
+    classroom_id: classroomId,
+    requested_date: s.date,
+    requested_slot_index: s.slotIndex,
+    term_type_id: termTypeId,
+    status: 'pending',
+    ...(cistaNapomena ? { napomena: cistaNapomena } : {}),
+  }));
+  let { error } = await admin.from('zahtevi_za_cas').insert(redovi);
+  // Pre migracije 060 (nema kolone napomena) – zakaži bez napomene.
+  if (error && cistaNapomena && /napomena/i.test(error.message)) {
+    ({ error } = await admin.from('zahtevi_za_cas').insert(redovi.map((r) => ({ ...r, napomena: undefined }))));
+  }
   if (error) {
     return { failed: [...skipped, ...toInsert.map((s) => ({ ...s, error: error.message }))] };
   }
@@ -423,7 +431,9 @@ export async function createBulkTermsAsAdmin(
   termTypeId: string | null,
   slots: { date: string; slotIndex: number }[],
   /** Kategorija termina za NOVE termine – grupna kategorija ako ima više od jednog deteta, inače individualna. */
-  termCategoryId: string | null = null
+  termCategoryId: string | null = null,
+  /** Napomena za sve ove časove (napomena termina) – na kalendaru se vidi tek u oblačiću. */
+  napomena: string | null = null
 ): Promise<{ failed: { date: string; slotIndex: number; error: string }[] }> {
   const { admin, error: authErr, actor } = await requireAdmin();
   if (authErr || !admin) return { failed: slots.map((s) => ({ ...s, error: authErr ?? 'Niste ovlašćeni.' })) };
@@ -439,11 +449,13 @@ export async function createBulkTermsAsAdmin(
 
       const { data: existing } = await admin
         .from('terms')
-        .select('id, classroom_id')
+        .select('id, classroom_id, napomena')
         .eq('instructor_id', instructorId)
         .eq('date', dateStr)
         .eq('slot_index', slot)
         .maybeSingle();
+      // Automatski nastavak tuđeg dužeg časa nije mesto za drugo dete (posle bi se obrisao sa njim).
+      if (existing?.napomena === AUTO_SPILLOVER_NAPOMENA) return { ...s, error: NASTAVAK_ZAUZET_PORUKA };
 
       // Duži čas: instruktor mora biti slobodan i u sledećem vremenu (pre nego što se napravi prazan termin).
       const nastavakGreska = await instruktorSlobodanZaNastavak(admin, instructorId, dateStr, slot, slotovaVrste, existing ? [existing.id] : []);
@@ -453,6 +465,7 @@ export async function createBulkTermsAsAdmin(
       let termId: string;
       if (existing) {
         termId = existing.id;
+        await dodajNapomenuTerminu(admin, termId, napomena);
         if (classroomId && !existing.classroom_id && !ucionicaRez) {
           const { data: roomConflict } = await admin
             .from('terms')
@@ -486,6 +499,7 @@ export async function createBulkTermsAsAdmin(
             slot_index: slot,
             classroom_id: classroomId,
             term_category_id: effectiveCategoryId,
+            napomena: ocistiNapomenu(napomena),
           })
           .select('id')
           .single();
@@ -634,11 +648,13 @@ export async function assignInstructorToZahtevAsAdmin(zahtevId: string, instruct
   let termId: string;
   const { data: existing } = await admin
     .from('terms')
-    .select('id')
+    .select('id, napomena')
     .eq('instructor_id', instructorId)
     .eq('date', dateStr)
     .eq('slot_index', slot)
     .maybeSingle();
+  // Automatski nastavak tuđeg dužeg časa nije mesto za drugo dete (posle bi se obrisao sa njim).
+  if (existing?.napomena === AUTO_SPILLOVER_NAPOMENA) return { error: NASTAVAK_ZAUZET_PORUKA };
   // Duži čas bez instruktora zauzima i sledeće vreme – instruktor tada mora biti slobodan, inače bi
   // nastavak nestao a čas se preklopio sa drugim.
   const nastavakGreska = await instruktorSlobodanZaNastavak(
@@ -681,6 +697,9 @@ export async function assignInstructorToZahtevAsAdmin(zahtevId: string, instruct
     }
   }
 
+  // Napomena časa bez instruktora prelazi na termin (migracija 060).
+  await dodajNapomenuTerminu(admin, termId, (zahtev as { napomena?: string | null }).napomena);
+
   const limitCheck = await termMozeNovoPredavanje(termId);
   if (!limitCheck.ok) return { error: `Maksimalan broj časova (${limitCheck.max}) je već dostignut u tom terminu.` };
 
@@ -716,16 +735,25 @@ export async function assignInstructorToZahteviAsAdmin(
   instructorId: string,
   zahtevIds: string[]
 ): Promise<{ failed: { zahtevId: string; error: string }[] }> {
-  const { error: authErr } = await requireAdmin();
-  if (authErr) return { failed: zahtevIds.map((zahtevId) => ({ zahtevId, error: authErr })) };
+  const { admin, error: authErr } = await requireAdmin();
+  if (authErr || !admin) return { failed: zahtevIds.map((zahtevId) => ({ zahtevId, error: authErr ?? 'Niste ovlašćeni.' })) };
 
-  const results = await Promise.all(
-    zahtevIds.map(async (zahtevId) => {
-      const res = await assignInstructorToZahtevAsAdmin(zahtevId, instructorId);
-      return { zahtevId, error: res.error ?? null };
-    })
-  );
-  return { failed: results.filter((r): r is { zahtevId: string; error: string } => r.error !== null) };
+  // Redom po vremenu, ne istovremeno: raniji duži čas prvo zauzme svoj nastavak, pa sledeći čas istog
+  // instruktora dobije jasnu poruku umesto da se tiho preklope (ili da se jedan izgubi).
+  const { data: redosled } = await admin
+    .from('zahtevi_za_cas')
+    .select('id, requested_date, requested_slot_index')
+    .in('id', zahtevIds);
+  const poVremenu = [...(redosled ?? [])]
+    .sort((a, b) => String(a.requested_date).localeCompare(String(b.requested_date)) || (a.requested_slot_index as number) - (b.requested_slot_index as number))
+    .map((z) => z.id as string);
+  const ids = [...poVremenu, ...zahtevIds.filter((id) => !poVremenu.includes(id))];
+  const failed: { zahtevId: string; error: string }[] = [];
+  for (const zahtevId of ids) {
+    const res = await assignInstructorToZahtevAsAdmin(zahtevId, instructorId);
+    if (res.error) failed.push({ zahtevId, error: res.error });
+  }
+  return { failed };
 }
 
 /**
@@ -1016,7 +1044,7 @@ export async function syncSpilloverSlots(
   admin: ReturnType<typeof createAdminClient>,
   originTermId: string,
   totalSlotsNeeded: number
-): Promise<void> {
+): Promise<number[]> {
   // Origin i existing ne zavise jedno od drugog – paralelno umesto sekvencijalno (upola manje čekanja).
   const [{ data: origin }, { data: existing }] = await Promise.all([
     admin
@@ -1026,19 +1054,22 @@ export async function syncSpilloverSlots(
       .single(),
     admin
       .from('terms')
-      .select('id, slot_index, date, instructor_id, classroom_id')
+      .select('id, slot_index, date, instructor_id, classroom_id, predavanja(id)')
       .eq('nastavak_of_term_id', originTermId)
       .eq('napomena', AUTO_SPILLOVER_NAPOMENA),
   ]);
-  if (!origin) return;
+  if (!origin) return [];
 
   // Nastavak koji više ne prati čas (čas premešten na drugi dan, promenjen instruktor ili učionica) se
   // briše i pravi ponovo uz čas – inače bi ostao da zauzima staro mesto.
   const originDatum = String(origin.date).slice(0, 10);
   const prati = (t: { date: string; instructor_id: string | null; classroom_id: string | null }) =>
     String(t.date).slice(0, 10) === originDatum && t.instructor_id === origin.instructor_id && t.classroom_id === origin.classroom_id;
-  const zastareli = (existing ?? []).filter((t) => !prati(t)).map((t) => t.id as string);
-  const existingBySlot = new Map((existing ?? []).filter(prati).map((t) => [t.slot_index, t.id as string]));
+  // Nastavak u kome je dete (stari podaci – dete upisano u nastavak tuđeg dužeg časa) nikad se ne briše:
+  // to je pravi čas tog deteta.
+  const prazni = (existing ?? []).filter((t) => ((t as { predavanja?: unknown[] }).predavanja ?? []).length === 0);
+  const zastareli = prazni.filter((t) => !prati(t)).map((t) => t.id as string);
+  const existingBySlot = new Map(prazni.filter(prati).map((t) => [t.slot_index, t.id as string]));
 
   const desiredSlots: number[] = [];
   for (let i = 1; i < totalSlotsNeeded; i++) {
@@ -1055,6 +1086,7 @@ export async function syncSpilloverSlots(
 
   // Prvo brisanje, pa upis – stari nastavak ne sme da smeta novom (isti instruktor/učionica).
   if (toDelete.length > 0) await admin.from('terms').delete().in('id', toDelete);
+  const neUpisano: number[] = [];
   await Promise.all([
     ...toInsert.map(async (slotIdx) => {
       const { error: spilloverErr } = await admin.from('terms').insert({
@@ -1070,9 +1102,11 @@ export async function syncSpilloverSlots(
         // Instruktor ili učionica su već genuinely zauzeti u tom slotu nečim drugim – ne rušimo
         // čuvanje radionice zbog ovoga, samo beležimo da automatska blokada nije uspela.
         console.warn('[dvočas] spillover insert failed for slot', slotIdx, spilloverErr.message);
+        neUpisano.push(slotIdx);
       }
     }),
   ]);
+  return neUpisano;
 }
 
 /** Koliko vremena termin zauzima – po najdužoj vrsti časa među decom (kao automatski nastavak). */
@@ -1093,7 +1127,7 @@ async function slotovaTermina(admin: ReturnType<typeof createAdminClient>, termI
 export async function syncSpilloverForTerm(
   admin: ReturnType<typeof createAdminClient>,
   termId: string
-): Promise<void> {
+): Promise<number[]> {
   // Jedan upit (embedded join) umesto dva sekvencijalna (prvo term_type_id pa onda term_types).
   const { data: preds } = await admin
     .from('predavanja')
@@ -1105,7 +1139,7 @@ export async function syncSpilloverForTerm(
     const trajanje = Array.isArray(tt) ? tt[0]?.trajanje_minuta : tt?.trajanje_minuta;
     if (trajanje) maxMinutes = Math.max(maxMinutes, trajanje);
   }
-  await syncSpilloverSlots(admin, termId, slotsNeeded(maxMinutes));
+  return syncSpilloverSlots(admin, termId, slotsNeeded(maxMinutes));
 }
 
 export async function createPredavanjeAsAdmin(
@@ -1600,11 +1634,13 @@ export async function reassignPredavanjeInstructorAsAdmin(
   // Tražimo postojeći termin novog instruktora u istom slotu
   const { data: existingTerm } = await admin
     .from('terms')
-    .select('id')
+    .select('id, napomena')
     .eq('instructor_id', newInstructorId)
     .eq('date', termDate.slice(0, 10))
     .eq('slot_index', slotIndex)
     .maybeSingle();
+  // Automatski nastavak tuđeg dužeg časa nije mesto za drugo dete (posle bi se obrisao sa njim).
+  if (existingTerm?.napomena === AUTO_SPILLOVER_NAPOMENA) return { error: NASTAVAK_ZAUZET_PORUKA };
 
   let newTermId: string;
   if (existingTerm) {
@@ -2376,11 +2412,12 @@ export async function updateTermTypeAsAdmin(
   cena_po_casu: number | null,
   program_id: string | null,
   trajanje_minuta: number
-): Promise<{ error?: string }> {
+): Promise<{ error?: string; upozorenje?: string }> {
   const { admin, error: authErr } = await requireAdmin();
   if (authErr || !admin) return { error: authErr ?? 'Samo admin.' };
   if (!program_id) return { error: 'Izaberite program.' };
   if (!Number.isFinite(trajanje_minuta) || trajanje_minuta <= 0) return { error: 'Trajanje mora biti pozitivan broj minuta.' };
+  const { data: staro } = await admin.from('term_types').select('trajanje_minuta').eq('id', id).maybeSingle();
   const { error } = await admin.from('term_types').update({
     naziv: naziv.trim(),
     opis: opis?.trim() || null,
@@ -2390,7 +2427,98 @@ export async function updateTermTypeAsAdmin(
   }).eq('id', id);
   if (error) return { error: error.message };
   revalidatePath('/admin/vrste-termina');
+  // Promenjeno trajanje (npr. 45 → 55 min): već zakazani časovi te vrste dobijaju (ili gube) nastavak.
+  if (slotsNeeded(staro?.trajanje_minuta as number | null | undefined) !== slotsNeeded(trajanje_minuta)) {
+    const res = await obnoviNastavke(admin, id);
+    revalidatePath('/admin/kalendar');
+    revalidatePath('/dashboard', 'layout');
+    if (res.sukobi.length > 0) {
+      return {
+        upozorenje: `Sačuvano. ${res.sukobi.length} budućih časova ove vrste nema mesta za nastavak (instruktor ili učionica je zauzeta u sledećem bloku): ${res.sukobi
+          .slice(0, 8)
+          .map((x) => `${x.datum} ${x.vreme} ${x.dete}`)
+          .join('; ')}${res.sukobi.length > 8 ? ' …' : ''}`,
+      };
+    }
+  }
   return {};
+}
+
+/**
+ * Obnovi „Nastavak dužeg časa“ za buduće termine (od danas): posle promene trajanja vrste časa, ili
+ * dugmetom na stranici Vrste časova. Vraća časove kojima nastavak ne može da se upiše jer instruktor ili
+ * učionica u sledećem bloku već imaju drugi čas.
+ */
+async function obnoviNastavke(
+  admin: ReturnType<typeof createAdminClient>,
+  termTypeId: string | null
+): Promise<{ obradjeno: number; sukobi: { termId: string; datum: string; vreme: string; dete: string }[] }> {
+  const danas = danasBeograd();
+  const termIds = new Set<string>();
+  for (let od = 0; ; od += 1000) {
+    let q = admin
+      .from('predavanja')
+      .select('term_id, term:terms!inner(date, napomena)')
+      .gte('term.date', danas)
+      .order('id')
+      .range(od, od + 999);
+    if (termTypeId) q = q.eq('term_type_id', termTypeId);
+    const { data, error } = await q;
+    if (error) break;
+    for (const p of data ?? []) {
+      const t = (Array.isArray(p.term) ? p.term[0] : p.term) as { napomena?: string | null } | null;
+      if (t?.napomena === AUTO_SPILLOVER_NAPOMENA) continue;
+      termIds.add(p.term_id as string);
+    }
+    if (!data || data.length < 1000) break;
+  }
+  const sukobi: { termId: string; datum: string; vreme: string; dete: string }[] = [];
+  const lista = [...termIds];
+  // Po 8 termina odjednom – dovoljno brzo, a ne zatrpava bazu.
+  for (let i = 0; i < lista.length; i += 8) {
+    const deo = lista.slice(i, i + 8);
+    const rezultati = await Promise.all(deo.map(async (termId) => ({ termId, neUpisano: await syncSpilloverForTerm(admin, termId) })));
+    for (const r of rezultati) {
+      if (r.neUpisano.length === 0) continue;
+      const { data: t } = await admin
+        .from('terms')
+        .select('date, slot_index, predavanja(client:clients(ime, prezime))')
+        .eq('id', r.termId)
+        .maybeSingle();
+      const deca = ((t?.predavanja ?? []) as { client: { ime?: string; prezime?: string } | { ime?: string; prezime?: string }[] | null }[])
+        .map((p) => (Array.isArray(p.client) ? p.client[0] : p.client))
+        .map((c) => `${c?.ime ?? ''} ${c?.prezime ?? ''}`.trim())
+        .filter(Boolean)
+        .join(', ');
+      sukobi.push({
+        termId: r.termId,
+        datum: String(t?.date ?? '').slice(0, 10),
+        vreme: TIME_SLOTS[(t?.slot_index as number) ?? 0] ?? '',
+        dete: deca || '—',
+      });
+    }
+  }
+  return { obradjeno: lista.length, sukobi };
+}
+
+/** Dugme „Obnovi nastavke dužih časova“ (Vrste časova): svi budući termini. */
+export async function obnoviNastavkeAsAdmin(): Promise<{
+  error?: string;
+  obradjeno?: number;
+  sukobi?: { termId: string; datum: string; vreme: string; dete: string }[];
+}> {
+  const { admin, error: authErr, actor } = await requireAdmin();
+  if (authErr || !admin) return { error: authErr ?? 'Samo admin.' };
+  const res = await obnoviNastavke(admin, null);
+  revalidatePath('/admin/kalendar');
+  revalidatePath('/dashboard', 'layout');
+  if (actor) {
+    logActivity(actor, 'term.spillover_repair', `Obnovljeni nastavci dužih časova: ${res.obradjeno} termina, ${res.sukobi.length} bez mesta.`, {
+      entityType: 'term',
+      metadata: { sukobi: res.sukobi },
+    });
+  }
+  return res;
 }
 
 export async function deleteTermTypeAsAdmin(id: string): Promise<{ error?: string }> {
@@ -3310,6 +3438,68 @@ export async function postaviRazlogOtkazivanjaAsAdmin(id: string, razlog: string
   if (clientId) revalidatePath(`/admin/klijenti/${clientId}`);
   revalidatePath('/admin/kalendar');
   return { razlog: cist };
+}
+
+/**
+ * Mod „Napomena“ na kalendaru: ista napomena za više izabranih termina i časova bez instruktora (naknadno).
+ * zameni=false → dopisuje se ispod postojeće; zameni=true → postojeća se zamenjuje (prazno = briše).
+ * U rasporedu se napomena ne ispisuje – vidi se u oblačiću (💬 na terminu).
+ */
+export async function postaviNapomenuAsAdmin(
+  termIds: string[],
+  zahtevIds: string[],
+  napomena: string | null,
+  zameni = false
+): Promise<{ error?: string; promenjeno: number }> {
+  const { admin, error: authErr, actor } = await requireAdmin();
+  if (authErr || !admin) return { error: authErr ?? 'Niste ovlašćeni.', promenjeno: 0 };
+  const cista = ocistiNapomenu(napomena);
+  if (!cista && !zameni) return { error: 'Upišite napomenu.', promenjeno: 0 };
+  let promenjeno = 0;
+
+  // Termini (nikad automatski „nastavak dužeg časa“ – njegova napomena je oznaka za aplikaciju).
+  const ids = [...new Set(termIds)];
+  if (ids.length > 0) {
+    const { data: termini, error } = await admin.from('terms').select('id, napomena').in('id', ids);
+    if (error) return { error: error.message, promenjeno };
+    for (const t of (termini ?? []) as { id: string; napomena: string | null }[]) {
+      if (t.napomena === AUTO_SPILLOVER_NAPOMENA) continue;
+      const nova = zameni ? cista : spojiNapomene(t.napomena, cista);
+      if (nova === (t.napomena ?? null)) continue;
+      const { error: upErr } = await admin.from('terms').update({ napomena: nova }).eq('id', t.id);
+      if (upErr) return { error: upErr.message, promenjeno };
+      promenjeno++;
+    }
+  }
+
+  const zIds = [...new Set(zahtevIds)];
+  if (zIds.length > 0) {
+    const { data: zahtevi, error } = await admin.from('zahtevi_za_cas').select('*').in('id', zIds);
+    if (error) return { error: error.message, promenjeno };
+    for (const z of (zahtevi ?? []) as { id: string; napomena?: string | null }[]) {
+      const nova = zameni ? cista : spojiNapomene(z.napomena, cista);
+      if (nova === (z.napomena ?? null)) continue;
+      const { error: upErr } = await admin.from('zahtevi_za_cas').update({ napomena: nova }).eq('id', z.id);
+      if (upErr) {
+        return {
+          error: /napomena/i.test(upErr.message) ? 'Prvo pokrenite migraciju 060_napomena_casova.sql u Supabase SQL Editoru.' : upErr.message,
+          promenjeno,
+        };
+      }
+      promenjeno++;
+    }
+  }
+
+  revalidatePath('/admin/kalendar');
+  revalidatePath('/dashboard', 'layout');
+  for (const id of ids) revalidatePath(`/admin/termin/${id}`);
+  if (actor && promenjeno > 0) {
+    logActivity(actor, 'napomena.bulk', `Napomena ${zameni ? 'postavljena' : 'dopisana'} za ${promenjeno} čas(ova).`, {
+      entityType: 'term',
+      metadata: { termIds: ids, zahtevIds: zIds, napomena: cista, zameni },
+    });
+  }
+  return { promenjeno };
 }
 
 /** ✕ uz datum u žutoj traci „termini bez instruktora“: uklanja podsetnik za taj dan (časovi ostaju). */

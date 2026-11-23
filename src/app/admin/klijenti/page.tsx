@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { getStanjeSvihKlijenata } from '@/lib/stanje-svih';
 import AdminKlijentiTable, { type AdminKlijentRow } from './AdminKlijentiTable';
+import { sviRedovi } from '@/lib/svi-redovi';
 
 export default async function AdminSviKlijentiPage() {
   const { user } = await getAuthedUser();
@@ -17,16 +18,24 @@ export default async function AdminSviKlijentiPage() {
   // koji još nemaju dodeljenog instruktora.
   // Sve u JEDNOM krugu upita: klijenti, instruktori i već sabrano stanje (baza sabira, ne app).
   const [{ data: clients }, { data: links }, stanjeMap] = await Promise.all([
-    adminSupabase
-      .from('clients')
-      .select('id, ime, prezime, godiste, razred, skola, kontakt_telefon, datum_testiranja')
-      .order('ime')
-      .order('prezime')
-      .limit(2000),
-    adminSupabase
-      .from('instructor_clients')
-      .select('instructor_id, client_id, instructor:instructors(id, ime, prezime)')
-      .limit(2000),
+    // Sva deca, i kad ih ima više od 1000 (Supabase vraća najviše 1000 redova po upitu).
+    sviRedovi((od, doReda) =>
+      adminSupabase
+        .from('clients')
+        .select('id, ime, prezime, godiste, razred, skola, kontakt_telefon, datum_testiranja')
+        .order('ime')
+        .order('prezime')
+        .order('id')
+        .range(od, doReda)
+    ).then((data) => ({ data })),
+    sviRedovi((od, doReda) =>
+      adminSupabase
+        .from('instructor_clients')
+        .select('instructor_id, client_id, instructor:instructors(id, ime, prezime)')
+        .order('client_id')
+        .order('instructor_id')
+        .range(od, doReda)
+    ).then((data) => ({ data })),
     getStanjeSvihKlijenata(),
   ]);
 

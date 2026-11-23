@@ -313,16 +313,24 @@ export default async function AdminUputstvoPage({ searchParams }: { searchParams
               grupa mora imati instruktora.
             </li>
             <li>
+              Po želji <Ui>Napomena (za sve izabrane časove)</Ui>, npr. „nadoknada“ – ista ide na sve časove koji se sada zakazuju. U
+              rasporedu se ne ispisuje: termin dobije 💬, a tekst se vidi u oblačiću kad se mišem pređe preko termina.
+            </li>
+            <li>
               Kliknite sve ćelije (dan + vreme) kada dete dolazi. Ispod postojećih časova uvek je prazan deo „+ još jedno dete u ovo vreme“.
               Ako je izabran instruktor, vremena kada on ne radi su crvena („⛔ izabrani instruktor ne radi“) i ne mogu se izabrati.
             </li>
             <li>Kliknite <Ui>✓ Potvrdi zakazivanje (N)</Ui>.</li>
           </Koraci>
 
-          <Podnaslov>Dodeli instruktora/učionicu/vrstu</Podnaslov>
+          <Podnaslov>Dodeli instruktora/učionicu/vrstu/napomenu</Podnaslov>
           <Koraci>
-            <li>Kliknite <Ui>Dodeli instruktora/učionicu/vrstu</Ui>.</li>
-            <li>Izaberite instruktora i/ili učionicu i/ili vrstu časa (bilo koja kombinacija; „ne menjaj“ = ostaje kako je).</li>
+            <li>Kliknite <Ui>Dodeli instruktora/učionicu/vrstu/napomenu</Ui>.</li>
+            <li>
+              Izaberite instruktora i/ili učionicu i/ili vrstu časa i/ili upišite napomenu (bilo koja kombinacija, može i samo napomena;
+              „ne menjaj“ i prazno polje = ostaje kako je). Napomena se dopisuje ispod postojeće; čekirano <Ui>zameni postojeću napomenu</Ui>{' '}
+              je zamenjuje (prazno + čekirano = briše napomenu).
+            </li>
             <li>Kliknite termine i narandžaste časove bez instruktora kojima to dodeljujete.</li>
             <li>Kliknite <Ui>✓ Potvrdi dodelu (N)</Ui>.</li>
           </Koraci>
@@ -571,8 +579,11 @@ export default async function AdminUputstvoPage({ searchParams }: { searchParams
             <li><M n="A" /> Gore popunite polja i kliknite <Ui>Dodaj</Ui> (za učionice <Ui>Dodaj učionicu</Ui>).</li>
             <li><M n="B" /> U listi: <Ui>Izmeni</Ui> (promena) ili brisanje.</li>
             <li>
-              <Ui>Vrste časova</Ui>: naziv, program, cena po času (RSD) i trajanje u minutima. Preko 45 min čas zauzima i sledeći slot. Cena se
-              koristi za automatski iznos uplate i za cenu časa u profilu deteta.
+              <Ui>Vrste časova</Ui>: naziv, program, cena po času (RSD) i trajanje u minutima. Preko 45 min čas zauzima i sledeći slot
+              (npr. 55 ili 90 min → „Nastavak dužeg časa“). Kad promenite trajanje, već zakazani budući časovi te vrste se sami usklade; ako
+              nekom nastavak ne može da stane (instruktor ili učionica u sledećem bloku već imaju čas), aplikacija to ispiše. Dugme{' '}
+              <Ui>Obnovi nastavke dužih časova</Ui> proveri i sredi sve buduće časove odjednom. Cena se koristi za automatski iznos uplate i
+              za cenu časa u profilu deteta.
             </li>
             <li><Ui>Kategorije termina</Ui>: npr. individualni/grupni – čekirajte „Samo jedno dete u terminu“ za individualne.</li>
             <li><Ui>Programi</Ui>: grupe vrsta časova; „Redosled“ određuje mesto u listi (manji broj = ranije).</li>

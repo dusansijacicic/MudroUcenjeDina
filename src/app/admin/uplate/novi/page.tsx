@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import UplataForm from './UplataForm';
 import { getTermTypes } from '@/app/admin/actions';
+import { sviRedovi } from '@/lib/svi-redovi';
 
 export default async function AdminUplateNoviPage() {
   const { user } = await getAuthedUser();
@@ -15,7 +16,7 @@ export default async function AdminUplateNoviPage() {
   const adminSupabase = createAdminClient();
   const [{ data: instructors }, { data: clients }, termTypes] = await Promise.all([
     adminSupabase.from('instructors').select('id, ime, prezime').eq('aktivan', true).order('prezime').order('ime'),
-    adminSupabase.from('clients').select('id, ime, prezime, popust_percent').order('ime').order('prezime'),
+    sviRedovi((od, doReda) => adminSupabase.from('clients').select('id, ime, prezime, popust_percent').order('ime').order('prezime').order('id').range(od, doReda)).then((data) => ({ data })),
     getTermTypes(),
   ]);
 

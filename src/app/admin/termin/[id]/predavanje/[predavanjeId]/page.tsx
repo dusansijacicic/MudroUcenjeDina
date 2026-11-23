@@ -7,6 +7,7 @@ import { getTermTypes, getClassrooms, getStanjePoVrstamaZaKlijenteBatch, getTerm
 import AdminPredavanjeForm from '@/app/admin/termin/AdminPredavanjeForm';
 import { SEEDED_TERM_CATEGORY_INDIVIDUAL_ID } from '@/lib/term-categories';
 import { termMozeNovoPredavanje } from '@/lib/settings';
+import { sviRedovi } from '@/lib/svi-redovi';
 
 export default async function AdminEditPredavanjePage({
   params,
@@ -42,11 +43,15 @@ export default async function AdminEditPredavanjePage({
     getAdminInstructorsList(),
   ]);
 
-  const { data: allClients } = await admin
-    .from('clients')
-    .select('id, ime, prezime, godiste, datum_testiranja')
-    .order('ime')
-    .order('prezime');
+  const allClients = await sviRedovi((od, doReda) =>
+    admin
+      .from('clients')
+      .select('id, ime, prezime, godiste, datum_testiranja')
+      .order('ime')
+      .order('prezime')
+      .order('id')
+      .range(od, doReda)
+  );
   const clients = (allClients ?? []).map((c) => ({
     id: c.id,
     ime: c.ime ?? '',

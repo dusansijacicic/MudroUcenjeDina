@@ -5,6 +5,7 @@ import { getDashboardInstructor } from '@/lib/dashboard';
 import { getStanjeSvihKlijenata } from '@/lib/stanje-svih';
 import ClientRow from './ClientRow';
 import type { Client } from '@/types/database';
+import { sviRedovi } from '@/lib/svi-redovi';
 
 export type StanjeVrsta = { term_type_naziv: string; uplaceno: number; odrzano: number; ostalo: number; duguje: number };
 
@@ -19,7 +20,7 @@ export default async function KlijentiPage() {
     const admin = createAdminClient();
     // Stanje svih klijenata sabira baza (046) – u istom krugu upita, bez ogromnog .in(id-jevi).
     const [{ data: clients }, { data: icRows }, batchStanje] = await Promise.all([
-      admin.from('clients').select('*').order('ime').order('prezime'),
+      sviRedovi((od, doReda) => admin.from('clients').select('*').order('ime').order('prezime').order('id').range(od, doReda)).then((data) => ({ data })),
       admin.from('instructor_clients').select('client_id, placeno_casova').eq('instructor_id', instructor.id),
       getStanjeSvihKlijenata(),
     ]);

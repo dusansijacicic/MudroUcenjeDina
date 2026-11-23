@@ -4,6 +4,7 @@ import { getAuthedUser, getIsAdmin } from '@/lib/auth';
 import { danasBeograd } from '@/lib/datum';
 import { kljucDanVreme, type KlijentZaUvoz } from '@/lib/uvoz-rasporeda';
 import UvozRasporeda from './UvozRasporeda';
+import { sviRedovi } from '@/lib/svi-redovi';
 
 function pomeriDane(datum: string, dana: number): string {
   const d = new Date(`${datum}T12:00:00Z`);
@@ -23,7 +24,7 @@ export default async function UvozRasporedaPage() {
   const doDatuma = pomeriDane(danas, 28);
 
   const [klijentiRes, vrsteRes, instruktoriRes, ucioniceRes, imenaRes, terminiRes, zahteviRes] = await Promise.all([
-    admin.from('clients').select('id, ime, prezime, godiste, razred, roditelj').order('ime').order('prezime').range(0, 4999),
+    sviRedovi((od, doReda) => admin.from('clients').select('id, ime, prezime, godiste, razred, roditelj').order('ime').order('prezime').order('id').range(od, doReda)).then((data) => ({ data })),
     admin.from('term_types').select('id, naziv, trajanje_minuta').order('naziv'),
     admin.from('instructors').select('id, ime, prezime, aktivan').order('ime').order('prezime'),
     admin.from('classrooms').select('id, naziv').order('naziv'),

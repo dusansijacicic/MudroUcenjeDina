@@ -6,6 +6,7 @@ import AdminTerminForm from '@/app/admin/termin/novi/AdminTerminForm';
 import { TIME_SLOTS } from '@/lib/constants';
 import { getTermTypes, getTakenForSlot, getTermCategories, getAllClientsCompletedProgramIds } from '@/app/admin/actions';
 import { getMaxTerminaPoSlotu } from '@/lib/settings';
+import { sviRedovi } from '@/lib/svi-redovi';
 
 export default async function TermBookingPage({
   searchParams,
@@ -26,7 +27,7 @@ export default async function TermBookingPage({
   const adminSupabase = createAdminClient();
   const [{ data: instructors }, { data: clients }, { data: classrooms }, termTypes, termCategories, completedMap] = await Promise.all([
     adminSupabase.from('instructors').select('id, ime, prezime').eq('aktivan', true).order('prezime').order('ime'),
-    adminSupabase.from('clients').select('id, ime, prezime, godiste, datum_testiranja').order('prezime').order('ime'),
+    sviRedovi((od, doReda) => adminSupabase.from('clients').select('id, ime, prezime, godiste, datum_testiranja').order('prezime').order('ime').order('id').range(od, doReda)).then((data) => ({ data })),
     adminSupabase.from('classrooms').select('id, naziv').order('naziv'),
     getTermTypes(), getTermCategories(), getAllClientsCompletedProgramIds(),
   ]);

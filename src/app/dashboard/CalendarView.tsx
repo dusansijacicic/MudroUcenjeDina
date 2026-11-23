@@ -4,6 +4,7 @@ import { createContext, useContext, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useKalendarRealtime } from '@/lib/use-kalendar-realtime';
 import KalendarVeza from '@/components/KalendarVeza';
+import Oblacic, { OblacicRed } from '@/components/Oblacic';
 import { TIME_SLOTS, AUTO_SPILLOVER_NAPOMENA } from '@/lib/constants';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
@@ -333,7 +334,10 @@ function OtherTermCard({ term, own = false }: { term: OtherTerm; own?: boolean }
     : (term.predavanja ?? []).map((p) => ({ id: p.id, name: p.client ? `${p.client.ime} ${p.client.prezime}`.trim() : '—' }));
   const tt = term.predavanja?.[0]?.term_type;
   const termTypeName = Array.isArray(tt) ? tt[0]?.naziv : tt?.naziv;
+  // Napomena se ne ispisuje u rasporedu – 💬 i oblačić kad se mišem pređe preko termina.
+  const napomena = !isAutoSpillover(term) && term.napomena && term.napomena !== AUTO_SPILLOVER_NAPOMENA ? term.napomena : null;
   return (
+    <Oblacic sadrzaj={napomena ? <OblacicRed naslov="Napomena">{napomena}</OblacicRed> : null}>
     <div
       className={`rounded-lg border-2 p-2 text-xs ${isAutoSpillover(term) || term.request_id ? 'border-dashed' : ''} ${term.cancelled ? 'opacity-60' : ''}`}
       style={{
@@ -360,11 +364,16 @@ function OtherTermCard({ term, own = false }: { term: OtherTerm; own?: boolean }
             renderItem={(item) => <span className={`block text-[13px] font-semibold text-stone-900 break-words ${term.cancelled ? 'line-through' : ''}`}>{item.name}</span>}
           />
           {isTesting && names.length === 0 && <span className="block text-stone-500">Nema prijavljenih</span>}
-          {term.napomena && <span className="block mt-1 text-stone-500 whitespace-pre-wrap">{term.napomena}</span>}
+          {napomena && (
+            <span aria-label="Ima napomenu – pređite mišem" className="block mt-1 text-[12px] leading-none">
+              💬
+            </span>
+          )}
           {term.request_id && <Link prefetch={false} href="/dashboard/zahtevi" className="block mt-1 text-amber-700 hover:underline">Pregled zahteva →</Link>}
         </>
       )}
     </div>
+    </Oblacic>
   );
 }
 

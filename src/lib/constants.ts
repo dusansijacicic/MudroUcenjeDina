@@ -29,6 +29,9 @@ export function slotsNeeded(trajanjeMinuta: number | null | undefined): number {
 /** Napomena kojom se prepoznaje automatski kreiran "blokirajući" nastavak (dvočas), za razliku od ručno unetog nastavka. */
 export const AUTO_SPILLOVER_NAPOMENA = 'Automatski zauzeto (nastavak dužeg časa)';
 
+/** Instruktor u to vreme ima nastavak svog dužeg časa – tu ne sme drugo dete (nastavak se briše sa časom). */
+export const NASTAVAK_ZAUZET_PORUKA = 'Instruktor u to vreme ima nastavak svog dužeg časa – izaberite drugo vreme ili drugog instruktora.';
+
 /** Kraj vremena slota (npr. slot 0 = 09:00–09:45 → "09:45"). */
 export function getSlotEndTime(slotIndex: number): string {
   if (slotIndex < 0 || slotIndex >= TIME_SLOTS.length) return '21:00';

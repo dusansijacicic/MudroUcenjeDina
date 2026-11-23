@@ -30,6 +30,7 @@ import {
   postaviPlacenoTestiranjaAsAdmin,
   postaviPlacenoOtkazanihAsAdmin,
   sakrijPodsetnikBezInstruktoraAsAdmin,
+  postaviNapomenuAsAdmin,
   type BlokiranTermin,
   type PlaceniPaket,
 } from '@/app/admin/actions';
@@ -38,6 +39,7 @@ import SingleKlijentPicker from '@/components/SingleKlijentPicker';
 import GrupniKlijentiPicker from '@/components/GrupniKlijentiPicker';
 import StickyBar from '@/components/StickyBar';
 import KalendarVeza from '@/components/KalendarVeza';
+import Oblacic, { OblacicRed } from '@/components/Oblacic';
 import useStickyThead from '@/components/useStickyThead';
 import { NAREDNIH_NEDELJA_COOKIE, NAREDNIH_NEDELJA_DEFAULT, NAREDNIH_NEDELJA_MAX, nazivNedelje } from '@/lib/kalendar-nedelje';
 
@@ -73,6 +75,8 @@ export type PendingZahtevCalendar = {
   term_type_id?: string | null;
   /** [x, y] – i čas zakazan bez instruktora ima svoj redni broj od plaćenih (migracija 047). */
   redni?: [number, number] | null;
+  /** Napomena (migracija 060) – na kalendaru samo u oblačiću. */
+  napomena?: string | null;
 };
 
 /** Duži čas bez instruktora (npr. 55 min) zauzima i sledeće vreme – prikazuje se kao nastavak, isto
@@ -830,6 +834,8 @@ export default function AdminCalendarView({
   const [bulkGroupClientIds, setBulkGroupClientIds] = useState<string[]>([]);
   const [bulkTermCategoryId, setBulkTermCategoryId] = useState('');
   const [bulkTermTypeId, setBulkTermTypeId] = useState('');
+  // Napomena za sve časove koji se zakazuju (u rasporedu samo 💬 + oblačić).
+  const [bulkNapomena, setBulkNapomena] = useState('');
   // Prazno = bez instruktora/učionice – pravi se zahtev (kao do sad). Ako se izabere instruktor,
   // pravi se pravi termin (učionica ostaje opciona i u tom slučaju).
   const [bulkInstructorChoice, setBulkInstructorChoice] = useState('');
@@ -867,6 +873,9 @@ export default function AdminCalendarView({
   const [assignInstructorChoice, setAssignInstructorChoice] = useState('');
   const [assignClassroomChoice, setAssignClassroomChoice] = useState('');
   const [assignTermTypeChoice, setAssignTermTypeChoice] = useState('');
+  // Napomena za izabrane termine/časove (u rasporedu samo 💬 + oblačić); zameni = umesto dopisivanja.
+  const [assignNapomena, setAssignNapomena] = useState('');
+  const [assignNapomenaZameni, setAssignNapomenaZameni] = useState(false);
   const [assignLoading, setAssignLoading] = useState(false);
 
   // Blokiranje termina: izabrani slotovi (date|slot) + zajednička napomena ZAŠTO.
@@ -1128,6 +1137,7 @@ export default function AdminCalendarView({
     setBulkInstructorChoice('');
     setBulkClassroomChoice('');
     setBulkTermTypeId('');
+    setBulkNapomena('');
   };
 
   const onToggleDeleteSelect = (termId: string) => {
@@ -1228,6 +1238,8 @@ export default function AdminCalendarView({
     const groupClientIds = bulkGroupClientIds;
     const groupCategoryId = bulkTermCategoryId;
     const isGroup = bulkGroupMode;
+    const napomena = bulkNapomena.trim() || null;
+    setBulkNapomena('');
     setBulkSlots(new Set());
     setBulkMode(false);
     setBulkClientId('');
@@ -1238,21 +1250,21 @@ export default function AdminCalendarView({
     setBulkClassroomChoice('');
     setBulkLoading(true);
     if (isGroup) {
-      const { failed } = await createBulkTermsAsAdmin(groupClientIds, instructorId, classroomId, bulkTermTypeId || null, slots, groupCategoryId);
+      const { failed } = await createBulkTermsAsAdmin(groupClientIds, instructorId, classroomId, bulkTermTypeId || null, slots, groupCategoryId, napomena);
       if (failed.length > 0) {
         toast.error(`Nije zakazano ${failed.length}/${slots.length} – ${failed.map((f) => `${f.date} (${f.error})`).join('; ')}`);
       } else {
         toast.success(`Zakazano ${slots.length} termin(a) za grupu od ${groupClientIds.length}.`);
       }
     } else if (instructorId) {
-      const { failed } = await createBulkTermsAsAdmin([bulkClientId], instructorId, classroomId, bulkTermTypeId || null, slots);
+      const { failed } = await createBulkTermsAsAdmin([bulkClientId], instructorId, classroomId, bulkTermTypeId || null, slots, null, napomena);
       if (failed.length > 0) {
         toast.error(`Nije zakazano ${failed.length}/${slots.length} – ${failed.map((f) => `${f.date} (${f.error})`).join('; ')}`);
       } else {
         toast.success(`Zakazano ${slots.length} termin(a).`);
       }
     } else {
-      const { failed } = await createBulkZahteviAsAdmin(bulkClientId, bulkTermTypeId || null, slots, classroomId);
+      const { failed } = await createBulkZahteviAsAdmin(bulkClientId, bulkTermTypeId || null, slots, classroomId, napomena);
       if (failed.length > 0) {
         toast.error(`Nije zakazano ${failed.length}/${slots.length} – ${failed.map((f) => `${f.date} (${f.error})`).join('; ')}`);
       } else {
@@ -1467,6 +1479,8 @@ export default function AdminCalendarView({
     setAssignInstructorChoice('');
     setAssignClassroomChoice('');
     setAssignTermTypeChoice('');
+    setAssignNapomena('');
+    setAssignNapomenaZameni(false);
   };
 
   const onToggleAssignSelect = (termId: string) => {
@@ -1498,7 +1512,11 @@ export default function AdminCalendarView({
     const hasInstructor = !!assignInstructorChoice && !bezInstruktora;
     const hasClassroom = !!assignClassroomChoice;
     const hasTermType = !!assignTermTypeChoice;
-    if (total === 0 || (!hasInstructor && !bezInstruktora && !hasClassroom && !hasTermType)) return;
+    const napomena = assignNapomena.trim();
+    const hasNapomena = napomena !== '' || assignNapomenaZameni;
+    const napomenaZameni = assignNapomenaZameni;
+    if (total === 0 || (!hasInstructor && !bezInstruktora && !hasClassroom && !hasTermType && !hasNapomena)) return;
+    if (hasNapomena && napomenaZameni && napomena === '' && !confirm(`Obrisati napomenu sa ${total} izabranih časova?`)) return;
     if (
       bezInstruktora &&
       !confirm(`Vratiti ${total} izabranih bez instruktora? Svako dete postaje zahtev na čekanju, a termini bez dece se brišu.`)
@@ -1516,13 +1534,28 @@ export default function AdminCalendarView({
     setAssignInstructorChoice('');
     setAssignClassroomChoice('');
     setAssignTermTypeChoice('');
+    setAssignNapomena('');
+    setAssignNapomenaZameni(false);
     setAssignLoading(true);
 
-    const termCalls: Promise<{ failed: { termId: string; error: string }[] }>[] = [];
+    // Napomena prva: čas bez instruktora koji ovde dobija instruktora tako je nosi na termin.
+    let napomenaGreska = false;
+    if (hasNapomena) {
+      const res = await postaviNapomenuAsAdmin(termIds, zahtevIds, napomena || null, napomenaZameni);
+      if (res.error) {
+        napomenaGreska = true;
+        toast.error(`Napomena nije sačuvana: ${res.error}`);
+      }
+    }
+    const samoNapomena = !hasInstructor && !bezInstruktora && !hasClassroom && !hasTermType;
+
+    // Redom, ne istovremeno: svaka izmena termina usklađuje i „nastavak dužeg časa“, a dve istovremene
+    // izmene istog termina mogu da obrišu nastavak (ili dete upisano u njega).
+    const termCalls: (() => Promise<{ failed: { termId: string; error: string }[] }>)[] = [];
     if (termIds.length > 0) {
-      if (hasInstructor) termCalls.push(assignInstructorToTermsAsAdmin(instructorId, termIds));
-      if (hasClassroom) termCalls.push(assignClassroomToTermsAsAdmin(classroomId, termIds));
-      if (hasTermType) termCalls.push(assignTermTypeToTermsAsAdmin(termTypeId, termIds));
+      if (hasInstructor) termCalls.push(() => assignInstructorToTermsAsAdmin(instructorId, termIds));
+      if (hasClassroom) termCalls.push(() => assignClassroomToTermsAsAdmin(classroomId, termIds));
+      if (hasTermType) termCalls.push(() => assignTermTypeToTermsAsAdmin(termTypeId, termIds));
     }
     let zahtevFailed: { zahtevId: string; error: string }[] = [];
     if (zahtevIds.length > 0) {
@@ -1540,7 +1573,8 @@ export default function AdminCalendarView({
         zahtevFailed = zahtevFailed.concat(res.failed);
       }
     }
-    const termResults = await Promise.all(termCalls);
+    const termResults: { failed: { termId: string; error: string }[] }[] = [];
+    for (const poziv of termCalls) termResults.push(await poziv());
     let bezInstruktoraFailed = 0;
     let vraceno = 0;
     if (bezInstruktora) {
@@ -1553,8 +1587,10 @@ export default function AdminCalendarView({
     const failedCount = termResults.reduce((sum, r) => sum + r.failed.length, 0) + zahtevFailed.length + bezInstruktoraFailed;
     if (failedCount > 0) {
       toast.error(`Nije dodeljeno ${failedCount}/${total}.`);
+    } else if (samoNapomena) {
+      if (!napomenaGreska) toast.success(napomena ? `Napomena ${napomenaZameni ? 'postavljena' : 'dodata'} za ${total} čas(ova).` : `Napomena obrisana sa ${total} čas(ova).`);
     } else {
-      toast.success(bezInstruktora ? `Vraćeno bez instruktora: ${vraceno} čas(ova) – čekaju kao zahtevi.` : `Dodeljeno ${total}.`);
+      toast.success(bezInstruktora ? `Vraćeno bez instruktora: ${vraceno} čas(ova) – čekaju kao zahtevi.` : `Dodeljeno ${total}${hasNapomena && !napomenaGreska ? ' (i napomena)' : ''}.`);
     }
     osveziAkoNijeStiglo(verzija);
   };
@@ -1744,7 +1780,10 @@ export default function AdminCalendarView({
   const deleteCount = deleteSelection.size + deleteOtkazaniSelection.size + deleteZahteviSelection.size;
   const deleteDisabled = deleteCount === 0 || deleteLoading;
   const assignCount = assignSelection.size + assignZahteviSelection.size;
-  const assignDisabled = (!assignInstructorChoice && !assignClassroomChoice && !assignTermTypeChoice) || assignCount === 0 || assignLoading;
+  const assignDisabled =
+    (!assignInstructorChoice && !assignClassroomChoice && !assignTermTypeChoice && !assignNapomena.trim() && !assignNapomenaZameni) ||
+    assignCount === 0 ||
+    assignLoading;
   const swapDisabled = !swapFirst || !swapSecond || !anyFieldChecked || swapLoading;
   const copyDisabled = copyTargets.size === 0 || !copyFieldsAnyChecked || copyLoading;
   const bulkDisabled =
@@ -1954,7 +1993,7 @@ export default function AdminCalendarView({
               assignMode ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-stone-200 text-stone-700 hover:bg-stone-300'
             }`}
           >
-            {assignMode ? 'Dodeli instruktora/učionicu/vrstu: uključeno' : 'Dodeli instruktora/učionicu/vrstu'}
+            {assignMode ? 'Dodeli instruktora/učionicu/vrstu/napomenu: uključeno' : 'Dodeli instruktora/učionicu/vrstu/napomenu'}
           </button>
           {assignLoading && <span className="text-sm text-stone-500">Dodeljujem…</span>}
           <button
@@ -2244,6 +2283,27 @@ export default function AdminCalendarView({
                     <option key={tt.id} value={tt.id}>{tt.naziv}</option>
                   ))}
                 </select>
+                <label htmlFor="dodeli-napomena" className="sr-only">
+                  Napomena
+                </label>
+                <input
+                  id="dodeli-napomena"
+                  type="text"
+                  value={assignNapomena}
+                  maxLength={500}
+                  onChange={(e) => setAssignNapomena(e.target.value)}
+                  placeholder="napomena (npr. nadoknada) – ne menjaj ako je prazno"
+                  className="min-w-[220px] flex-1 rounded-lg border border-stone-300 px-3 py-1.5 text-sm text-stone-800 sm:max-w-sm"
+                />
+                <label htmlFor="dodeli-napomena-zameni" className="flex items-center gap-1.5 text-stone-700">
+                  <input
+                    id="dodeli-napomena-zameni"
+                    type="checkbox"
+                    checked={assignNapomenaZameni}
+                    onChange={(e) => setAssignNapomenaZameni(e.target.checked)}
+                  />
+                  zameni postojeću napomenu (prazno = obriši)
+                </label>
                 <button
                   type="button"
                   onClick={() => runMutation(confirmAssign)}
@@ -2255,7 +2315,7 @@ export default function AdminCalendarView({
                 <span className="text-sm text-stone-400">
                   {assignInstructorChoice === BEZ_INSTRUKTORA
                     ? 'kliknite časove koje vraćate bez instruktora – svako dete postaje narandžasti zahtev (isti datum, vreme, vrsta i učionica) koji čeka da ga neko preuzme'
-                    : 'izaberite instruktora i/ili učionicu i/ili vrstu časa (može bilo koja kombinacija), pa kliknite termine na kalendaru da ih označite'}
+                    : 'izaberite instruktora i/ili učionicu i/ili vrstu časa i/ili upišite napomenu (može bilo koja kombinacija, može i samo napomena), pa kliknite termine na kalendaru da ih označite. Napomena se u rasporedu ne ispisuje – termin dobije 💬, a tekst se vidi kad se mišem pređe preko njega.'}
                 </span>
               </div>
               {(assignSelection.size > 0 || assignZahteviSelection.size > 0) && (
@@ -2552,6 +2612,20 @@ export default function AdminCalendarView({
                     ))}
                   </select>
                 </div>
+                <div className="min-w-[200px] flex-1 sm:max-w-sm">
+                  <label htmlFor="bulk-napomena" className="block text-xs font-medium text-stone-700 mb-1">
+                    Napomena (za sve izabrane časove)
+                  </label>
+                  <input
+                    id="bulk-napomena"
+                    type="text"
+                    value={bulkNapomena}
+                    maxLength={500}
+                    onChange={(e) => setBulkNapomena(e.target.value)}
+                    placeholder="npr. nadoknada – nije obavezno"
+                    className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm text-stone-800"
+                  />
+                </div>
                 <button
                   type="button"
                   onClick={() => runMutation(confirmBulk)}
@@ -2672,10 +2746,14 @@ function TermCardVisual({ term, rowOffset = 0 }: { term: AdminTerm; rowOffset?: 
 
   const anyUnpaid = !isTesting && predavanja.some((p) => isUnpaid(p.redni));
 
+  // Napomena termina se ne ispisuje u rasporedu – vidi se u oblačiću (prelaz mišem preko termina).
+  const napomena = term.napomena && term.napomena !== AUTO_SPILLOVER_NAPOMENA ? term.napomena : null;
+
   return (
+    <Oblacic sadrzaj={napomena ? <OblacicRed naslov="Napomena">{napomena}</OblacicRed> : null}>
     <div
       className={`rounded-lg border bg-white overflow-hidden text-sm ${anyUnpaid ? 'border-red-500 ring-1 ring-red-500' : 'border-stone-200'}`}
-      title={`${instructorName} · ${classroomName ? `učionica ${classroomName}` : 'bez učionice'}`}
+      title={napomena ? undefined : `${instructorName} · ${classroomName ? `učionica ${classroomName}` : 'bez učionice'}`}
     >
       <div className="flex items-baseline justify-between gap-1 px-2 py-0.5 text-[11px] leading-tight">
         <span className="font-semibold truncate" style={{ color: instructorColor }}>
@@ -2685,6 +2763,11 @@ function TermCardVisual({ term, rowOffset = 0 }: { term: AdminTerm; rowOffset?: 
           <span className="hidden lg:inline">{instructorName}</span>
         </span>
         <span className="flex min-w-0 items-baseline gap-1">
+          {napomena && (
+            <span aria-label="Ima napomenu – pređite mišem" className="shrink-0 text-[12px] leading-none">
+              💬
+            </span>
+          )}
           {!isTesting && vrsta && <span className="truncate text-stone-500">{vrsta}</span>}
           {classroomName && (
             <span className="shrink-0 rounded bg-stone-100 px-1 font-medium text-stone-600">
@@ -2817,6 +2900,7 @@ function TermCardVisual({ term, rowOffset = 0 }: { term: AdminTerm; rowOffset?: 
         <span className="block px-2 pb-1 text-xs text-stone-500">+ radionica</span>
       )}
     </div>
+    </Oblacic>
   );
 }
 
@@ -2929,9 +3013,19 @@ function AdminCellContent({
         const otkPaidKey = `o:${ot.id}`;
         const otkPaidState = swap.paidMode ? swap.paidSelectionState(otkPaidKey) : null;
         const otkIme = `${ot.client_ime}${ot.client_prezime ? ` ${ot.client_prezime}` : ''}`;
+        // Status, razlog i instruktor se ne ispisuju u rasporedu – vide se u oblačiću.
+        const otkOblacic = (
+          <>
+            <OblacicRed naslov="Otkazan čas">{ot.placeno ? 'naplaćen – računa se u plaćene časove' : 'nije naplaćen'}</OblacicRed>
+            <OblacicRed naslov="Razlog">{ot.razlog || 'nije upisan'}</OblacicRed>
+            {ot.instructor_ime && (
+              <OblacicRed naslov="Instruktor">{`${ot.instructor_ime} ${ot.instructor_prezime ?? ''}`.trim()}</OblacicRed>
+            )}
+          </>
+        );
         return (
+          <Oblacic key={ot.id} sadrzaj={otkOblacic}>
           <div
-            key={ot.id}
             role={swap.deleteMode || swap.paidMode ? 'button' : undefined}
             title={swap.paidMode ? (ot.placeno ? 'Klik: skini oznaku naplaćeno' : 'Klik: otkazan čas je naplaćen') : undefined}
             onClick={() => {
@@ -2998,8 +3092,8 @@ function AdminCellContent({
               </span>
             )}
             {ot.razlog && (
-              <span className={`block truncate text-[11px] italic${ot.placeno ? ' text-indigo-800' : ''}`} title={`Razlog: ${ot.razlog}`}>
-                {ot.razlog}
+              <span aria-label="Ima razlog otkazivanja – pređite mišem" className="block text-[12px] leading-none">
+                💬
               </span>
             )}
             {otkPaidState === 'dodaj' ? (
@@ -3008,6 +3102,7 @@ function AdminCellContent({
               <span className="block text-[11px] font-bold text-red-700">✕ skini naplaćeno</span>
             ) : null}
           </div>
+          </Oblacic>
         );
       })}
     </div>
@@ -3095,15 +3190,15 @@ function AdminCellContent({
           (swap.copyMode && swap.copySourceZahtevId === z.id) ||
           (swap.moveMode && swap.moveSourceZahtevId === z.id);
         return (
+          <Oblacic key={z.id} sadrzaj={z.napomena ? <OblacicRed naslov="Napomena">{z.napomena}</OblacicRed> : null}>
           <div
-            key={z.id}
             role={zahtevClickable ? 'button' : undefined}
             draggable={zahtevDraggable}
             onDragStart={zahtevDraggable ? () => setDraggedTermId(`z:${z.id}`) : undefined}
             onDragEnd={zahtevDraggable ? () => setDraggedTermId(null) : undefined}
             onClick={(e) => klikNaZahtev(z, e)}
             data-zahtev-date={z.date}
-            title={redniTitle(z.redni) ?? (zahtevDraggable ? 'Prevucite mišem u drugo vreme da ga premestite' : undefined)}
+            title={z.napomena ? undefined : redniTitle(z.redni) ?? (zahtevDraggable ? 'Prevucite mišem u drugo vreme da ga premestite' : undefined)}
             // Izgleda kao običan termin (zaglavlje: instruktor · vrsta · učionica, pa red deteta) – samo
             // umesto instruktora piše „bez instruktora“ i okvir je isprekidan.
             className={`overflow-hidden rounded-lg border-2 border-dashed bg-white text-sm${
@@ -3130,6 +3225,11 @@ function AdminCellContent({
             >
               <span className="truncate font-semibold text-amber-700">bez instruktora</span>
               <span className="flex min-w-0 items-baseline gap-1">
+                {z.napomena && (
+                  <span aria-label="Ima napomenu – pređite mišem" className="shrink-0 text-[12px] leading-none">
+                    💬
+                  </span>
+                )}
                 {z.term_type_naziv && <span className="truncate text-stone-500">{z.term_type_naziv}</span>}
                 {z.classroom_naziv && (
                   <span className="shrink-0 rounded bg-stone-100 px-1 font-medium text-stone-600">
@@ -3161,6 +3261,7 @@ function AdminCellContent({
               ) : null}
             </div>
           </div>
+          </Oblacic>
         );
       })}
       {zahtevNastavci.map((n) => (

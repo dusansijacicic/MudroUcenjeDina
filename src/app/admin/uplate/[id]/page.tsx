@@ -6,6 +6,7 @@ import UplataForm from '../novi/UplataForm';
 import ObrisiUplatuButton from '../ObrisiUplatuButton';
 import { getTermTypes } from '@/app/admin/actions';
 import { datumBeograd } from '@/lib/datum';
+import { sviRedovi } from '@/lib/svi-redovi';
 
 export default async function AdminUplataIzmenaPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -22,7 +23,7 @@ export default async function AdminUplataIzmenaPage({ params }: { params: Promis
       .maybeSingle(),
     // Svi instruktori (i suspendovani) – da se postojeća uplata suspendovanog instruktora i dalje vidi ispravno.
     adminSupabase.from('instructors').select('id, ime, prezime, aktivan').order('prezime').order('ime'),
-    adminSupabase.from('clients').select('id, ime, prezime, popust_percent').order('ime').order('prezime'),
+    sviRedovi((od, doReda) => adminSupabase.from('clients').select('id, ime, prezime, popust_percent').order('ime').order('prezime').order('id').range(od, doReda)).then((data) => ({ data })),
     getTermTypes(),
   ]);
   if (!uplata) notFound();

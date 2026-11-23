@@ -14,6 +14,7 @@ import { mapBlokada, mapNedeljna, nedeljneUDatume, type BlokiranTermin } from '@
 import { NAREDNIH_NEDELJA_COOKIE, parseNarednihNedelja } from '@/lib/kalendar-nedelje';
 import { merenje } from '@/lib/merenje';
 import { readCalendarRpc } from '@/lib/calendar-rpc';
+import { sviRedovi } from '@/lib/svi-redovi';
 
 export default async function AdminKalendarPage({
   searchParams,
@@ -111,7 +112,7 @@ export default async function AdminKalendarPage({
       ),
       m.meri('instruktori', adminSupabase.from('instructors').select('id, ime, prezime, color, aktivan').order('prezime').order('ime')),
       m.meri('ucionice', adminSupabase.from('classrooms').select('id, naziv').order('naziv')),
-      m.meri('klijenti', adminSupabase.from('clients').select('id, ime, prezime, godiste, datum_testiranja').order('ime').order('prezime')),
+      m.meri('klijenti', sviRedovi((od, doReda) => adminSupabase.from('clients').select('id, ime, prezime, godiste, datum_testiranja').order('ime').order('prezime').order('id').range(od, doReda)).then((data) => ({ data }))),
       m.meri(
         'otkazani',
         // select('*'): radi i pre i posle migracije 059 (razlog otkazivanja).
@@ -121,7 +122,8 @@ export default async function AdminKalendarPage({
         'zahtevi',
         adminSupabase
           .from('zahtevi_za_cas')
-          .select('id, client_id, term_type_id, requested_date, requested_slot_index, client:clients(ime, prezime), term_type:term_types(naziv), classroom:classrooms(naziv)')
+          // '*': i napomena (migracija 060), a radi i pre nje.
+          .select('*, client:clients(ime, prezime), term_type:term_types(naziv), classroom:classrooms(naziv)')
           .eq('status', 'pending')
           .gte('requested_date', dateFrom)
           .lte('requested_date', dateTo)
@@ -300,6 +302,7 @@ export default async function AdminKalendarPage({
       client_id: z.client_id as string,
       term_type_id: (z.term_type_id as string | null) ?? null,
       redni: redniPoPredavanju[z.id] ?? null,
+      napomena: ((z as { napomena?: string | null }).napomena ?? null) as string | null,
     };
   });
 

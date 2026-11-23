@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { getDashboardInstructor } from '@/lib/dashboard';
 import { getTermTypes } from '@/app/admin/actions';
 import UplataForm from '@/app/admin/uplate/novi/UplataForm';
+import { sviRedovi } from '@/lib/svi-redovi';
 
 export default async function DashboardUplateNoviPage() {
   const { instructor } = await getDashboardInstructor();
@@ -12,7 +13,7 @@ export default async function DashboardUplateNoviPage() {
   const admin = createAdminClient();
   // Klijenti i vrste časova u istom krugu upita (ranije jedno za drugim).
   const [{ data: clientsRaw }, termTypes] = await Promise.all([
-    admin.from('clients').select('id, ime, prezime, popust_percent').order('ime').order('prezime'),
+    sviRedovi((od, doReda) => admin.from('clients').select('id, ime, prezime, popust_percent').order('ime').order('prezime').order('id').range(od, doReda)).then((data) => ({ data })),
     getTermTypes(),
   ]);
   const clients = (clientsRaw ?? []).map((c) => ({

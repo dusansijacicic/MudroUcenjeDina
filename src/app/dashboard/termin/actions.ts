@@ -6,7 +6,7 @@ import { getDashboardInstructor } from '@/lib/dashboard';
 import { termMozeNovoPredavanje, getMaxTerminaPoSlotu, jedanDeteMaksimalnoPoTerminu } from '@/lib/settings';
 import { revalidatePath } from 'next/cache';
 import { syncSpilloverForTerm } from '@/app/admin/actions';
-import { AUTO_SPILLOVER_NAPOMENA, TIME_SLOTS, slotsNeeded } from '@/lib/constants';
+import { AUTO_SPILLOVER_NAPOMENA, TIME_SLOTS, slotsNeeded, NASTAVAK_ZAUZET_PORUKA } from '@/lib/constants';
 import { deteImaZahtev, instruktorSlobodanZaNastavak, trajanjeVrste, ucionicaRezervisana } from '@/lib/zauzetost-zahteva';
 import { SEEDED_TERM_CATEGORY_INDIVIDUAL_ID } from '@/lib/term-categories';
 import { logActivity, getInstructorActor } from '@/lib/audit';
@@ -564,11 +564,13 @@ export async function createBulkTermsAsInstructor(
       let termId: string;
       const { data: existingTerm } = await admin
         .from('terms')
-        .select('id')
+        .select('id, napomena')
         .eq('instructor_id', instructor.id)
         .eq('date', s.date)
         .eq('slot_index', s.slotIndex)
         .maybeSingle();
+      // Automatski nastavak tuđeg dužeg časa nije mesto za drugo dete (posle bi se obrisao sa njim).
+      if (existingTerm?.napomena === AUTO_SPILLOVER_NAPOMENA) return { ...s, error: NASTAVAK_ZAUZET_PORUKA };
       // Pre pravljenja termina: dete tada nema čas bez instruktora, a za duži čas ste slobodni i posle.
       const zahtevPoruka = await deteImaZahtev(admin, clientId, s.date.slice(0, 10), s.slotIndex);
       if (zahtevPoruka) return { ...s, error: zahtevPoruka };

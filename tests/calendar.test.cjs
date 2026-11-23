@@ -72,6 +72,7 @@ function actionsFor(role, db, events = [], refreshed = []) {
   return loadSource('src/app/admin/actions.ts', {
     '@/lib/scheduling-access': { requireSchedulingAccess: accessFor(role, db) },
     '@/lib/payment-starts': loadSource('src/lib/payment-starts.ts'),
+    '@/lib/napomena-termina': loadSource('src/lib/napomena-termina.ts'),
     '@/lib/auth': {
       getAuthedUser: async () => ({ user: role === 'anonymous' ? null : { id: 'logged-in-user' } }),
       getIsAdmin: async () => role === 'admin',
@@ -182,6 +183,7 @@ const Calendar = loadSource('src/app/dashboard/CalendarView.tsx', {
   'next/link': ({ children, ...props }) => { calendarLinks.push({ ...props }); delete props.prefetch; return React.createElement('a', props, children); },
   '@/lib/use-kalendar-realtime': { useKalendarRealtime() {} },
   '@/components/KalendarVeza': () => null,
+  '@/components/Oblacic': { __esModule: true, default: ({ children }) => children, OblacicRed: ({ children }) => children },
   '@/lib/constants': constants,
   '@/app/dashboard/termin/actions': { moveTermAsInstructor() {} },
 }).default;
@@ -361,6 +363,7 @@ for (const mode of ['admin', 'instructor']) {
       '@/app/admin/termin/novi/AdminTerminForm': Form,
       '@/lib/constants': constants,
       '@/lib/settings': { getMaxTerminaPoSlotu: async () => 4 },
+      '@/lib/svi-redovi': loadSource('src/lib/svi-redovi.ts'),
       '@/app/admin/actions': {
         getTermTypes: async () => [], getTermCategories: async () => [], getAllClientsCompletedProgramIds: async () => new Map(),
         getTakenForSlot: async () => ({ takenInstructorIds: [], takenClassroomIds: [], blockedInstructorIds: [], blocked: null }),
@@ -606,4 +609,42 @@ test('daily backup is saved per day and only backups older than 90 days are remo
   assert.equal(uploads[0].opts.upsert, true);
   assert.deepEqual(removed.sort(), ['bekap-2026-01-01.json.gz', 'bekap-2026-08-24.json.gz']);
   assert.equal(res.obrisano, 2);
+});
+
+test('notes: appended once, replaced on request, automatic continuations untouched', async () => {
+  const { spojiNapomene } = loadSource('src/lib/napomena-termina.ts');
+  assert.equal(spojiNapomene(null, ' nadoknada '), 'nadoknada');
+  assert.equal(spojiNapomene('Doneti svesku', 'nadoknada'), 'Doneti svesku\nnadoknada');
+  assert.equal(spojiNapomene('Doneti svesku\nnadoknada', 'nadoknada'), 'Doneti svesku\nnadoknada');
+
+  const db = database((q) => {
+    if (q.table === 'terms' && q.operation === 'select') {
+      return { data: [
+        { id: 'term-1', napomena: 'Doneti svesku' },
+        { id: 'spill', napomena: 'Automatski zauzeto (nastavak dužeg časa)' },
+      ], error: null };
+    }
+    if (q.table === 'zahtevi_za_cas' && q.operation === 'select') return { data: [{ id: 'req-1', napomena: null }], error: null };
+    return { data: null, error: null };
+  });
+  const res = await actionsFor('admin', db).postaviNapomenuAsAdmin(['term-1', 'spill'], ['req-1'], 'nadoknada', false);
+  assert.equal(res.promenjeno, 2);
+  const updates = db.queries.filter((q) => q.operation === 'update');
+  assert.deepEqual(updates.map((q) => [q.table, q.values.napomena, q.filters[0][1]]), [
+    ['terms', 'Doneti svesku\nnadoknada', 'term-1'],
+    ['zahtevi_za_cas', 'nadoknada', 'req-1'],
+  ]);
+
+  const db2 = database(() => ({ data: [], error: null }));
+  await actionsFor('admin', db2).createBulkZahteviAsAdmin('child', null, [{ date: '2026-11-24', slotIndex: 2 }], null, ' nadoknada ');
+  assert.equal(db2.queries.find((q) => q.table === 'zahtevi_za_cas' && q.operation === 'insert').values[0].napomena, 'nadoknada');
+});
+
+test('full lists are read in pages so children past the first 1000 rows are not lost', async () => {
+  const { sviRedovi } = loadSource('src/lib/svi-redovi.ts');
+  const svi = Array.from({ length: 1234 }, (_, i) => ({ id: i }));
+  const pozivi = [];
+  const redovi = await sviRedovi(async (od, doReda) => { pozivi.push([od, doReda]); return { data: svi.slice(od, doReda + 1), error: null }; });
+  assert.equal(redovi.length, 1234);
+  assert.deepEqual(pozivi, [[0, 499], [500, 999], [1000, 1499]]);
 });

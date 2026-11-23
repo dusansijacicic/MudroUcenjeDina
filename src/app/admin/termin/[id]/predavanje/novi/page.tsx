@@ -6,6 +6,7 @@ import { getMaxCasovaPoTerminu } from '@/lib/settings';
 import { TIME_SLOTS } from '@/lib/constants';
 import { getTermTypes, getClassrooms, getStanjePoVrstamaZaKlijenteBatch, getAllClientsCompletedProgramIds, type StanjeVrstaRow } from '@/app/admin/actions';
 import AdminPredavanjeForm from '@/app/admin/termin/AdminPredavanjeForm';
+import { sviRedovi } from '@/lib/svi-redovi';
 
 export default async function AdminNoviPredavanjePage({
   params,
@@ -34,7 +35,7 @@ export default async function AdminNoviPredavanjePage({
     .map((t: { classroom_id: string | null }) => t.classroom_id)
     .filter((id: string | null): id is string => id != null);
 
-  const { data: allClients } = await admin.from('clients').select('id, ime, prezime, godiste, datum_testiranja').order('prezime').order('ime');
+  const allClients = await sviRedovi((od, doReda) => admin.from('clients').select('id, ime, prezime, godiste, datum_testiranja').order('prezime').order('ime').order('id').range(od, doReda));
   const clients = (allClients ?? []).map((c) => ({
     id: c.id,
     ime: c.ime ?? '',

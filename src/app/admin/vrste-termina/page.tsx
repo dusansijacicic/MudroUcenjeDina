@@ -3,6 +3,7 @@ import { getAuthedUser, getIsAdmin } from '@/lib/auth';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import TermTypesForm from './TermTypesForm';
+import ObnoviNastavkeDugme from './ObnoviNastavkeDugme';
 import DeleteTermTypeButton from './DeleteTermTypeButton';
 import { getPrograms } from '@/app/admin/actions';
 
@@ -26,6 +27,7 @@ export default async function AdminVrsteTerminaPage() {
         Dodajte vrste termina (npr. individualni, grupa) i cenu po času. One se mogu dodeliti radionicama. Svaka vrsta pripada
         jednom programu (Admin → Programi).
       </p>
+      <ObnoviNastavkeDugme />
       <TermTypesForm programs={programs} />
       <div className="mt-6 rounded-xl border border-stone-200 bg-white divide-y divide-stone-100">
         {(rows ?? []).length === 0 ? (

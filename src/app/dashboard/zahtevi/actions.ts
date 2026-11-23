@@ -7,8 +7,9 @@ import { SEEDED_TERM_CATEGORY_INDIVIDUAL_ID } from '@/lib/term-categories';
 import { syncSpilloverForTerm } from '@/app/admin/actions';
 import { revalidatePath } from 'next/cache';
 import { logActivity, getInstructorActor } from '@/lib/audit';
-import { TIME_SLOTS, slotsNeeded } from '@/lib/constants';
+import { TIME_SLOTS, slotsNeeded, AUTO_SPILLOVER_NAPOMENA, NASTAVAK_ZAUZET_PORUKA } from '@/lib/constants';
 import { instruktorSlobodanZaNastavak, trajanjeVrste } from '@/lib/zauzetost-zahteva';
+import { dodajNapomenuTerminu } from '@/lib/napomena-termina';
 
 function getAdmin() {
   try {
@@ -116,11 +117,13 @@ export async function potvrdiZahtev(zahtevId: string): Promise<{ error?: string 
   let termId: string;
   const { data: existing } = await admin
     .from('terms')
-    .select('id')
+    .select('id, napomena')
     .eq('instructor_id', targetInstructorId)
     .eq('date', dateStr)
     .eq('slot_index', slot)
     .single();
+  // Automatski nastavak tuđeg dužeg časa nije mesto za drugo dete (posle bi se obrisao sa njim).
+  if (existing?.napomena === AUTO_SPILLOVER_NAPOMENA) return { error: NASTAVAK_ZAUZET_PORUKA };
   // Duži čas zauzima i sledeće vreme – instruktor tada mora biti slobodan (inače bi se preklopio).
   const nastavakGreska = await instruktorSlobodanZaNastavak(
     admin,
@@ -152,6 +155,8 @@ export async function potvrdiZahtev(zahtevId: string): Promise<{ error?: string 
   }
 
   await applyZahtevClassroom(admin, zahtev.classroom_id ?? null, termId, dateStr, slot);
+  // Napomena časa (migracija 060) prelazi na termin.
+  await dodajNapomenuTerminu(admin, termId, (zahtev as { napomena?: string | null }).napomena);
 
   const limitCheck = await termMozeNovoPredavanje(termId);
   if (!limitCheck.ok) {
@@ -227,11 +232,13 @@ export async function promeniTerminZahtev(
   let termId: string;
   const { data: existing } = await admin
     .from('terms')
-    .select('id')
+    .select('id, napomena')
     .eq('instructor_id', targetInstructorId)
     .eq('date', dateStr)
     .eq('slot_index', slot)
     .single();
+  // Automatski nastavak tuđeg dužeg časa nije mesto za drugo dete (posle bi se obrisao sa njim).
+  if (existing?.napomena === AUTO_SPILLOVER_NAPOMENA) return { error: NASTAVAK_ZAUZET_PORUKA };
   // Duži čas zauzima i sledeće vreme – instruktor tada mora biti slobodan (inače bi se preklopio).
   const nastavakGreska = await instruktorSlobodanZaNastavak(
     admin,
@@ -263,6 +270,8 @@ export async function promeniTerminZahtev(
   }
 
   await applyZahtevClassroom(admin, zahtev.classroom_id ?? null, termId, dateStr, slot);
+  // Napomena časa (migracija 060) prelazi na termin.
+  await dodajNapomenuTerminu(admin, termId, (zahtev as { napomena?: string | null }).napomena);
 
   const limitCheck = await termMozeNovoPredavanje(termId);
   if (!limitCheck.ok) {
