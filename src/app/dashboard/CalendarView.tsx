@@ -594,7 +594,7 @@ function CalendarWeek({
             const term = termByKey(terms, date, slotIndex);
             const otherTermsInSlot = otherTermsByKey(otherTerms, date, slotIndex);
             return (
-              <td key={date} className={`p-1 align-top${idx === 7 ? ' border-l-2 border-stone-300' : ''}`}>
+              <td key={date} className={`p-1 align-top${idx === 7 ? ' kalendar-nova-nedelja' : ''}`}>
                 <CellContent
                   term={term}
                   otherTermsInSlot={otherTermsInSlot}
@@ -635,15 +635,15 @@ function CalendarWeek({
       </div>
 
       {/* Desktop (lg+): obe nedelje, netaknuto. */}
-      <div className="hidden lg:block overflow-x-auto rounded-xl border border-stone-200 bg-white">
-        <table className="w-full min-w-[1400px] text-sm">
+      <div className="hidden lg:block overflow-x-auto rounded-xl border-2 border-stone-700 bg-white">
+        <table className="kalendar-mreza w-full min-w-[1400px] text-sm">
           <thead>
             <tr className="border-b border-stone-100 bg-stone-50/60">
               <th className="sticky left-0 z-20 bg-stone-50 w-16 p-2" rowSpan={2} />
               <th colSpan={7} className="px-2 py-1.5 text-center text-xs font-semibold text-stone-500 uppercase tracking-wide border-r border-stone-200">
                 Ova nedelja — {formatWeekLabel(startOfWeek)}
               </th>
-              <th colSpan={7} className="px-2 py-1.5 text-center text-xs font-semibold text-amber-700 uppercase tracking-wide">
+              <th colSpan={7} className="kalendar-nova-nedelja px-2 py-1.5 text-center text-xs font-semibold text-amber-700 uppercase tracking-wide">
                 Sledeća nedelja — {formatWeekLabel(week2Start)}
               </th>
             </tr>
@@ -653,7 +653,7 @@ function CalendarWeek({
                 return (
                   <th
                     key={date}
-                    className={`p-2 text-center text-stone-600 font-medium min-w-[90px]${idx === 7 ? ' border-l-2 border-stone-300' : ''}`}
+                    className={`p-2 text-center text-stone-600 font-medium min-w-[90px]${idx === 7 ? ' kalendar-nova-nedelja' : ''}`}
                   >
                     <div>{DAY_NAMES[d.getDay() === 0 ? 6 : d.getDay() - 1]}</div>
                     <div className="text-stone-400">{d.getDate()}.{d.getMonth() + 1}.</div>
@@ -669,8 +669,8 @@ function CalendarWeek({
       {/* Tablet + telefon (<lg): cela nedelja, 7 kolona, horizontalni skrol po potrebi. Sopstveni
           vertikalni skrol (max-h + overflow-y) da bi "sticky top" lepio zaglavlje za VRH OVOG
           OKVIRA, nezavisno od sticky nav-a iznad. */}
-      <div className="lg:hidden overflow-auto max-h-[70vh] rounded-xl border border-stone-200 bg-white">
-        <table className="w-full min-w-[700px] text-sm">
+      <div className="lg:hidden overflow-auto max-h-[70vh] rounded-xl border-2 border-stone-700 bg-white">
+        <table className="kalendar-mreza w-full min-w-[700px] text-sm">
           <thead>
             <tr className="border-b border-stone-200 bg-stone-50/60">
               <th className="sticky left-0 top-0 z-30 bg-stone-50 w-16 p-2" />
@@ -787,7 +787,7 @@ function DayAgenda({
   onDropCell: (date: string, slot: number) => void | Promise<void>;
 }) {
   return (
-    <div className="rounded-xl border border-stone-200 bg-white divide-y-2 divide-stone-200">
+    <div className="rounded-xl border-2 border-stone-700 bg-white divide-y divide-stone-600">
       {TIME_SLOTS.map((time, slotIndex) => {
         const term = termByKey(terms, date, slotIndex);
         const otherTermsInSlot = otherTermsByKey(otherTerms, date, slotIndex);
@@ -902,8 +902,8 @@ function CalendarMonth({
           </Link>
         </div>
       </div>
-      <div className="rounded-xl border border-stone-200 bg-white overflow-hidden">
-        <div className="grid grid-cols-7 border-b border-stone-200 bg-stone-50">
+      <div className="rounded-xl border-2 border-stone-700 bg-white overflow-hidden">
+        <div className="grid grid-cols-7 border-b border-stone-600 bg-stone-50">
           {DAY_NAMES.map((d) => (
             <div key={d} className="p-2 text-center text-sm font-medium text-stone-600">
               {d}
@@ -913,7 +913,7 @@ function CalendarMonth({
         <div className="grid grid-cols-7">
           {days.map((date, i) => {
             if (!date) {
-              return <div key={`e-${i}`} className="min-h-[80px] border-b border-r border-stone-100 bg-stone-50/50" />;
+              return <div key={`e-${i}`} className="min-h-[80px] border-b border-r border-stone-600 bg-stone-50/50" />;
             }
             const dayTerms = [...terms, ...otherTerms]
               .filter((t) => t.date === date)
@@ -922,7 +922,7 @@ function CalendarMonth({
             return (
               <div
                 key={date}
-                className="min-h-[80px] border-b border-r border-stone-100 p-1"
+                className="min-h-[80px] border-b border-r border-stone-600 p-1"
               >
                 <div className="text-xs text-stone-400 mb-1">
                   {new Date(date + 'T12:00:00').getDate()}.

@@ -226,3 +226,28 @@ input:focus, select:focus, textarea:focus {
     margin: 10mm;
   }
 }
+
+/* ── Mreža kalendara: jasna tamna linija oko svakog termina (dan × vreme) ──────────────────────────
+   Odvojene ivice (separate) umesto spojenih: zamrznuta kolona vremena i zaglavlje zadržavaju svoje linije
+   dok se klizi. Granica nedelje je deblja i crna (klasa .kalendar-nova-nedelja na prvoj ćeliji nedelje). */
+.kalendar-mreza {
+  --mreza-linija: #57534e;
+  --mreza-nedelja: #1c1917;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+.kalendar-mreza > thead > tr > th,
+.kalendar-mreza > tbody > tr > td {
+  border-right: 1px solid var(--mreza-linija);
+  border-bottom: 1px solid var(--mreza-linija);
+}
+.kalendar-mreza > thead > tr > :last-child,
+.kalendar-mreza > tbody > tr > :last-child {
+  border-right: 0;
+}
+.kalendar-mreza > tbody > tr:last-child > td {
+  border-bottom: 0;
+}
+.kalendar-mreza .kalendar-nova-nedelja {
+  border-left: 3px solid var(--mreza-nedelja);
+}

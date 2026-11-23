@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 
 /** Posle ovoliko ms držanja miša iznad časa iskoči oblačić (da ne treperi dok se miš samo prevlači). */
@@ -9,13 +9,30 @@ const KASNJENJE_MS = 200;
 const POLA_SIRINE = 160;
 
 /** Boja zaglavlja i ikonica po vrsti oblačića. */
-export type OblacicTon = 'napomena' | 'naplacen' | 'otkazan' | 'izuzetak';
+export type OblacicTon = 'napomena' | 'naplacen' | 'otkazan' | 'izuzetak' | 'placeno' | 'nijePlaceno' | 'termin';
 const TONOVI: Record<OblacicTon, { ikona: string; pozadina: string; ivica: string; tekst: string }> = {
   napomena: { ikona: '💬', pozadina: '#fef3c7', ivica: '#fcd34d', tekst: '#78350f' },
+  placeno: { ikona: '💰', pozadina: '#d1fae5', ivica: '#6ee7b7', tekst: '#064e3b' },
+  nijePlaceno: { ikona: '!', pozadina: '#fee2e2', ivica: '#fca5a5', tekst: '#7f1d1d' },
+  termin: { ikona: '🗓', pozadina: '#e0f2fe', ivica: '#7dd3fc', tekst: '#0c4a6e' },
   naplacen: { ikona: '💰', pozadina: '#e0e7ff', ivica: '#a5b4fc', tekst: '#312e81' },
   otkazan: { ikona: '✕', pozadina: '#f5f5f4', ivica: '#d6d3d1', tekst: '#44403c' },
   izuzetak: { ikona: '⇄', pozadina: '#ede9fe', ivica: '#c4b5fd', tekst: '#4c1d95' },
 };
+
+// Oblačići jedan u drugom (dete u terminu): prikazuje se samo poslednji u koji je miš ušao (najdublji).
+let otvoreni: string[] = [];
+const slusaoci = new Set<() => void>();
+function postaviOtvorene(novi: string[]) {
+  otvoreni = novi;
+  slusaoci.forEach((f) => f());
+}
+function pretplati(f: () => void) {
+  slusaoci.add(f);
+  return () => {
+    slusaoci.delete(f);
+  };
+}
 
 /**
  * Oblačić za kalendar: napomena časa, razlog otkazivanja i sl. se NE ispisuju u rasporedu, nego se vide
@@ -27,6 +44,7 @@ export default function Oblacic({
   sadrzaj,
   naslov,
   ton = 'napomena',
+  kasnjenje = KASNJENJE_MS,
   children,
   className,
 }: {
@@ -34,9 +52,17 @@ export default function Oblacic({
   /** Naslov u zaglavlju (npr. „Napomena“, „Otkazan čas · naplaćen“). */
   naslov?: string;
   ton?: OblacicTon;
+  /** ms do pojavljivanja (opšti podaci termina – duže, da ne iskaču dok se miš samo prevlači). */
+  kasnjenje?: number;
   children: ReactNode;
   className?: string;
 }) {
+  const id = useId();
+  const naVrhu = useSyncExternalStore(
+    pretplati,
+    () => otvoreni[otvoreni.length - 1] === id,
+    () => false
+  );
   const ref = useRef<HTMLDivElement>(null);
   const tajmer = useRef<number | undefined>(undefined);
   const [poz, setPoz] = useState<{ x: number; y: number; ispod: boolean } | null>(null);
@@ -52,23 +78,32 @@ export default function Oblacic({
       window.removeEventListener('resize', zatvori);
     };
   }, [poz]);
-  useEffect(() => () => window.clearTimeout(tajmer.current), []);
+  useEffect(
+    () => () => {
+      window.clearTimeout(tajmer.current);
+      postaviOtvorene(otvoreni.filter((x) => x !== id));
+    },
+    [id]
+  );
 
   if (!sadrzaj) return <>{children}</>;
 
   const t = TONOVI[ton];
   const otvori = () => {
     window.clearTimeout(tajmer.current);
+    // Ulazak u unutrašnji oblačić ga stavlja na vrh – spoljašnji se tada ne prikazuje.
+    postaviOtvorene([...otvoreni.filter((x) => x !== id), id]);
     tajmer.current = window.setTimeout(() => {
       const r = ref.current?.getBoundingClientRect();
       if (!r) return;
       const ispod = r.top < 180;
       const x = Math.min(Math.max(r.left + r.width / 2, POLA_SIRINE + 8), window.innerWidth - POLA_SIRINE - 8);
       setPoz({ x, y: ispod ? r.bottom + 10 : r.top - 10, ispod });
-    }, KASNJENJE_MS);
+    }, kasnjenje);
   };
   const zatvori = () => {
     window.clearTimeout(tajmer.current);
+    postaviOtvorene(otvoreni.filter((x) => x !== id));
     setPoz(null);
   };
 
@@ -76,6 +111,7 @@ export default function Oblacic({
     <div ref={ref} className={className} onMouseEnter={otvori} onMouseLeave={zatvori}>
       {children}
       {poz &&
+        naVrhu &&
         createPortal(
           // Spoljni sloj samo postavlja mesto (transform); kartica unutra ima animaciju pojavljivanja.
           <div

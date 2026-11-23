@@ -2767,24 +2767,25 @@ function TermCardVisual({ term, rowOffset = 0 }: { term: AdminTerm; rowOffset?: 
 
   return (
     <Oblacic
-      naslov={napomena ? 'Napomena' : 'Izuzetak: dupliranje predavača'}
-      ton={napomena ? 'napomena' : 'izuzetak'}
+      naslov={napomena ? 'Napomena' : term.dozvoli_preklapanje ? 'Izuzetak: dupliranje predavača' : 'Termin'}
+      ton={napomena ? 'napomena' : term.dozvoli_preklapanje ? 'izuzetak' : 'termin'}
+      kasnjenje={napomena || term.dozvoli_preklapanje ? undefined : 500}
       sadrzaj={
-        napomena || term.dozvoli_preklapanje ? (
-          <>
-            {napomena && <OblacicRed>{napomena}</OblacicRed>}
-            {term.dozvoli_preklapanje && (
-              <OblacicRed naslov={napomena ? 'Izuzetak ⇄' : undefined}>
-                Predavač u ovom bloku ima još jedan čas (dupliranje predavača).
-              </OblacicRed>
-            )}
-          </>
-        ) : null
+        <>
+          {napomena && <OblacicRed>{napomena}</OblacicRed>}
+          {term.dozvoli_preklapanje && (
+            <OblacicRed naslov={napomena ? 'Izuzetak ⇄' : undefined}>
+              Predavač u ovom bloku ima još jedan čas (dupliranje predavača).
+            </OblacicRed>
+          )}
+          <OblacicRed naslov="Predavač">{instructorName}</OblacicRed>
+          <OblacicRed naslov="Učionica">{classroomName ?? 'bez učionice'}</OblacicRed>
+          {!isTesting && vrsta && <OblacicRed naslov="Vrsta časa">{vrsta}</OblacicRed>}
+        </>
       }
     >
     <div
       className={`rounded-lg border bg-white overflow-hidden text-sm ${anyUnpaid ? 'border-red-500 ring-1 ring-red-500' : 'border-stone-200'}`}
-      title={napomena || term.dozvoli_preklapanje ? undefined : `${instructorName} · ${classroomName ? `učionica ${classroomName}` : 'bez učionice'}`}
     >
       <div className="flex items-baseline justify-between gap-1 px-2 py-0.5 text-[11px] leading-tight">
         <span className="font-semibold truncate" style={{ color: instructorColor }}>
@@ -2838,6 +2839,17 @@ function TermCardVisual({ term, rowOffset = 0 }: { term: AdminTerm; rowOffset?: 
                 return {
                   key: pc.id,
                   content: (
+                    <Oblacic
+                      naslov="Označi plaćeno"
+                      ton="placeno"
+                      sadrzaj={
+                        swap.paidMode ? (
+                          <OblacicRed naslov={`${ime} (testiranje)`}>
+                            {pc.placeno ? 'Klik: skida se oznaka „plaćeno“.' : 'Klik: testiranje je plaćeno.'}
+                          </OblacicRed>
+                        ) : null
+                      }
+                    >
                     <div
                       style={rowStyle(i)}
                       role={klik ? 'button' : undefined}
@@ -2852,7 +2864,6 @@ function TermCardVisual({ term, rowOffset = 0 }: { term: AdminTerm; rowOffset?: 
                             }
                           : undefined
                       }
-                      title={swap.paidMode ? (pc.placeno ? 'Klik: skini oznaku plaćeno' : 'Klik: testiranje je plaćeno') : undefined}
                       className={`px-2 py-1 text-[12px] leading-snug text-stone-900${klik ? ' cursor-pointer hover:brightness-95' : ''}${
                         otkazuje ? ' ring-2 ring-inset ring-stone-700' : ''
                       }${placenoStanje === 'dodaj' ? ' ring-2 ring-inset ring-emerald-600' : placenoStanje === 'ukloni' ? ' ring-2 ring-inset ring-red-600' : ''}`}
@@ -2869,6 +2880,7 @@ function TermCardVisual({ term, rowOffset = 0 }: { term: AdminTerm; rowOffset?: 
                         <span className="block text-[11px] font-semibold text-emerald-700">💰 plaćeno</span>
                       ) : null}
                     </div>
+                    </Oblacic>
                   ),
                 };
               })}
@@ -2889,10 +2901,28 @@ function TermCardVisual({ term, rowOffset = 0 }: { term: AdminTerm; rowOffset?: 
                 const klik = !!paidPick;
                 const otkaziKey = `p:${p.id}`;
                 const otkazuje = swap.cancelMode && swap.isCancelSelected(otkaziKey);
+                // Oblačić deteta (umesto crnog sistemskog teksta): u modu Označi plaćeno – šta klik radi;
+                // inače koji je ovo plaćeni čas, ili da nije plaćen.
+                const neplacen = isUnpaid(p.redni);
+                const tVrsta = Array.isArray(p.term_type) ? p.term_type[0]?.naziv : p.term_type?.naziv;
+                const detaljiDeteta = klik ? (
+                  <OblacicRed>
+                    {swap.paidSamoJedan ? 'Klik: plaćen je samo ovaj čas.' : 'Klik: plaćeno od ovog časa – ovaj i sledećih 5 časova deteta.'}
+                  </OblacicRed>
+                ) : p.redni ? (
+                  <>
+                    <OblacicRed naslov={ime}>{redniTitle(p.redni)}</OblacicRed>
+                    {tVrsta && <OblacicRed naslov="Vrsta časa">{tVrsta}</OblacicRed>}
+                  </>
+                ) : null;
                 return (
+                  <Oblacic
+                    naslov={klik ? 'Označi plaćeno' : neplacen ? 'Nije plaćeno' : 'Plaćeni časovi'}
+                    ton={klik ? 'placeno' : neplacen ? 'nijePlaceno' : 'placeno'}
+                    sadrzaj={detaljiDeteta}
+                  >
                   <div
                     style={isUnpaid(p.redni) ? UNPAID_ROW_STYLE : rowStyle(i)}
-                    title={klik ? (swap.paidSamoJedan ? 'Plaćen samo ovaj čas' : 'Plaćeno od ovog časa (ovaj + 5 sledećih)') : redniTitle(p.redni)}
                     role={klik || swap.cancelMode ? 'button' : undefined}
                     onClick={
                       swap.cancelMode
@@ -2930,6 +2960,7 @@ function TermCardVisual({ term, rowOffset = 0 }: { term: AdminTerm; rowOffset?: 
                       </span>
                     ) : null}
                   </div>
+                  </Oblacic>
                 );
               })(),
             }))}
@@ -3055,6 +3086,11 @@ function AdminCellContent({
         // Status, razlog i instruktor se ne ispisuju u rasporedu – vide se u oblačiću.
         const otkOblacic = (
           <>
+            {swap.paidMode && (
+              <OblacicRed naslov="Označi plaćeno">
+                {ot.placeno ? 'Klik: skida se oznaka „naplaćeno“.' : 'Klik: otkazan čas je naplaćen (računa se u plaćene časove).'}
+              </OblacicRed>
+            )}
             <OblacicRed naslov="Razlog">
               {ot.razlog || <span className="italic text-stone-400">nije upisan</span>}
             </OblacicRed>
@@ -3077,7 +3113,6 @@ function AdminCellContent({
           >
           <div
             role={swap.deleteMode || swap.paidMode ? 'button' : undefined}
-            title={swap.paidMode ? (ot.placeno ? 'Klik: skini oznaku naplaćeno' : 'Klik: otkazan čas je naplaćen') : undefined}
             onClick={() => {
               if (swap.deleteMode) swap.onToggleOtkazaniDeleteSelect(ot.id);
               else if (swap.paidMode) {
@@ -3240,7 +3275,21 @@ function AdminCellContent({
           (swap.copyMode && swap.copySourceZahtevId === z.id) ||
           (swap.moveMode && swap.moveSourceZahtevId === z.id);
         return (
-          <Oblacic key={z.id} naslov="Napomena" ton="napomena" sadrzaj={z.napomena ? <OblacicRed>{z.napomena}</OblacicRed> : null}>
+          <Oblacic
+            key={z.id}
+            naslov={z.napomena ? 'Napomena' : z.redni ? (zahtevUnpaid ? 'Nije plaćeno' : 'Plaćeni časovi') : 'Čas bez instruktora'}
+            ton={z.napomena ? 'napomena' : z.redni ? (zahtevUnpaid ? 'nijePlaceno' : 'placeno') : 'termin'}
+            kasnjenje={z.napomena || z.redni ? undefined : 500}
+            sadrzaj={
+              <>
+                {z.napomena && <OblacicRed>{z.napomena}</OblacicRed>}
+                {z.redni && <OblacicRed naslov={z.napomena ? 'Plaćeni časovi' : undefined}>{redniTitle(z.redni)}</OblacicRed>}
+                <OblacicRed naslov="Čeka predavača">
+                  {zahtevDraggable ? 'Prevucite mišem u drugo vreme da ga premestite, ili dodelite instruktora (Dodeli).' : 'Dodelite instruktora modom Dodeli.'}
+                </OblacicRed>
+              </>
+            }
+          >
           <div
             role={zahtevClickable ? 'button' : undefined}
             draggable={zahtevDraggable}
@@ -3248,7 +3297,6 @@ function AdminCellContent({
             onDragEnd={zahtevDraggable ? () => setDraggedTermId(null) : undefined}
             onClick={(e) => klikNaZahtev(z, e)}
             data-zahtev-date={z.date}
-            title={z.napomena ? undefined : redniTitle(z.redni) ?? (zahtevDraggable ? 'Prevucite mišem u drugo vreme da ga premestite' : undefined)}
             // Izgleda kao običan termin (zaglavlje: instruktor · vrsta · učionica, pa red deteta) – samo
             // umesto instruktora piše „bez instruktora“ i okvir je isprekidan.
             className={`overflow-hidden rounded-lg border-2 border-dashed bg-white text-sm${
@@ -3271,7 +3319,6 @@ function AdminCellContent({
           >
             <div
               className="flex items-baseline justify-between gap-1 bg-amber-50 px-2 py-0.5 text-[11px] leading-tight"
-              title={`bez instruktora · ${z.classroom_naziv ? `učionica ${z.classroom_naziv}` : 'bez učionice'}${z.term_type_naziv ? '' : ' · bez vrste'}`}
             >
               <span className="truncate font-semibold text-amber-700">bez instruktora</span>
               <span className="flex min-w-0 items-baseline gap-1">
@@ -3315,11 +3362,21 @@ function AdminCellContent({
         );
       })}
       {zahtevNastavci.map((n) => (
-        <div
+        <Oblacic
           key={n.key}
+          naslov="Nastavak dužeg časa"
+          ton="termin"
+          kasnjenje={400}
+          sadrzaj={
+            <OblacicRed naslov={n.ime}>
+              Čas bez instruktora traje {n.trajanje} min – zauzima i ovo vreme (za to dete i učionicu). Kad dobije instruktora, ovde ostaje
+              „Nastavak dužeg časa“.
+            </OblacicRed>
+          }
+        >
+        <div
           role={zahtevClickable ? 'button' : undefined}
           onClick={(e) => klikNaZahtev(n.zahtev, e)}
-          title={`Čas bez instruktora traje ${n.trajanje} min – zauzima i ovo vreme (za to dete i učionicu). Kad dobije instruktora, ovde ostaje „Nastavak dužeg časa“.`}
           className={`rounded-lg border-2 border-dashed border-amber-300 bg-stone-50 p-2 text-xs text-stone-500${
             zahtevClickable ? ' cursor-pointer' : ''
           }${zahtevNekakoIzabran(n.zahtevId) ? ' ring-2 ring-offset-1 ring-amber-500' : ''}`}
@@ -3329,6 +3386,7 @@ function AdminCellContent({
             {n.ime} · <span className="text-amber-700">bez instruktora</span>
           </span>
         </div>
+        </Oblacic>
       ))}
     </div>
   ) : null;
@@ -3741,9 +3799,9 @@ function AdminWeekView({
         <GridHoverHighlight containerRef={gridRef} />
         <div
           ref={okvirRef}
-          className="overflow-x-auto overscroll-x-contain snap-x snap-proximity scroll-pl-16 rounded-xl border border-stone-200 bg-white"
+          className="overflow-x-auto overscroll-x-contain snap-x snap-proximity scroll-pl-16 rounded-xl border-2 border-stone-700 bg-white"
         >
-          <table ref={tabelaRef} className="w-full text-sm" style={{ minWidth: 64 + dates.length * 100 }}>
+          <table ref={tabelaRef} className="kalendar-mreza w-full text-sm" style={{ minWidth: 64 + dates.length * 100 }}>
             {/* relative + z-20 + neprovidna pozadina: zamrznuto zaglavlje (useStickyThead) prekriva termine ispod sebe */}
             <thead className="relative z-20 bg-white shadow-[0_1px_0_0_#e7e5e4]">
               <tr className="border-b border-stone-100 bg-stone-50">
@@ -3755,7 +3813,7 @@ function AdminWeekView({
                       key={weekStart}
                       colSpan={7}
                       className={`px-2 py-1.5 text-center text-xs font-semibold uppercase tracking-wide${
-                        i > 0 ? ' border-l-2 border-stone-300' : ''
+                        i > 0 ? ' kalendar-nova-nedelja' : ''
                       }${trenutna ? ' bg-amber-50 text-amber-800' : ' text-stone-500'}`}
                     >
                       {nazivNedelje(weekStart, trenutnaNedelja)} — {formatWeekLabel(weekStart)}
@@ -3772,7 +3830,7 @@ function AdminWeekView({
                       data-date={date}
                       data-pocetak-nedelje={idx % 7 === 0 ? '' : undefined}
                       className={`snap-start min-w-[90px] p-2 text-center font-medium text-stone-600${
-                        idx > 0 && idx % 7 === 0 ? ' border-l-2 border-stone-300' : ''
+                        idx > 0 && idx % 7 === 0 ? ' kalendar-nova-nedelja' : ''
                       }`}
                     >
                       <div>{DAY_NAMES[d.getDay() === 0 ? 6 : d.getDay() - 1]}</div>
@@ -3791,7 +3849,7 @@ function AdminWeekView({
                       key={date}
                       data-date={date}
                       data-slot={slotIndex}
-                      className={`p-1 align-top${idx > 0 && idx % 7 === 0 ? ' border-l-2 border-stone-300' : ''}`}
+                      className={`p-1 align-top${idx > 0 && idx % 7 === 0 ? ' kalendar-nova-nedelja' : ''}`}
                     >
                       <AdminCellContent
                         termsInSlot={poCeliji.termini.get(`${date}|${slotIndex}`) ?? PRAZNA_CELIJA}
@@ -3932,7 +3990,7 @@ function AdminDayAgenda({
   maxTerminaPoSlotu: number;
 }) {
   return (
-    <div className="rounded-xl border border-stone-200 bg-white divide-y divide-stone-100">
+    <div className="rounded-xl border-2 border-stone-700 bg-white divide-y divide-stone-600">
       {TIME_SLOTS.map((time, slotIndex) => {
         const termsInSlot = termsByKey(terms, date, slotIndex);
         const otkazaniInSlot = otkazaniTermini.filter((ot) => ot.term_date === date && ot.slot_index === slotIndex);
@@ -4106,8 +4164,8 @@ function AdminMonthView({
 
   return (
     <div className="space-y-4">
-      <div className="rounded-xl border border-stone-200 bg-white overflow-hidden">
-        <div className="grid grid-cols-7 border-b border-stone-200 bg-stone-50">
+      <div className="rounded-xl border-2 border-stone-700 bg-white overflow-hidden">
+        <div className="grid grid-cols-7 border-b border-stone-600 bg-stone-50">
           {DAY_NAMES.map((d) => (
             <div key={d} className="p-2 text-center text-sm font-medium text-stone-600">{d}</div>
           ))}
@@ -4115,13 +4173,13 @@ function AdminMonthView({
         <div className="grid grid-cols-7">
           {days.map((date, i) => {
             if (!date) {
-              return <div key={`e-${i}`} className="min-h-[96px] border-b border-r border-stone-100 bg-stone-50/50" />;
+              return <div key={`e-${i}`} className="min-h-[96px] border-b border-r border-stone-600 bg-stone-50/50" />;
             }
             const entries = (entriesByDate.get(date) ?? []).sort((a, b) => a.slot - b.slot);
             const shown = showAll ? entries : entries.slice(0, MONTH_DAY_MAX);
             const dayHref = `${base}?view=dan&day=${date}${linkSuffix}`;
             return (
-              <div key={date} className="min-h-[96px] min-w-0 border-b border-r border-stone-100 p-1 flex flex-col gap-0.5">
+              <div key={date} className="min-h-[96px] min-w-0 border-b border-r border-stone-600 p-1 flex flex-col gap-0.5">
                 <Link prefetch={false} href={dayHref} className="self-start rounded px-1 text-xs text-stone-500 hover:bg-amber-50 hover:text-amber-800">
                   {new Date(date + 'T12:00:00').getDate()}.
                 </Link>
