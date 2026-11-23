@@ -548,3 +548,62 @@ test('occupied starts include long-class continuations and the requested class d
   assert.equal(occupied.has('2027-03-02|4'), false);
   assert.equal(occupied.has('2027-03-02|10'), false);
 });
+
+test('backup covers every table created by the migrations', () => {
+  const { BEKAP_TABELE } = loadSource('src/lib/bekap.ts', { 'server-only': {} });
+  const { readdirSync } = require('node:fs');
+  const dir = resolve(__dirname, '..', 'supabase', 'migrations');
+  const created = new Set();
+  for (const f of readdirSync(dir).filter((x) => x.endsWith('.sql'))) {
+    for (const m of readFileSync(resolve(dir, f), 'utf8').matchAll(/CREATE TABLE (?:IF NOT EXISTS )?(?:public\.)?(\w+)/gi)) created.add(m[1].toLowerCase());
+  }
+  created.delete('terms_new'); // privremena tabela iz migracije 002
+  const missing = [...created].filter((t) => !BEKAP_TABELE.includes(t));
+  assert.deepEqual(missing, []);
+});
+
+test('daily backup cron refuses calls without the secret', async () => {
+  let ran = 0;
+  const route = loadSource('src/app/api/cron/bekap/route.ts', {
+    '@/lib/supabase/admin': { createAdminClient: () => ({}) },
+    '@/lib/bekap': { sacuvajDnevniBekap: async () => { ran++; return { ime: 'bekap-2026-11-23.json.gz', redova: 1, velicina: 10, obrisano: 0, greskeTabela: {} }; } },
+  });
+  const old = process.env.CRON_SECRET;
+  const log = console.log, err = console.error;
+  console.log = () => {}; console.error = () => {};
+  try {
+    delete process.env.CRON_SECRET;
+    assert.equal((await route.GET(new Request('https://x/api/cron/bekap'))).status, 500);
+    process.env.CRON_SECRET = 'tajna';
+    assert.equal((await route.GET(new Request('https://x/api/cron/bekap', { headers: { authorization: 'Bearer pogresno' } }))).status, 401);
+    assert.equal(ran, 0);
+    assert.equal((await route.GET(new Request('https://x/api/cron/bekap', { headers: { authorization: 'Bearer tajna' } }))).status, 200);
+    assert.equal(ran, 1);
+  } finally {
+    if (old === undefined) delete process.env.CRON_SECRET; else process.env.CRON_SECRET = old;
+    console.log = log; console.error = err;
+  }
+});
+
+test('daily backup is saved per day and only backups older than 90 days are removed', async () => {
+  const { sacuvajDnevniBekap } = loadSource('src/lib/bekap.ts', { 'server-only': {} });
+  const uploads = [], removed = [];
+  const files = ['bekap-2026-11-22.json.gz', 'bekap-2026-08-25.json.gz', 'bekap-2026-08-24.json.gz', 'bekap-2026-01-01.json.gz', 'nesto-drugo.txt'];
+  const db = database(() => ({ data: [{ id: 1 }], error: null }));
+  const admin = {
+    from: db.from,
+    storage: {
+      getBucket: async () => ({ data: {}, error: null }),
+      from: () => ({
+        upload: async (ime, sadrzaj, opts) => { uploads.push({ ime, opts, size: sadrzaj.length }); return { error: null }; },
+        list: async () => ({ data: files.map((name) => ({ name, metadata: { size: 100 } })), error: null }),
+        remove: async (imena) => { removed.push(...imena); return { data: imena.map((name) => ({ name })), error: null }; },
+      }),
+    },
+  };
+  const res = await sacuvajDnevniBekap(admin, 'test', new Date('2026-11-23T01:30:00Z'));
+  assert.equal(res.ime, 'bekap-2026-11-23.json.gz');
+  assert.equal(uploads[0].opts.upsert, true);
+  assert.deepEqual(removed.sort(), ['bekap-2026-01-01.json.gz', 'bekap-2026-08-24.json.gz']);
+  assert.equal(res.obrisano, 2);
+});

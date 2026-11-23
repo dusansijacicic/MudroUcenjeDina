@@ -123,7 +123,7 @@ export default async function AdminUputstvoPage({ searchParams }: { searchParams
               Ko nije platio: posle potrošenih 6 časova kalendar pokazuje crveno <Crveno>! nije plaćeno</Crveno>; na stranici{' '}
               <Ui>Klijenti</Ui> crveno „nije plaćeno N“.
             </li>
-            <li>Kraj dana: <Ui>Podešavanja</Ui> → <Ui>⬇ Preuzmi bekap baze (JSON)</Ui>.</li>
+            <li>Bekap se pravi sam svake noći (čuva se 90 dana) – vidi <Ui>Podešavanja</Ui> → <Ui>Automatski dnevni bekap</Ui>.</li>
           </Koraci>
         </Sekcija>
 
@@ -622,8 +622,14 @@ export default async function AdminUputstvoPage({ searchParams }: { searchParams
             </li>
             <li>Kliknite <Ui>Sačuvaj podešavanja</Ui>.</li>
             <li>
-              <Ui>⬇ Preuzmi bekap baze (JSON)</Ui> – preuzima kompletnu kopiju podataka. Preporuka: jednom dnevno; fajl čuvajte na sigurnom
+              <Ui>⬇ Preuzmi bekap baze (JSON)</Ui> – odmah preuzima kompletnu kopiju podataka na vaš računar. Fajl čuvajte na sigurnom
               mestu jer sadrži lične podatke dece i roditelja.
+            </li>
+            <li>
+              <Ui>Automatski dnevni bekap</Ui>: svake noći oko 3 h cela baza se sama sačuva u privatnu arhivu aplikacije i čuva se 90 dana
+              (stariji se sami brišu). Zeleno „✓ Noćni bekap radi“ znači da je bekap od danas ili juče tu. Narandžasto upozorenje znači da
+              noćni bekap ne radi – tada u Vercel-u treba postaviti <code>CRON_SECRET</code>. <Ui>Sačuvaj bekap sada u arhivu</Ui> pravi
+              današnji odmah, a pod <Ui>Sačuvani bekapi</Ui> je spisak po danima sa <Ui>Preuzmi</Ui>.
             </li>
           </Koraci>
         </Sekcija>
