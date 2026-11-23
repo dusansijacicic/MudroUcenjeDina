@@ -39,7 +39,7 @@ import SingleKlijentPicker from '@/components/SingleKlijentPicker';
 import GrupniKlijentiPicker from '@/components/GrupniKlijentiPicker';
 import StickyBar from '@/components/StickyBar';
 import KalendarVeza from '@/components/KalendarVeza';
-import Oblacic, { OblacicRed } from '@/components/Oblacic';
+import Oblacic, { OblacicDugme, OblacicRed } from '@/components/Oblacic';
 import useStickyThead from '@/components/useStickyThead';
 import { NAREDNIH_NEDELJA_COOKIE, NAREDNIH_NEDELJA_DEFAULT, NAREDNIH_NEDELJA_MAX, nazivNedelje } from '@/lib/kalendar-nedelje';
 
@@ -2796,17 +2796,17 @@ function TermCardVisual({ term, rowOffset = 0 }: { term: AdminTerm; rowOffset?: 
         </span>
         <span className="flex min-w-0 items-baseline gap-1">
           {term.dozvoli_preklapanje && (
-            <span
-              aria-label="Izuzetak: dupliranje predavača – pređite mišem"
+            <OblacicDugme
+              oznaka="Izuzetak: dupliranje predavača – prikaži objašnjenje"
               className="shrink-0 rounded bg-violet-100 px-1 text-[10px] font-bold leading-tight text-violet-800"
             >
               ⇄
-            </span>
+            </OblacicDugme>
           )}
           {napomena && (
-            <span aria-label="Ima napomenu – pređite mišem" className="shrink-0 text-[12px] leading-none">
+            <OblacicDugme oznaka="Prikaži napomenu" className="shrink-0 text-[12px] leading-none">
               💬
-            </span>
+            </OblacicDugme>
           )}
           {!isTesting && vrsta && <span className="truncate text-stone-500">{vrsta}</span>}
           {classroomName && (
@@ -3177,9 +3177,9 @@ function AdminCellContent({
               </span>
             )}
             {ot.razlog && (
-              <span aria-label="Ima razlog otkazivanja – pređite mišem" className="block text-[12px] leading-none">
+              <OblacicDugme oznaka="Prikaži razlog otkazivanja" className="block text-[12px] leading-none">
                 💬
-              </span>
+              </OblacicDugme>
             )}
             {otkPaidState === 'dodaj' ? (
               <span className="block text-[11px] font-bold text-emerald-700">✓ naplaćeno</span>
@@ -3323,9 +3323,9 @@ function AdminCellContent({
               <span className="truncate font-semibold text-amber-700">bez instruktora</span>
               <span className="flex min-w-0 items-baseline gap-1">
                 {z.napomena && (
-                  <span aria-label="Ima napomenu – pređite mišem" className="shrink-0 text-[12px] leading-none">
+                  <OblacicDugme oznaka="Prikaži napomenu" className="shrink-0 text-[12px] leading-none">
                     💬
-                  </span>
+                  </OblacicDugme>
                 )}
                 {z.term_type_naziv && <span className="truncate text-stone-500">{z.term_type_naziv}</span>}
                 {z.classroom_naziv && (

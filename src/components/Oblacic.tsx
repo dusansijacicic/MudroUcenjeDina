@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useId, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useId, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 
 /** Posle ovoliko ms držanja miša iznad časa iskoči oblačić (da ne treperi dok se miš samo prevlači). */
@@ -32,6 +32,13 @@ function pretplati(f: () => void) {
   return () => {
     slusaoci.delete(f);
   };
+}
+
+/** Telefon/tablet (nema miša): oblačić se otvara tapom na ikonicu (OblacicDugme), ne prelaskom. */
+const OblacicKontekst = createContext<{ id: string; prikazi: () => void } | null>(null);
+
+function bezMisa(): boolean {
+  return typeof window !== 'undefined' && window.matchMedia?.('(hover: none)').matches === true;
 }
 
 /**
@@ -66,6 +73,8 @@ export default function Oblacic({
   const ref = useRef<HTMLDivElement>(null);
   const tajmer = useRef<number | undefined>(undefined);
   const [poz, setPoz] = useState<{ x: number; y: number; ispod: boolean } | null>(null);
+  // Otvoren tapom (telefon/tablet) – zatvara se tapom bilo gde drugde.
+  const [dodirom, setDodirom] = useState(false);
 
   // Oblačić nestaje čim se stranica pomeri (inače bi ostao na starom mestu).
   useEffect(() => {
@@ -85,29 +94,58 @@ export default function Oblacic({
     },
     [id]
   );
+  useEffect(() => {
+    if (!poz || !dodirom) return;
+    const van = (e: PointerEvent) => {
+      // Tap na ikonicu ovog oblačića ga sam zatvara (OblacicDugme); sve ostalo zatvara ovde.
+      if ((e.target as Element | null)?.closest?.(`[data-oblacic-ikonica="${CSS.escape(id)}"]`)) return;
+      setPoz(null);
+      setDodirom(false);
+      postaviOtvorene(otvoreni.filter((x) => x !== id));
+    };
+    document.addEventListener('pointerdown', van, true);
+    return () => document.removeEventListener('pointerdown', van, true);
+  }, [poz, dodirom, id]);
 
   if (!sadrzaj) return <>{children}</>;
 
   const t = TONOVI[ton];
+  const postavi = () => {
+    const r = ref.current?.getBoundingClientRect();
+    if (!r) return;
+    const ispod = r.top < 180;
+    const x = Math.min(Math.max(r.left + r.width / 2, POLA_SIRINE + 8), window.innerWidth - POLA_SIRINE - 8);
+    setPoz({ x, y: ispod ? r.bottom + 10 : r.top - 10, ispod });
+  };
   const otvori = () => {
+    // Na ekranu na dodir pregledač „glumi“ prelazak mišem pri tapu – tamo se otvara samo ikonicom.
+    if (bezMisa()) return;
     window.clearTimeout(tajmer.current);
     // Ulazak u unutrašnji oblačić ga stavlja na vrh – spoljašnji se tada ne prikazuje.
     postaviOtvorene([...otvoreni.filter((x) => x !== id), id]);
-    tajmer.current = window.setTimeout(() => {
-      const r = ref.current?.getBoundingClientRect();
-      if (!r) return;
-      const ispod = r.top < 180;
-      const x = Math.min(Math.max(r.left + r.width / 2, POLA_SIRINE + 8), window.innerWidth - POLA_SIRINE - 8);
-      setPoz({ x, y: ispod ? r.bottom + 10 : r.top - 10, ispod });
-    }, kasnjenje);
+    tajmer.current = window.setTimeout(postavi, kasnjenje);
   };
   const zatvori = () => {
+    if (dodirom) return;
     window.clearTimeout(tajmer.current);
     postaviOtvorene(otvoreni.filter((x) => x !== id));
     setPoz(null);
   };
+  const prikaziDodirom = () => {
+    window.clearTimeout(tajmer.current);
+    if (poz && dodirom) {
+      setPoz(null);
+      setDodirom(false);
+      postaviOtvorene(otvoreni.filter((x) => x !== id));
+      return;
+    }
+    postaviOtvorene([...otvoreni.filter((x) => x !== id), id]);
+    setDodirom(true);
+    postavi();
+  };
 
   return (
+    <OblacicKontekst.Provider value={{ id, prikazi: prikaziDodirom }}>
     <div ref={ref} className={className} onMouseEnter={otvori} onMouseLeave={zatvori}>
       {children}
       {poz &&
@@ -128,7 +166,8 @@ export default function Oblacic({
             <div
               className="animate-scale-in relative w-max overflow-visible rounded-xl border bg-white text-stone-800 shadow-xl"
               style={{
-                maxWidth: POLA_SIRINE * 2,
+                // Na uskom telefonu ne šire od ekrana.
+                maxWidth: `min(${POLA_SIRINE * 2}px, calc(100vw - 16px))`,
                 minWidth: 180,
                 borderColor: t.ivica,
                 transformOrigin: poz.ispod ? 'top center' : 'bottom center',
@@ -160,6 +199,36 @@ export default function Oblacic({
           document.body
         )}
     </div>
+    </OblacicKontekst.Provider>
+  );
+}
+
+/**
+ * Ikonica koja otvara oblačić tapom (telefon, tablet) ili klikom; na računaru oblačić iskače i na prelazak
+ * mišem. Klik ne otvara termin ispod (zaustavlja se).
+ */
+export function OblacicDugme({ children, className, oznaka }: { children: ReactNode; className?: string; oznaka: string }) {
+  const ctx = useContext(OblacicKontekst);
+  if (!ctx) return <span className={className}>{children}</span>;
+  const aktiviraj = (e: { preventDefault: () => void; stopPropagation: () => void }) => {
+    e.preventDefault();
+    e.stopPropagation();
+    ctx.prikazi();
+  };
+  return (
+    <span
+      role="button"
+      tabIndex={0}
+      aria-label={oznaka}
+      data-oblacic-ikonica={ctx.id}
+      className={`${className ?? ''} cursor-pointer`}
+      onClick={aktiviraj}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') aktiviraj(e);
+      }}
+    >
+      {children}
+    </span>
   );
 }
 

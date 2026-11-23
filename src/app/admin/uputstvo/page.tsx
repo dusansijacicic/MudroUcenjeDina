@@ -210,6 +210,12 @@ export default async function AdminUputstvoPage({ searchParams }: { searchParams
               Na tabletu i telefonu je u kartici skraćeno: inicijali instruktora (npr. „DM“) levo, a desno <strong>uč. 2</strong> = učionica
               (broj sa početka naziva, npr. „2-Sperry“).
             </li>
+            <li>
+              <strong>Oblačići</strong> (napomena, razlog otkazivanja, plaćeni časovi, podaci termina): na računaru iskaču kad se mišem
+              pređe preko termina ili deteta. Na telefonu i tabletu nema prelaska mišem – tapnite ikonicu <strong>💬</strong> (napomena,
+              razlog) ili <strong>⇄</strong> (izuzetak) i oblačić se otvori; tap bilo gde drugde ga zatvara. Tap na sam termin i dalje
+              otvara termin. Plaćeni časovi se na svim uređajima vide i u kartici („3/6 · još 3“).
+            </li>
           </Lista>
         </Sekcija>
 

@@ -4,7 +4,7 @@ import { createContext, useContext, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useKalendarRealtime } from '@/lib/use-kalendar-realtime';
 import KalendarVeza from '@/components/KalendarVeza';
-import Oblacic, { OblacicRed } from '@/components/Oblacic';
+import Oblacic, { OblacicDugme, OblacicRed } from '@/components/Oblacic';
 import { TIME_SLOTS, AUTO_SPILLOVER_NAPOMENA } from '@/lib/constants';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
@@ -365,9 +365,9 @@ function OtherTermCard({ term, own = false }: { term: OtherTerm; own?: boolean }
           />
           {isTesting && names.length === 0 && <span className="block text-stone-500">Nema prijavljenih</span>}
           {napomena && (
-            <span aria-label="Ima napomenu – pređite mišem" className="block mt-1 text-[12px] leading-none">
+            <OblacicDugme oznaka="Prikaži napomenu" className="block mt-1 text-[12px] leading-none">
               💬
-            </span>
+            </OblacicDugme>
           )}
           {term.request_id && <Link prefetch={false} href="/dashboard/zahtevi" className="block mt-1 text-amber-700 hover:underline">Pregled zahteva →</Link>}
         </>

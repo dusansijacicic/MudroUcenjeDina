@@ -185,7 +185,7 @@ const Calendar = loadSource('src/app/dashboard/CalendarView.tsx', {
   'next/link': ({ children, ...props }) => { calendarLinks.push({ ...props }); delete props.prefetch; return React.createElement('a', props, children); },
   '@/lib/use-kalendar-realtime': { useKalendarRealtime() {} },
   '@/components/KalendarVeza': () => null,
-  '@/components/Oblacic': { __esModule: true, default: ({ children }) => children, OblacicRed: ({ children }) => children },
+  '@/components/Oblacic': { __esModule: true, default: ({ children }) => children, OblacicRed: ({ children }) => children, OblacicDugme: ({ children }) => children },
   '@/lib/constants': constants,
   '@/app/dashboard/termin/actions': { moveTermAsInstructor() {} },
 }).default;
