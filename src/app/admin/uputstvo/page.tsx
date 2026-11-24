@@ -188,7 +188,11 @@ export default async function AdminUputstvoPage({ searchParams }: { searchParams
               časova tog deteta (sve vrste zajedno); posle njega ostaje još N. <span className="font-bold text-amber-700">6/6 · poslednji</span> = poslednji plaćeni
               čas – vreme za naplatu. Dete bez oznake nema natpis.
             </li>
-            <li><M n="F" /> Crveni red sa <Crveno>! nije plaćeno</Crveno> i crveni okvir termina = paket je potrošen, a ovaj čas nije plaćen.</li>
+            <li>
+              <M n="F" /> Crveni red sa <Crveno>! nije plaćeno</Crveno> i crveni okvir termina = paket je potrošen, a ovaj čas nije plaćen. Na
+              prvom takvom času deteta je zeleno dugme <strong>💰 +6</strong>: klik (uz potvrdu) označava narednih 6 časova kao plaćene od tog
+              časa – bez uključivanja moda Označi plaćeno.
+            </li>
             <li>
               <M n="G" /> Kartica sa isprekidanim narandžastim okvirom i „bez instruktora“ u zaglavlju = čas zakazan bez instruktora (izgleda
               i radi kao svaki drugi čas, samo mu fale polja); čeka da ga neki predavač preuzme. Ako je
@@ -480,8 +484,15 @@ export default async function AdminUputstvoPage({ searchParams }: { searchParams
               izabrano) → popunite → <Ui>Unesi uplatu</Ui>. Kod svake uplate su <Ui>Izmeni</Ui> i <Ui>Obriši</Ui>.
             </li>
             <li>
-              <Ui>Pregled termina</Ui>: levo zakazani (isprekidano = još bez instruktora), desno održani – sa vrstom časa, instruktorom i
-              cenom časa, i (ako je označeno plaćanje) koji je to čas od plaćenih. Klik na termin ga otvara.
+              <Ui>Pregled termina</Ui>: na vrhu pregled plaćanja – plaćeno u oznakama, održano plaćeno / nije plaćeno, zakazano plaćeno /
+              nije plaćeno (sve vrste zajedno). Ispod levo zakazani (isprekidano = još bez instruktora), desno održani – sa vrstom časa,
+              instruktorom i cenom časa. Kao na kalendaru: crveno = nije plaćeno, „x. čas od y plaćenih“, 💰 = odatle je označeno plaćeno,
+              indigo = otkazan a naplaćen. Klik na termin ga otvara.
+            </li>
+            <li>
+              <Ui>💰 Označi narednih 6 kao plaćeno</Ui> stoji pored prvog neplaćenog časa (i u pregledu plaćanja): jednim klikom, uz
+              potvrdu, taj čas i sledećih 5 su plaćeni. <Ui>samo ovaj čas</Ui> = plaćen samo taj jedan. Ako dete još nema nijednu oznaku,
+              dugme stoji uz prvi čas od danas.
             </li>
             <li>
               <Ui>Otkazani termini</Ui>: svaki otkazan čas sa oznakom „Otkazan · naplaćen“ (računa se u plaćene, uz redni broj x/6) ili

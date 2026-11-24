@@ -40,6 +40,7 @@ import GrupniKlijentiPicker from '@/components/GrupniKlijentiPicker';
 import StickyBar from '@/components/StickyBar';
 import KalendarVeza from '@/components/KalendarVeza';
 import Oblacic, { OblacicDugme, OblacicRed } from '@/components/Oblacic';
+import BrzoPlacenoDugme from './BrzoPlacenoDugme';
 import useStickyThead from '@/components/useStickyThead';
 import { NAREDNIH_NEDELJA_COOKIE, NAREDNIH_NEDELJA_DEFAULT, NAREDNIH_NEDELJA_MAX, nazivNedelje } from '@/lib/kalendar-nedelje';
 
@@ -2703,6 +2704,11 @@ function RedniBroj({ redni }: { redni: [number, number] }) {
   );
 }
 
+/** Prvi neplaćeni čas deteta – odmah posle potrošenog paketa (npr. 7/6): tu ide brzo „💰 +6“. */
+function prviNeplacen(redni: [number, number] | null | undefined): boolean {
+  return !!redni && redni[0] === redni[1] + 1;
+}
+
 function redniTitle(redni: [number, number] | null | undefined): string | undefined {
   if (!redni) return undefined;
   const [x, y] = redni;
@@ -2913,8 +2919,10 @@ function TermCardVisual({ term, rowOffset = 0 }: { term: AdminTerm; rowOffset?: 
                   <>
                     <OblacicRed naslov={ime}>{redniTitle(p.redni)}</OblacicRed>
                     {tVrsta && <OblacicRed naslov="Vrsta časa">{tVrsta}</OblacicRed>}
+                    {prviNeplacen(p.redni) && <OblacicRed naslov="💰 +6">Označava narednih 6 časova deteta kao plaćene, od ovog časa.</OblacicRed>}
                   </>
                 ) : null;
+                const brzoPlaceno = !swap.paidMode && !swap.cancelMode && prviNeplacen(p.redni) && !!(p.client_id ?? p.client?.id);
                 return (
                   <Oblacic
                     naslov={klik ? 'Označi plaćeno' : neplacen ? 'Nije plaćeno' : 'Plaćeni časovi'}
@@ -2947,6 +2955,15 @@ function TermCardVisual({ term, rowOffset = 0 }: { term: AdminTerm; rowOffset?: 
                   >
                     <span className={`min-w-0 break-words${otkazuje ? ' line-through' : ''}`}>{ime}</span>
                     {p.redni && <RedniBroj redni={p.redni} />}
+                    {brzoPlaceno && (
+                      <BrzoPlacenoDugme
+                        clientId={(p.client_id ?? p.client?.id) as string}
+                        termTypeId={p.term_type_id ?? null}
+                        datum={term.date}
+                        slot={term.slot_index}
+                        opis={`${formatShortDate(term.date)} ${TIME_SLOTS[term.slot_index] ?? ''} · ${ime}`}
+                      />
+                    )}
                     {otkazuje && <span className="w-full text-[11px] font-bold text-stone-700">✕ otkazuje se</span>}
                     {paidState === 'dodaj' ? (
                       <span className="w-full text-[11px] font-bold text-emerald-700">
@@ -3344,6 +3361,15 @@ function AdminCellContent({
                 {z.client_ime}{z.client_prezime ? ` ${z.client_prezime}` : ''}
               </span>
               {z.redni && <RedniBroj redni={z.redni} />}
+              {!swap.paidMode && !swap.cancelMode && prviNeplacen(z.redni) && z.client_id && (
+                <BrzoPlacenoDugme
+                  clientId={z.client_id}
+                  termTypeId={z.term_type_id ?? null}
+                  datum={z.date}
+                  slot={z.slot_index}
+                  opis={`${formatShortDate(z.date)} ${TIME_SLOTS[z.slot_index] ?? ''} · ${z.client_ime}${z.client_prezime ? ` ${z.client_prezime}` : ''}`}
+                />
+              )}
               {zahtevOtkazuje && <span className="w-full text-[11px] font-bold text-stone-700">✕ otkazuje se</span>}
               {zahtevPaidState === 'dodaj' ? (
                 <span className="w-full text-[11px] font-bold text-emerald-700">
