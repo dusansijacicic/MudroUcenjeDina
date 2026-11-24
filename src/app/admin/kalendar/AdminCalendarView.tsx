@@ -41,6 +41,7 @@ import StickyBar from '@/components/StickyBar';
 import KalendarVeza from '@/components/KalendarVeza';
 import Oblacic, { OblacicDugme, OblacicRed } from '@/components/Oblacic';
 import BrzoPlacenoDugme from './BrzoPlacenoDugme';
+import UrediOtkazanCas from '@/components/UrediOtkazanCas';
 import useStickyThead from '@/components/useStickyThead';
 import { NAREDNIH_NEDELJA_COOKIE, NAREDNIH_NEDELJA_DEFAULT, NAREDNIH_NEDELJA_MAX, nazivNedelje } from '@/lib/kalendar-nedelje';
 
@@ -141,6 +142,8 @@ type SwapContextValue = {
   isSelected: (termId: string) => 'first' | 'second' | null;
   onSelectTerm: (term: AdminTerm) => void;
   onDeleteOtkazani: (id: string) => void;
+  /** Klik na otkazan čas (bez aktivnog moda): prozor za naknadnu naplatu i razlog/komentar. */
+  onUrediOtkazan: (ot: OtkazaniTerminCalendar) => void;
   copyMode: boolean;
   copySourceId: string | null;
   onSelectCopySource: (term: AdminTerm) => void;
@@ -213,6 +216,7 @@ const SwapContext = createContext<SwapContextValue>({
   isSelected: () => null,
   onSelectTerm: () => {},
   onDeleteOtkazani: () => {},
+  onUrediOtkazan: () => {},
   copyMode: false,
   copySourceId: null,
   onSelectCopySource: () => {},
@@ -714,6 +718,8 @@ export default function AdminCalendarView({
   useEffect(() => {
     setOtkazaniTermini(otkazaniTerminiProp);
   }, [otkazaniTerminiProp]);
+  // Otkazan čas otvoren za naknadnu izmenu (naplaćen + razlog/komentar); verzija = za osvežavanje posle čuvanja.
+  const [uredjujeOtkazan, setUredjujeOtkazan] = useState<{ ot: OtkazaniTerminCalendar; verzija: number } | null>(null);
 
   const [pendingZahtevi, setPendingZahtevi] = useState(pendingZahteviProp);
   useEffect(() => {
@@ -1841,6 +1847,7 @@ export default function AdminCalendarView({
         isSelected,
         onSelectTerm,
         onDeleteOtkazani: (id) => runMutation(() => handleDeleteOtkazani(id)),
+        onUrediOtkazan: (ot) => setUredjujeOtkazan({ ot, verzija: verzijaPodataka.current }),
         copyMode,
         copySourceId: copySource?.vrsta === 'termin' ? copySource.id : null,
         onSelectCopySource,
@@ -1900,6 +1907,28 @@ export default function AdminCalendarView({
     >
       {headerContent}
       <CalendarProgress active={navigating || mutationPending} />
+      {uredjujeOtkazan && (
+        <UrediOtkazanCas
+          otkazan={{
+            id: uredjujeOtkazan.ot.id,
+            ime: `${uredjujeOtkazan.ot.client_ime}${uredjujeOtkazan.ot.client_prezime ? ` ${uredjujeOtkazan.ot.client_prezime}` : ''}`,
+            kada: `${formatShortDate(uredjujeOtkazan.ot.term_date)} ${TIME_SLOTS[uredjujeOtkazan.ot.slot_index] ?? ''}`,
+            vrsta: uredjujeOtkazan.ot.term_type_naziv,
+            instruktor: uredjujeOtkazan.ot.instructor_ime
+              ? `${uredjujeOtkazan.ot.instructor_ime} ${uredjujeOtkazan.ot.instructor_prezime ?? ''}`.trim()
+              : null,
+            placeno: uredjujeOtkazan.ot.placeno,
+            razlog: uredjujeOtkazan.ot.razlog ?? null,
+          }}
+          onClose={() => setUredjujeOtkazan(null)}
+          onSacuvano={({ placeno, razlog }) => {
+            const { ot, verzija } = uredjujeOtkazan;
+            setOtkazaniTermini((list) => list.map((x) => (x.id === ot.id ? { ...x, placeno, razlog } : x)));
+            // „x/6“ ostalih časova deteta se menja – stiže sa odgovorom akcije; ako ne stigne, osveži.
+            osveziAkoNijeStiglo(verzija);
+          }}
+        />
+      )}
       {podsetnikDatumi.length > 0 && (
         <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-amber-400 bg-amber-50 px-4 py-2.5 text-sm text-amber-900">
           <span className="font-semibold">
@@ -3092,6 +3121,18 @@ function AdminCellContent({
 
   const rowOffsets = childRowOffsets(termsInSlot);
 
+  // Bez aktivnog moda klik na otkazan čas otvara naknadnu izmenu (naplaćen + razlog/komentar).
+  const otkazanMozeIzmena = !(
+    swap.swapMode ||
+    swap.copyMode ||
+    swap.deleteMode ||
+    swap.assignMode ||
+    swap.paidMode ||
+    swap.cancelMode ||
+    swap.moveMode ||
+    swap.bulkMode ||
+    swap.blockMode
+  );
   const CancelledEntries = otkazaniInSlot.length > 0 ? (
     <div className="mt-1 space-y-1">
       {otkazaniInSlot.map((ot) => {
@@ -3108,7 +3149,7 @@ function AdminCellContent({
                 {ot.placeno ? 'Klik: skida se oznaka „naplaćeno“.' : 'Klik: otkazan čas je naplaćen (računa se u plaćene časove).'}
               </OblacicRed>
             )}
-            <OblacicRed naslov="Razlog">
+            <OblacicRed naslov="Razlog / komentar">
               {ot.razlog || <span className="italic text-stone-400">nije upisan</span>}
             </OblacicRed>
             {ot.placeno && (
@@ -3118,6 +3159,9 @@ function AdminCellContent({
             )}
             {ot.instructor_ime && (
               <OblacicRed naslov="Instruktor">{`${ot.instructor_ime} ${ot.instructor_prezime ?? ''}`.trim()}</OblacicRed>
+            )}
+            {otkazanMozeIzmena && (
+              <OblacicRed naslov="✎ Klik">naplaćen ili ne, i razlog / komentar – može i naknadno.</OblacicRed>
             )}
           </>
         );
@@ -3129,9 +3173,23 @@ function AdminCellContent({
             sadrzaj={otkOblacic}
           >
           <div
-            role={swap.deleteMode || swap.paidMode ? 'button' : undefined}
-            onClick={() => {
-              if (swap.deleteMode) swap.onToggleOtkazaniDeleteSelect(ot.id);
+            role={swap.deleteMode || swap.paidMode || otkazanMozeIzmena ? 'button' : undefined}
+            tabIndex={otkazanMozeIzmena ? 0 : undefined}
+            aria-label={otkazanMozeIzmena ? `${otkIme}, otkazan čas – naplata i razlog / komentar` : undefined}
+            onKeyDown={
+              otkazanMozeIzmena
+                ? (e) => {
+                    if (e.target !== e.currentTarget || (e.key !== 'Enter' && e.key !== ' ')) return;
+                    e.preventDefault();
+                    swap.onUrediOtkazan(ot);
+                  }
+                : undefined
+            }
+            onClick={(e) => {
+              if (otkazanMozeIzmena) {
+                e.stopPropagation();
+                swap.onUrediOtkazan(ot);
+              } else if (swap.deleteMode) swap.onToggleOtkazaniDeleteSelect(ot.id);
               else if (swap.paidMode) {
                 swap.onTogglePaid({
                   key: otkPaidKey,
@@ -3149,7 +3207,9 @@ function AdminCellContent({
             // plaćene časove pa ima i „x/y“. Nenaplaćen: sivo, kao do sada.
             className={`rounded-lg border p-1.5 text-xs${
               ot.placeno ? ' border-indigo-300 bg-indigo-50 text-indigo-900' : ` text-stone-400${otkPaidState ? '' : ' opacity-70'}`
-            }${swap.deleteMode || swap.paidMode ? ' cursor-pointer' : ''}${
+            }${swap.deleteMode || swap.paidMode || otkazanMozeIzmena ? ' cursor-pointer' : ''}${
+              otkazanMozeIzmena ? (ot.placeno ? ' hover:bg-indigo-100' : ' hover:opacity-100 hover:border-stone-300') : ''
+            }${
               otkazaniSelected || otkPaidState === 'ukloni'
                 ? ' border-red-500 ring-2 ring-offset-1 ring-red-500 bg-red-50'
                 : otkPaidState === 'dodaj'
@@ -3170,17 +3230,26 @@ function AdminCellContent({
                 <span className="line-through block">{otkIme}</span>
               )}
               {!swap.deleteMode && !swap.paidMode && (
-                <button
-                  type="button"
-                  title="Trajno obriši"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    swap.onDeleteOtkazani(ot.id);
-                  }}
-                  className="shrink-0 leading-none text-stone-400 hover:text-red-600"
-                >
-                  ✕
-                </button>
+                <span className="flex shrink-0 items-center gap-1.5">
+                  {otkazanMozeIzmena && (
+                    <span aria-hidden className={`leading-none ${ot.placeno ? 'text-indigo-500' : 'text-stone-400'}`}>
+                      ✎
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    title="Trajno obriši"
+                    aria-label="Trajno obriši otkazan čas"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      swap.onDeleteOtkazani(ot.id);
+                    }}
+                    className="leading-none text-stone-400 hover:text-red-600"
+                  >
+                    ✕
+                  </button>
+                </span>
               )}
             </div>
             {!ot.placeno && ot.instructor_ime && (

@@ -3545,6 +3545,48 @@ export async function postaviRazlogOtkazivanjaAsAdmin(id: string, razlog: string
 }
 
 /**
+ * Naknadna izmena već otkazanog časa (klik na otkazan čas na kalendaru / „✎ Naplata i komentar“ na profilu
+ * deteta): da li je naplaćen (računa se u plaćene časove, 059) i razlog/komentar – jednim upisom.
+ */
+export async function izmeniOtkazanCasAsAdmin(
+  id: string,
+  izmene: { placeno?: boolean; razlog?: string | null }
+): Promise<{ error?: string; placeno?: boolean; razlog?: string | null }> {
+  const { admin, error: authErr, actor } = await requireAdmin();
+  if (authErr || !admin) return { error: authErr ?? 'Niste ovlašćeni.' };
+  const patch: { placeno?: boolean; razlog?: string | null } = {};
+  if (typeof izmene.placeno === 'boolean') patch.placeno = izmene.placeno;
+  if ('razlog' in izmene) patch.razlog = ocistiRazlog(izmene.razlog);
+  if (Object.keys(patch).length === 0) return {};
+  const { data, error } = await admin
+    .from('otkazani_termini')
+    .update(patch)
+    .eq('id', id)
+    .select('id, client_id, placeno, term_date, slot_index')
+    .maybeSingle();
+  if (error) {
+    return {
+      error: /razlog/i.test(error.message) ? 'Prvo pokrenite migraciju 059_otkazani_razlog_i_naplata.sql u Supabase SQL Editoru.' : error.message,
+    };
+  }
+  if (!data) return { error: 'Taj otkazan čas više ne postoji (možda je obrisan) – osvežite stranicu.' };
+  const red = data as { id: string; client_id: string | null; placeno: boolean; term_date: string; slot_index: number };
+  revalidatePath('/admin/kalendar');
+  revalidatePath('/admin/klijenti', 'layout');
+  if (actor) {
+    logActivity(
+      actor,
+      'otkazani.izmena',
+      `Otkazan čas ${red.term_date} ${TIME_SLOTS[red.slot_index] ?? ''}: ${red.placeno ? 'naplaćen' : 'nije naplaćen'}${
+        'razlog' in patch ? ` · razlog: ${patch.razlog ?? '(obrisan)'}` : ''
+      }.`,
+      { entityType: 'otkazani_termin', entityId: red.id, metadata: { clientId: red.client_id, ...patch } }
+    );
+  }
+  return { placeno: red.placeno, razlog: 'razlog' in patch ? patch.razlog ?? null : undefined };
+}
+
+/**
  * Mod „Napomena“ na kalendaru: ista napomena za više izabranih termina i časova bez instruktora (naknadno).
  * zameni=false → dopisuje se ispod postojeće; zameni=true → postojeća se zamenjuje (prazno = briše).
  * U rasporedu se napomena ne ispisuje – vidi se u oblačiću (💬 na terminu).

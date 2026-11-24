@@ -203,8 +203,9 @@ export default async function AdminUputstvoPage({ searchParams }: { searchParams
             <li>
               <M n="H" /> Siva, precrtana = otkazan čas koji <strong>nije naplaćen</strong> (istorija). Indigo (plavo-ljubičasta) sa trakom
               levo = otkazan čas koji <strong>je naplaćen</strong>: samo dete, bez instruktora i učionice, „otkazan · naplaćen“ i redni broj
-              „x/6“ – računa se u plaćene časove. Ispod može da stoji razlog otkazivanja. Prugasto „⛔ Blokirano“ = u tom vremenu niko ne
-              može da zakaže.
+              „x/6“ – računa se u plaćene časove. Razlog otkazivanja se vidi u oblačiću (💬). <strong>Klik na otkazan čas</strong> (✎)
+              otvara prozor gde se i naknadno čekira da li je naplaćen i upisuje razlog / komentar. Prugasto „⛔ Blokirano“ = u tom
+              vremenu niko ne može da zakaže.
             </li>
             <li>
               U jednom vremenu (npr. 9:00) može biti više paralelnih termina – svaki ima svog instruktora i svoju učionicu. Koliko najviše,
@@ -296,7 +297,8 @@ export default async function AdminUputstvoPage({ searchParams }: { searchParams
             </li>
             <li>
               Po želji upišite <Ui>Razlog</Ui> (npr. bolest) i čekirajte <Ui>naplaćeno</Ui> ako se otkazani čas ipak naplaćuje – važi za sve
-              izabrane. Naplaćen otkazan čas troši čas iz plaćenog paketa deteta i na kalendaru je indigo boje.
+              izabrane. Naplaćen otkazan čas troši čas iz plaćenog paketa deteta i na kalendaru je indigo boje. Ovo se može i naknadno:
+              klik na već otkazan čas na kalendaru (ili <Ui>✎ Naplata i komentar</Ui> na profilu deteta).
             </li>
             <li>Kliknite <Ui>✓ Potvrdi otkazivanje (N)</Ui>.</li>
             <li>
@@ -487,7 +489,8 @@ export default async function AdminUputstvoPage({ searchParams }: { searchParams
               <Ui>Pregled termina</Ui>: na vrhu pregled plaćanja – plaćeno u oznakama, održano plaćeno / nije plaćeno, zakazano plaćeno /
               nije plaćeno (sve vrste zajedno). Ispod levo zakazani (isprekidano = još bez instruktora), desno održani – sa vrstom časa,
               instruktorom i cenom časa. Kao na kalendaru: crveno = nije plaćeno, „x. čas od y plaćenih“, 💰 = odatle je označeno plaćeno,
-              indigo = otkazan a naplaćen. Klik na termin ga otvara.
+              indigo = otkazan a naplaćen. Klik na termin ga otvara. Na otkazanom času <Ui>✎ Naplata i komentar</Ui> menja da li je
+              naplaćen i razlog / komentar.
             </li>
             <li>
               <Ui>💰 Označi narednih 6 kao plaćeno</Ui> stoji pored prvog neplaćenog časa (i u pregledu plaćanja): jednim klikom, uz

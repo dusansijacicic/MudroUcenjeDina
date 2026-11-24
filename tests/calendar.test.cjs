@@ -179,6 +179,30 @@ test('cancelling a class can mark it charged and keep the reason', async () => {
   assert.equal('razlog' in bez, false);
 });
 
+test('an already cancelled class can later be marked charged and get a comment', async () => {
+  const row = (q) => ({ id: 'otk-1', client_id: 'child', placeno: q.values.placeno ?? false, term_date: '2026-11-24', slot_index: 3 });
+  const db = database((q) => (q.table === 'otkazani_termini' && q.operation === 'update' ? { data: row(q), error: null } : { data: null, error: null }));
+  const events = [], refreshed = [];
+  const res = await actionsFor('admin', db, events, refreshed).izmeniOtkazanCasAsAdmin('otk-1', { placeno: true, razlog: '  Bolest,   javili kasno ' });
+  assert.deepEqual(res, { placeno: true, razlog: 'Bolest, javili kasno' });
+  const upd = db.queries.find((q) => q.table === 'otkazani_termini' && q.operation === 'update');
+  assert.deepEqual(upd.values, { placeno: true, razlog: 'Bolest, javili kasno' });
+  assert.deepEqual(upd.filters, [['id', 'otk-1']]);
+  assert.ok(refreshed.includes('/admin/kalendar') && refreshed.includes('/admin/klijenti'));
+  assert.equal(events[0][1], 'otkazani.izmena');
+
+  // Prazan komentar briše razlog; naplata se ne dira ako nije poslata.
+  const db2 = database((q) => (q.operation === 'update' ? { data: row(q), error: null } : { data: null, error: null }));
+  assert.deepEqual(await actionsFor('admin', db2).izmeniOtkazanCasAsAdmin('otk-1', { razlog: '   ' }), { placeno: false, razlog: null });
+  assert.deepEqual(db2.queries.find((q) => q.operation === 'update').values, { razlog: null });
+
+  // Obrisan u međuvremenu → jasna poruka; instruktor ne može da menja.
+  assert.match((await actionsFor('admin', database(() => ({ data: null, error: null }))).izmeniOtkazanCasAsAdmin('gone', { placeno: true })).error, /ne postoji/);
+  const zabranjeno = database(() => { throw new Error('Admin-only database access'); });
+  assert.ok((await actionsFor('instructor', zabranjeno).izmeniOtkazanCasAsAdmin('otk-1', { placeno: true })).error);
+  assert.equal(zabranjeno.queries.length, 0);
+});
+
 const calendarLinks = [];
 const Calendar = loadSource('src/app/dashboard/CalendarView.tsx', {
   'next/navigation': { useRouter: () => ({ refresh() {} }) },

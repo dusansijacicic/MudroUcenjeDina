@@ -11,6 +11,7 @@ import OtkazaniTerminiSection from './OtkazaniTerminiSection';
 import UplateKlijentaSection, { type UplataKlijentaRow } from './UplateKlijentaSection';
 import PlaceniPaketiSection, { type PaketKlijentaRow } from './PlaceniPaketiSection';
 import OznaciPlacenoDugme from './OznaciPlacenoDugme';
+import UrediOtkazanDugme from './UrediOtkazanDugme';
 import PlacenoStanje from '@/components/PlacenoStanje';
 
 function getMonday(iso: string): string {
@@ -346,6 +347,17 @@ export default async function AdminKlijentEditPage({
           {o.classroom_naziv && ` · ${o.classroom_naziv}`}
           {o.razlog && <span className="italic"> · {o.razlog}</span>}
         </p>
+        <UrediOtkazanDugme
+          otkazan={{
+            id: o.id,
+            ime: [client.ime, client.prezime].filter(Boolean).join(' '),
+            kada: `${dateStr} ${timeStr}`,
+            vrsta: o.term_type_naziv,
+            instruktor: instr || null,
+            placeno: o.placeno,
+            razlog: o.razlog ?? null,
+          }}
+        />
         <DugmeAkoPrvi kljuc={o.id} />
       </Link>
     );
@@ -556,12 +568,18 @@ export default async function AdminKlijentEditPage({
         <div className="border-b border-stone-100 bg-stone-50/80 px-5 py-3">
           <h2 className="text-base font-semibold text-stone-800">Otkazani termini</h2>
           <p className="text-xs text-stone-500 mt-0.5">
-            Svaki otkazan čas je naplaćen ili nije. Naplaćen se računa u plaćene časove deteta (troši čas iz paketa). Razlog otkazivanja
-            se može upisati ili izmeniti ovde.
+            Svaki otkazan čas je naplaćen ili nije. Naplaćen se računa u plaćene časove deteta (troši čas iz paketa). Naplata i razlog /
+            komentar se mogu naknadno menjati ovde, u Pregledu termina (✎ Naplata i komentar) ili klikom na otkazan čas na kalendaru.
           </p>
         </div>
         <div className="p-5">
-          <OtkazaniTerminiSection otkazani={otkazani} clientId={clientId} redni={redni} />
+          {/* key: posle izmene u Pregledu termina (✎ Naplata i komentar) lista se osveži sa novim podacima. */}
+          <OtkazaniTerminiSection
+            key={otkazani.map((o) => `${o.id}:${o.placeno ? 1 : 0}:${o.razlog ?? ''}`).join('|')}
+            otkazani={otkazani}
+            clientId={clientId}
+            redni={redni}
+          />
         </div>
       </section>
 
