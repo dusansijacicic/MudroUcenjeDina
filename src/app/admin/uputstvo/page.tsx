@@ -141,6 +141,11 @@ export default async function AdminUputstvoPage({ searchParams }: { searchParams
               <Ui>Nedelju napred ▶</Ui>. Prevlačenje termina prstom je isključeno (koristite Swap).
             </li>
             <li>
+              <Ui>🔍 − 100% +</Ui> (iznad kalendara, desno): umanjuje ili uvećava ceo kalendar – manji prikaz = više dana i vremena na
+              ekranu odjednom (npr. 60% na telefonu). Na telefonu i tabletu radi i <strong>štipanje sa dva prsta</strong> preko kalendara.
+              Klik na procenat vraća na 100%. Pamti se za taj uređaj; važi i za kalendar instruktora.
+            </li>
+            <li>
               <Ui>← Prethodna</Ui> / <Ui>Sledeća →</Ui> pomera period. Ova traka ostaje zalepljena na vrhu dok skrolujete, zajedno sa
               dugmićima Swap, Copy… – i na tabletu, gde je jedan red koji se pomera prstom levo-desno.
             </li>

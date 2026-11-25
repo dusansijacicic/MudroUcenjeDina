@@ -12,6 +12,7 @@ import { VRSTA_BEZ, VRSTA_TESTIRANJE } from '@/lib/kalendar-filter';
 import { getTermTypes, getTermCategories, type PlaceniPaket } from '@/app/admin/actions';
 import { mapBlokada, mapNedeljna, nedeljneUDatume, type BlokiranTermin } from '@/lib/blokade';
 import { NAREDNIH_NEDELJA_COOKIE, parseNarednihNedelja } from '@/lib/kalendar-nedelje';
+import { ZUM_COOKIE, parseZum } from '@/lib/kalendar-zum';
 import { merenje } from '@/lib/merenje';
 import { readCalendarRpc } from '@/lib/calendar-rpc';
 import { sviRedovi } from '@/lib/svi-redovi';
@@ -48,7 +49,10 @@ export default async function AdminKalendarPage({
   };
 
   // Nedeljni prikaz: prikazana nedelja + koliko narednih (izbor na kalendaru, pamti se po uređaju).
-  const narednihNedelja = parseNarednihNedelja((await cookies()).get(NAREDNIH_NEDELJA_COOKIE)?.value);
+  const kolacici = await cookies();
+  const narednihNedelja = parseNarednihNedelja(kolacici.get(NAREDNIH_NEDELJA_COOKIE)?.value);
+  // Zum kalendara (−/+ ili štipanje) – takođe po uređaju.
+  const zum = parseZum(kolacici.get(ZUM_COOKIE)?.value);
   const trenutnaNedelja = getMonday(today);
 
   let dateFrom: string;
@@ -442,6 +446,7 @@ export default async function AdminKalendarPage({
         startOfWeek={startOfWeek}
         narednihNedelja={narednihNedelja}
         trenutnaNedelja={trenutnaNedelja}
+        zum={zum}
         singleDay={singleDay}
         monthStart={monthStart}
         maxTerminaPoSlotu={maxTerminaPoSlotu}

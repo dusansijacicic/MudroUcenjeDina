@@ -210,6 +210,7 @@ const Calendar = loadSource('src/app/dashboard/CalendarView.tsx', {
   '@/lib/use-kalendar-realtime': { useKalendarRealtime() {} },
   '@/components/KalendarVeza': () => null,
   '@/components/Oblacic': { __esModule: true, default: ({ children }) => children, OblacicRed: ({ children }) => children, OblacicDugme: ({ children }) => children },
+  '@/components/ZumKalendara': loadSource('src/components/ZumKalendara.tsx', { '@/lib/kalendar-zum': loadSource('src/lib/kalendar-zum.ts') }),
   '@/lib/constants': constants,
   '@/app/dashboard/termin/actions': { moveTermAsInstructor() {} },
 }).default;
@@ -244,6 +245,25 @@ for (const view of ['dan', 'nedelja']) {
     assert.match(html, /Test Dete/);
   });
 }
+
+test('week calendar can be zoomed out; the choice is kept within limits', () => {
+  const zum = loadSource('src/lib/kalendar-zum.ts');
+  assert.equal(zum.parseZum(undefined), 1);
+  assert.equal(zum.parseZum('0.7'), 0.7);
+  assert.equal(zum.parseZum('0.62'), 0.6);
+  assert.equal(zum.parseZum('0.1'), zum.ZUM_MIN);
+  assert.equal(zum.parseZum('9'), zum.ZUM_MAX);
+  assert.equal(zum.parseZum('abc'), 1);
+
+  const html = renderCalendar({ view: 'nedelja', zum: 0.6 });
+  assert.match(html, /zoom:0\.6/);
+  assert.match(html, /data-zum="0\.6"/);
+  assert.match(html, />60%</);
+  assert.match(html, /Umanji prikaz/);
+  assert.match(html, /Drugo Dete/);
+  // Bez kolačića: 100%.
+  assert.match(renderCalendar({ view: 'nedelja' }), />100%</);
+});
 
 test('month includes other teachers and pending classes in the daily count', () => {
   const html = renderCalendar({ view: 'mesec', otherTerms: [otherTerm, { ...otherTerm, id: 'request', request_id: 'request' }] });
@@ -295,6 +315,8 @@ function dashboardFor(db, serviceRoleAvailable = true) {
     '@/lib/blokade': { mapBlokada: (r) => r, mapNedeljna: (r) => r, nedeljneUDatume: () => [] },
     '@/lib/constants': constants,
     'next/navigation': { redirect: (path) => { throw new Error(`redirect:${path}`); } },
+    'next/headers': { cookies: async () => ({ get: (name) => (name === 'kalendar_zum' ? { value: '0.8' } : undefined) }) },
+    '@/lib/kalendar-zum': loadSource('src/lib/kalendar-zum.ts'),
     './CalendarView': CalendarStub,
     './AddTermButton': () => null, './CalendarFilters': () => null,
     './DashboardErrorToast': () => null, './DashboardDebugLog': () => null,

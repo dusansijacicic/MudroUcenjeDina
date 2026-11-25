@@ -1,4 +1,6 @@
 import { redirect } from 'next/navigation';
+import { cookies } from 'next/headers';
+import { ZUM_COOKIE, parseZum } from '@/lib/kalendar-zum';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { readAllCalendarRows } from '@/lib/calendar-rows';
 import { getDashboardInstructor } from '@/lib/dashboard';
@@ -349,6 +351,7 @@ export default async function DashboardPage({
         clientFilterId={clientFilterId}
         otherTerms={filteredOtherTerms}
         blockedSlots={blockedSlots}
+        zum={parseZum((await cookies()).get(ZUM_COOKIE)?.value)}
       />
     </div>
   );

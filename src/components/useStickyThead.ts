@@ -35,9 +35,12 @@ export default function useStickyThead(enabled = true, minWidth = 1024) {
       const bar = document.querySelector<HTMLElement>('[data-sticky-bar="pinned"]');
       const vrh = bar ? bar.getBoundingClientRect().bottom : 0;
       const t = table.getBoundingClientRect();
-      const najvise = Math.max(0, t.height - thead.offsetHeight);
+      const najvise = Math.max(0, t.height - thead.getBoundingClientRect().height);
       const pomeraj = Math.min(Math.max(0, vrh - t.top), najvise);
-      thead.style.transform = pomeraj > 0 ? `translateY(${pomeraj}px)` : '';
+      // Zumiran kalendar (ZumKalendara, CSS zoom): pomeraj je izmeren na ekranu, a translateY se unutar
+      // zumiranog dela množi zumom – zato se deli.
+      const zum = Number(table.closest<HTMLElement>('[data-zum]')?.dataset.zum) || 1;
+      thead.style.transform = pomeraj > 0 ? `translateY(${pomeraj / zum}px)` : '';
     };
 
     const zakazi = () => {
@@ -49,6 +52,7 @@ export default function useStickyThead(enabled = true, minWidth = 1024) {
     window.addEventListener('resize', zakazi);
     // StickyBar javlja kad se zamrzne ili otpusti (posle skrola), da zaglavlje odmah stane ispod nje
     window.addEventListener('stickybar', zakazi);
+    window.addEventListener('kalendar-zum', zakazi);
     mq.addEventListener('change', zakazi);
     // tabela menja visinu kad se učitaju termini ili promeni nedelja
     const ro = new ResizeObserver(zakazi);
@@ -58,6 +62,7 @@ export default function useStickyThead(enabled = true, minWidth = 1024) {
       window.removeEventListener('scroll', zakazi);
       window.removeEventListener('resize', zakazi);
       window.removeEventListener('stickybar', zakazi);
+      window.removeEventListener('kalendar-zum', zakazi);
       mq.removeEventListener('change', zakazi);
       ro.disconnect();
       thead.style.transform = '';

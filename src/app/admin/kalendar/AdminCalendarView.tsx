@@ -42,6 +42,7 @@ import KalendarVeza from '@/components/KalendarVeza';
 import Oblacic, { OblacicDugme, OblacicRed } from '@/components/Oblacic';
 import BrzoPlacenoDugme from './BrzoPlacenoDugme';
 import UrediOtkazanCas from '@/components/UrediOtkazanCas';
+import ZumKalendara from '@/components/ZumKalendara';
 import useStickyThead from '@/components/useStickyThead';
 import { NAREDNIH_NEDELJA_COOKIE, NAREDNIH_NEDELJA_DEFAULT, NAREDNIH_NEDELJA_MAX, nazivNedelje } from '@/lib/kalendar-nedelje';
 
@@ -643,6 +644,7 @@ export default function AdminCalendarView({
   paketiMigracija = true,
   narednihNedelja = NAREDNIH_NEDELJA_DEFAULT,
   trenutnaNedelja,
+  zum = 1,
 }: {
   /** Naslov/filteri/legenda iznad kalendara (server-renderovani deo iz page.tsx). */
   headerContent?: React.ReactNode;
@@ -684,6 +686,8 @@ export default function AdminCalendarView({
   narednihNedelja?: number;
   /** Ponedeljak trenutne nedelje (po Beogradu) – za nazive "Ova nedelja", "Sledeća nedelja"… */
   trenutnaNedelja: string;
+  /** Zum kalendara (kolačić, po uređaju) – manji = više termina na ekranu. */
+  zum?: number;
 }) {
   const router = useRouter();
   const [navigating, startNavigation] = useTransition();
@@ -1759,6 +1763,7 @@ export default function AdminCalendarView({
         draggedTermId={draggedTermId}
         onDropCell={(date, slot) => runMutation(() => handleDrop(date, slot))}
         maxTerminaPoSlotu={maxTerminaPoSlotu}
+        zum={zum}
       />
     );
   } else if (view === 'mesec' && monthStart) {
@@ -1786,6 +1791,7 @@ export default function AdminCalendarView({
         setDraggedTermId={setDraggedTermId}
         onDropCell={(date, slot) => runMutation(() => handleDrop(date, slot))}
         maxTerminaPoSlotu={maxTerminaPoSlotu}
+        zum={zum}
       />
     );
   }
@@ -3842,11 +3848,13 @@ function AdminWeekView({
   setDraggedTermId,
   onDropCell,
   maxTerminaPoSlotu,
+  zum,
 }: WeekCellsProps & {
   startOfWeek: string;
   brojNedelja: number;
   ucitanoNedelja: number;
   trenutnaNedelja: string;
+  zum: number;
 }) {
   const gridRef = useRef<HTMLDivElement>(null);
   const okvirRef = useRef<HTMLDivElement>(null);
@@ -3878,22 +3886,27 @@ function AdminWeekView({
   const btn = 'px-3 py-1.5 min-h-[44px] md:min-h-0 rounded-lg bg-stone-100 text-sm text-stone-700 hover:bg-stone-200';
 
   return (
-    <div className="space-y-2">
-      {nedelje.length > 1 && (
-        <div className="flex items-center justify-end gap-2">
-          <span className="mr-auto text-xs text-stone-500">Klizite levo-desno kroz nedelje (prstom ili dugmićima).</span>
-          <button type="button" onClick={() => kliziNedelju(-1)} className={btn}>
-            ◀ Nedelju nazad
-          </button>
-          <button type="button" onClick={() => kliziNedelju(1)} className={btn}>
-            Nedelju napred ▶
-          </button>
-        </div>
-      )}
+    <ZumKalendara
+      pocetni={zum}
+      traka={
+        nedelje.length > 1 ? (
+          <>
+            <span className="mr-auto text-xs text-stone-500">Klizite levo-desno kroz nedelje (prstom ili dugmićima).</span>
+            <button type="button" onClick={() => kliziNedelju(-1)} className={btn}>
+              ◀ Nedelju nazad
+            </button>
+            <button type="button" onClick={() => kliziNedelju(1)} className={btn}>
+              Nedelju napred ▶
+            </button>
+          </>
+        ) : null
+      }
+    >
       <div ref={gridRef} data-hover-grid="">
         <GridHoverHighlight containerRef={gridRef} />
         <div
           ref={okvirRef}
+          data-zum-skrol=""
           className="overflow-x-auto overscroll-x-contain snap-x snap-proximity scroll-pl-16 rounded-xl border-2 border-stone-700 bg-white"
         >
           <table ref={tabelaRef} className="kalendar-mreza w-full text-sm" style={{ minWidth: 64 + dates.length * 100 }}>
@@ -3965,7 +3978,7 @@ function AdminWeekView({
           </table>
         </div>
       </div>
-    </div>
+    </ZumKalendara>
   );
 }
 
@@ -4019,6 +4032,7 @@ function AdminDayView({
   draggedTermId,
   onDropCell,
   maxTerminaPoSlotu,
+  zum,
 }: {
   date: string;
   terms: AdminTerm[];
@@ -4029,6 +4043,7 @@ function AdminDayView({
   draggedTermId: string | null;
   onDropCell: (date: string, slot: number) => void | Promise<void>;
   maxTerminaPoSlotu: number;
+  zum: number;
 }) {
   const label = new Date(date + 'T12:00:00').toLocaleDateString('sr-Latn-RS', {
     weekday: 'long',
@@ -4051,16 +4066,18 @@ function AdminDayView({
           makeHref={(d) => `${base}?view=dan&day=${d}${linkSuffix}`}
         />
       </div>
-      <AdminDayAgenda
-        date={date}
-        terms={terms}
-        otkazaniTermini={otkazaniTermini}
-        pendingZahtevi={pendingZahtevi}
-        draggedTermId={draggedTermId}
-        setDraggedTermId={() => {}}
-        onDropCell={onDropCell}
-        maxTerminaPoSlotu={maxTerminaPoSlotu}
-      />
+      <ZumKalendara pocetni={zum}>
+        <AdminDayAgenda
+          date={date}
+          terms={terms}
+          otkazaniTermini={otkazaniTermini}
+          pendingZahtevi={pendingZahtevi}
+          draggedTermId={draggedTermId}
+          setDraggedTermId={() => {}}
+          onDropCell={onDropCell}
+          maxTerminaPoSlotu={maxTerminaPoSlotu}
+        />
+      </ZumKalendara>
     </div>
   );
 }

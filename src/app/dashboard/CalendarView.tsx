@@ -4,6 +4,7 @@ import { createContext, useContext, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useKalendarRealtime } from '@/lib/use-kalendar-realtime';
 import KalendarVeza from '@/components/KalendarVeza';
+import ZumKalendara from '@/components/ZumKalendara';
 import Oblacic, { OblacicDugme, OblacicRed } from '@/components/Oblacic';
 import { TIME_SLOTS, AUTO_SPILLOVER_NAPOMENA } from '@/lib/constants';
 import Link from 'next/link';
@@ -182,6 +183,7 @@ export default function CalendarView({
   clientFilterId,
   otherTerms = [],
   blockedSlots,
+  zum = 1,
 }: {
   view: string;
   terms: RawTerm[];
@@ -195,6 +197,8 @@ export default function CalendarView({
   otherTerms?: OtherTerm[];
   /** Globalne blokade sprečavaju zakazivanje; lične važe samo za ovog instruktora. */
   blockedSlots?: { date: string; slot_index: number; napomena: string | null; ownOnly?: boolean }[];
+  /** Zum kalendara (kolačić, po uređaju) – manji = više termina na ekranu. */
+  zum?: number;
 }) {
   const blockedMap = useMemo(
     () => {
@@ -220,6 +224,7 @@ export default function CalendarView({
         monthStart={monthStart}
         clientFilterId={clientFilterId}
         otherTerms={otherTerms}
+        zum={zum}
       />
     </BlockedSlotsContext.Provider>
   );
@@ -237,6 +242,7 @@ function CalendarViewInner({
   monthStart,
   clientFilterId,
   otherTerms,
+  zum,
 }: {
   view: string;
   terms: RawTerm[];
@@ -247,6 +253,7 @@ function CalendarViewInner({
   monthStart?: string;
   clientFilterId?: string | null;
   otherTerms: OtherTerm[];
+  zum: number;
 }) {
   const router = useRouter();
   const [draggedTermId, setDraggedTermId] = useState<string | null>(null);
@@ -321,6 +328,7 @@ function CalendarViewInner({
       draggedTermId={draggedTermId}
       setDraggedTermId={setDraggedTermId}
       onDropCell={handleDrop}
+      zum={zum}
     />
   </>
   );
@@ -547,6 +555,7 @@ function CalendarWeek({
   draggedTermId,
   setDraggedTermId,
   onDropCell,
+  zum,
 }: {
   startOfWeek: string;
   terms: RawTerm[];
@@ -557,6 +566,7 @@ function CalendarWeek({
   draggedTermId: string | null;
   setDraggedTermId: (id: string | null) => void;
   onDropCell: (date: string, slot: number) => void | Promise<void>;
+  zum: number;
 }) {
   const week1Dates = getWeekDates(startOfWeek);
   const week2Start = (() => {
@@ -634,8 +644,9 @@ function CalendarWeek({
         </div>
       </div>
 
+      <ZumKalendara pocetni={zum}>
       {/* Desktop (lg+): obe nedelje, netaknuto. */}
-      <div className="hidden lg:block overflow-x-auto rounded-xl border-2 border-stone-700 bg-white">
+      <div data-zum-skrol="" className="hidden lg:block overflow-x-auto rounded-xl border-2 border-stone-700 bg-white">
         <table className="kalendar-mreza w-full min-w-[1400px] text-sm">
           <thead>
             <tr className="border-b border-stone-100 bg-stone-50/60">
@@ -668,8 +679,12 @@ function CalendarWeek({
 
       {/* Tablet + telefon (<lg): cela nedelja, 7 kolona, horizontalni skrol po potrebi. Sopstveni
           vertikalni skrol (max-h + overflow-y) da bi "sticky top" lepio zaglavlje za VRH OVOG
-          OKVIRA, nezavisno od sticky nav-a iznad. */}
-      <div className="lg:hidden overflow-auto max-h-[70vh] rounded-xl border-2 border-stone-700 bg-white">
+          OKVIRA, nezavisno od sticky nav-a iznad. Visina se deli zumom (--zum), da umanjen kalendar i dalje
+          zauzima 70% ekrana – zato i staje više vremena. */}
+      <div
+        data-zum-skrol=""
+        className="lg:hidden overflow-auto max-h-[calc(70vh/var(--zum,1))] rounded-xl border-2 border-stone-700 bg-white"
+      >
         <table className="kalendar-mreza w-full min-w-[700px] text-sm">
           <thead>
             <tr className="border-b border-stone-200 bg-stone-50/60">
@@ -688,6 +703,7 @@ function CalendarWeek({
           {renderBody(week1Dates)}
         </table>
       </div>
+      </ZumKalendara>
     </div>
   );
 }
